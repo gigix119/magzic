@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+/* ── Light theme (default) ── */
+:root {
+  --bg: #ffffff;
+  --card: #f8f9fa;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-2: #6b7280;
+  --muted: #9ca3af;
+  --input-bg: #f9fafb;
+  --table-even: #ffffff;
+  --table-odd: #f9fafb;
+  --table-head: #f3f4f6;
+  --table-sub: #f1f5f9;
+  --sidebar: #f8f9fa;
+  --sidebar-border: #e5e7eb;
+  --hover-bg: #f3f4f6;
+}
+
+/* ── Dark theme ── */
+:root[data-theme="dark"] {
+  --bg: #0e0e10;
+  --card: #18181b;
+  --border: #27272a;
+  --text: #fafafa;
+  --text-2: #a1a1aa;
+  --muted: #71717a;
+  --input-bg: #0e0e10;
+  --table-even: #18181b;
+  --table-odd: #1c1c1f;
+  --table-head: #18181b;
+  --table-sub: #0e0e10;
+  --sidebar: #18181b;
+  --sidebar-border: #27272a;
+  --hover-bg: #27272a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  margin: 0;
+  padding: 0;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* Table row hover */
+.table-row:hover {
+  background-color: var(--hover-bg) !important;
+}
+
+/* Toast animation */
+@keyframes slideInToast {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--card); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
