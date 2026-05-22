@@ -98,7 +98,7 @@ body {
 @media (max-width: 600px) {
   .modal-inner {
     max-height: calc(100dvh - 48px) !important;
-    overflow-y: auto !important;
+    overflow: hidden !important;
   }
 }
 
@@ -110,4 +110,14 @@ body {
 /* 2-col form grids in modals: collapse on very small phones */
 @media (max-width: 400px) {
   .modal-2col { grid-template-columns: 1fr !important; }
+}
+
+/* Faktury: new invoice 2-col (form + file preview) → 1-col on mobile */
+@media (max-width: 767px) {
+  .faktura-new-grid { grid-template-columns: 1fr !important; }
+}
+
+/* 4-col positions grid in Faktury modal → 2-col on mobile */
+@media (max-width: 600px) {
+  .modal-4col { grid-template-columns: 1fr 1fr !important; }
 }

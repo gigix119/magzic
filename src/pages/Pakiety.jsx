@@ -228,7 +228,8 @@ export default function Pakiety() {
                     {items.length === 0 ? (
                       <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>Brak elementów w pakiecie</p>
                     ) : (
-                      <table className="w-full text-sm">
+                      <div className="table-scroll-x">
+                      <table className="w-full text-sm" style={{ minWidth: 400 }}>
                         <thead>
                           <tr style={{ background: 'var(--table-sub)' }}>
                             <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
@@ -253,6 +254,7 @@ export default function Pakiety() {
                           })}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </div>
                 )}

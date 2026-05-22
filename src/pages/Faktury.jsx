@@ -628,7 +628,7 @@ export default function Faktury() {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: nFile ? '1fr 260px' : '1fr', gap: 24, alignItems: 'start' }}>
+              <div className="faktura-new-grid" style={{ display: 'grid', gridTemplateColumns: nFile ? '1fr 260px' : '1fr', gap: 24, alignItems: 'start' }}>
 
                 {/* Left column: form + positions */}
                 <div className="space-y-4 min-w-0">
@@ -636,7 +636,7 @@ export default function Faktury() {
                     Dane faktury — sprawdź i zatwierdź
                   </p>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 modal-2col">
                     <div>
                       <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Numer *</label>
                       <input
@@ -659,7 +659,7 @@ export default function Faktury() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 modal-2col">
                     <div>
                       <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Kontrahent *</label>
                       <select
@@ -756,7 +756,7 @@ export default function Faktury() {
                               <Trash2 size={13} />
                             </button>
                           </div>
-                          <div className="grid gap-2" style={{ gridTemplateColumns: '2fr 1fr 1fr 1.3fr' }}>
+                          <div className="grid gap-2 modal-4col" style={{ gridTemplateColumns: '2fr 1fr 1fr 1.3fr' }}>
                             <input
                               placeholder="Typ / kategoria"
                               value={p.typ}
@@ -853,7 +853,7 @@ export default function Faktury() {
       {showFakModal && (
         <Modal title="Edytuj fakturę" onClose={() => setShowFakModal(false)} maxWidth={620}>
           <form onSubmit={handleSaveFak} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 modal-2col">
               <div>
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Numer *</label>
                 <input style={IS(fakErrors.numer)} value={fakForm.numer} onChange={e => setFakForm(f => ({ ...f, numer: e.target.value }))} placeholder="np. FV/2025/001" />
@@ -865,7 +865,7 @@ export default function Faktury() {
                 {fakErrors.data_zakupu && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 modal-2col">
               <div>
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Kontrahent</label>
                 <select style={IS()} value={fakForm.kontrahent_id} onChange={e => setFakForm(f => ({ ...f, kontrahent_id: e.target.value }))}>

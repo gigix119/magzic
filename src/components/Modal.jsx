@@ -31,7 +31,7 @@ export default function Modal({ title, onClose, children, maxWidth = 560 }) {
             <X size={16} />
           </button>
         </div>
-        <div className="p-5 overflow-y-auto">{children}</div>
+        <div className="p-5 overflow-y-auto flex-1 min-h-0">{children}</div>
       </div>
     </div>
   )
