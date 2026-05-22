@@ -22,7 +22,32 @@ ALTER TABLE pozycje_faktury
 ALTER TABLE ruchy_magazynowe
   ADD COLUMN IF NOT EXISTS faktura_id uuid REFERENCES faktury(id);
 
--- 4. Unique constraint w stany_magazynowe (wymagany dla UPSERT)
+-- 4a. Deduplikacja stany_magazynowe — scal duplikaty (towar_id, magazyn_id)
+--     Zostawia wiersz z MIN(id), sumuje ilości, usuwa pozostałe.
+WITH duplikaty AS (
+  SELECT
+    towar_id,
+    magazyn_id,
+    MIN(id)        AS keep_id,
+    SUM(ilosc)     AS suma_ilosc,
+    COUNT(*)       AS cnt
+  FROM stany_magazynowe
+  GROUP BY towar_id, magazyn_id
+  HAVING COUNT(*) > 1
+)
+UPDATE stany_magazynowe sm
+SET ilosc = d.suma_ilosc
+FROM duplikaty d
+WHERE sm.id = d.keep_id;
+
+DELETE FROM stany_magazynowe
+WHERE id NOT IN (
+  SELECT MIN(id)
+  FROM stany_magazynowe
+  GROUP BY towar_id, magazyn_id
+);
+
+-- 4b. Unique constraint w stany_magazynowe (wymagany dla UPSERT)
 DO $$
 BEGIN
   IF NOT EXISTS (

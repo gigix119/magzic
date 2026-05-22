@@ -1,15 +1,18 @@
 import { supabase } from '../supabase'
 import { refreshInventory } from './events'
 
+const DEV = import.meta.env.DEV
+
 // ── Stan helpers ───────────────────────────────────────────────
 
 async function getStan(towarId, magazynId) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('stany_magazynowe')
     .select('id, ilosc')
     .eq('towar_id', towarId)
     .eq('magazyn_id', magazynId)
     .maybeSingle()
+  if (error) console.error('getStan error:', error)
   return data
 }
 
@@ -21,13 +24,17 @@ async function insertRuch(fields) {
 // ── Eksportowane funkcje ───────────────────────────────────────
 
 export async function dodajStan(towarId, magazynId, ilosc, powod = null, fakturaId = null) {
+  if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
+  if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
 
   const current = await getStan(towarId, magazynId)
+  const nowaIlosc = Number(current?.ilosc ?? 0) + Number(ilosc)
+
   if (current) {
     const { error } = await supabase
       .from('stany_magazynowe')
-      .update({ ilosc: Number(current.ilosc) + Number(ilosc) })
+      .update({ ilosc: nowaIlosc })
       .eq('id', current.id)
     if (error) return { success: false, error: error.message }
   } else {
@@ -46,10 +53,14 @@ export async function dodajStan(towarId, magazynId, ilosc, powod = null, faktura
     faktura_id: fakturaId || null,
   })
 
+  if (DEV) console.debug('[magazyn] dodajStan', { towarId, magazynId, ilosc, nowaIlosc })
+  refreshInventory()
   return { success: true }
 }
 
 export async function wydajStan(towarId, magazynId, ilosc, powod = null) {
+  if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
+  if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
 
   const current = await getStan(towarId, magazynId)
@@ -57,9 +68,10 @@ export async function wydajStan(towarId, magazynId, ilosc, powod = null) {
     return { success: false, error: `Niewystarczający stan. Dostępne: ${current?.ilosc ?? 0}` }
   }
 
+  const nowaIlosc = Number(current.ilosc) - Number(ilosc)
   const { error } = await supabase
     .from('stany_magazynowe')
-    .update({ ilosc: Number(current.ilosc) - Number(ilosc) })
+    .update({ ilosc: nowaIlosc })
     .eq('id', current.id)
   if (error) return { success: false, error: error.message }
 
@@ -71,10 +83,14 @@ export async function wydajStan(towarId, magazynId, ilosc, powod = null) {
     powod,
   })
 
+  if (DEV) console.debug('[magazyn] wydajStan', { towarId, magazynId, ilosc, nowaIlosc })
+  refreshInventory()
   return { success: true }
 }
 
 export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, powod = null) {
+  if (!zMagazynuId || !doMagazynuId) return { success: false, error: 'Oba magazyny są wymagane' }
+  if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
   if (zMagazynuId === doMagazynuId) return { success: false, error: 'Magazyny muszą być różne' }
 
@@ -83,17 +99,19 @@ export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, 
     return { success: false, error: `Niewystarczający stan w magazynie źródłowym. Dostępne: ${zrodlo?.ilosc ?? 0}` }
   }
 
+  const nowaIloscZrodlo = Number(zrodlo.ilosc) - Number(ilosc)
   const { error: e1 } = await supabase
     .from('stany_magazynowe')
-    .update({ ilosc: Number(zrodlo.ilosc) - Number(ilosc) })
+    .update({ ilosc: nowaIloscZrodlo })
     .eq('id', zrodlo.id)
   if (e1) return { success: false, error: e1.message }
 
   const cel = await getStan(towarId, doMagazynuId)
+  const nowaIloscCel = Number(cel?.ilosc ?? 0) + Number(ilosc)
   if (cel) {
     const { error: e2 } = await supabase
       .from('stany_magazynowe')
-      .update({ ilosc: Number(cel.ilosc) + Number(ilosc) })
+      .update({ ilosc: nowaIloscCel })
       .eq('id', cel.id)
     if (e2) return { success: false, error: e2.message }
   } else {
@@ -112,10 +130,14 @@ export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, 
     powod,
   })
 
+  if (DEV) console.debug('[magazyn] transferujStan', { towarId, zMagazynuId, doMagazynuId, ilosc, nowaIloscZrodlo, nowaIloscCel })
+  refreshInventory()
   return { success: true }
 }
 
 export async function korektaStan(towarId, magazynId, nowaIlosc, powod) {
+  if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
+  if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(nowaIlosc) < 0) return { success: false, error: 'Ilość nie może być ujemna' }
   if (!powod?.trim()) return { success: false, error: 'Powód korekty jest wymagany' }
 
@@ -145,6 +167,8 @@ export async function korektaStan(towarId, magazynId, nowaIlosc, powod) {
     powod,
   })
 
+  if (DEV) console.debug('[magazyn] korektaStan', { towarId, magazynId, stary, nowaIlosc, roznica })
+  refreshInventory()
   return { success: true }
 }
 
