@@ -15,6 +15,7 @@ import { zatwierdźFakturę } from '../utils/magazyn'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping } from '../utils/invoiceLearning'
+import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
@@ -810,11 +811,39 @@ export default function Faktury() {
           ) : nShowExtracted && !nShowForm ? (
             /* Phase 1.5: Extracted items review */
             <div>
-              {/* Service/utility invoice warning banner */}
+              {/* Source badge + AI availability */}
+              {nExtractionResult && (
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: nExtractionResult.source === 'pdf_text_ai' ? '#eff6ff' : '#f0fdf4',
+                    color: nExtractionResult.source === 'pdf_text_ai' ? '#1d4ed8' : '#15803d',
+                    border: `1px solid ${nExtractionResult.source === 'pdf_text_ai' ? '#bfdbfe' : '#bbf7d0'}`,
+                    borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 600,
+                  }}>
+                    {nExtractionResult.source === 'pdf_text_ai' ? '🤖 Odczyt lokalny + AI' :
+                     nExtractionResult.source === 'pdf_text' ? '📄 Odczyt lokalny' :
+                     '✍️ Wymaga ręcznej weryfikacji'}
+                  </span>
+                  {!isInvoiceAiAvailable() && nExtractionResult.source !== 'pdf_text_ai' && (
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>AI premium nie jest skonfigurowane</span>
+                  )}
+                </div>
+              )}
+              {/* Document type banner */}
+              {nExtractionResult?.documentType === 'inventory_purchase_invoice' && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#166534' }}>
+                  <strong>Faktura zakupowa magazynowa</strong> — po zatwierdzeniu pozycje oznaczone jako <strong>Towar</strong> mogą zwiększyć stany magazynowe.
+                </div>
+              )}
               {nExtractionResult?.documentType && ['telecom_invoice','utility_invoice','service_cost_invoice'].includes(nExtractionResult.documentType) && (
-                <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 13, color: '#92400e' }}>
-                  <strong>⚠️ Faktura usługowa/kosztowa</strong><br/>
-                  Ta faktura wygląda na dokument usługowy lub kosztowy. Pozycje zostaną zapisane jako koszt i nie zwiększą stanów magazynowych bez Twojego ręcznego zatwierdzenia.
+                <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#92400e' }}>
+                  <strong>Faktura usługowa/kosztowa</strong> — pozycje nie zwiększą stanów magazynowych. Zostaną zapisane jako koszty.
+                </div>
+              )}
+              {nExtractionResult?.documentType === 'unknown' && nExtractedItems.some(i => i.itemType === 'inventory_item') && nExtractedItems.some(i => i.itemType === 'service_item') && (
+                <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#0369a1' }}>
+                  <strong>Faktura mieszana</strong> — tylko pozycje oznaczone jako <strong>Towar</strong> wpłyną na magazyn.
                 </div>
               )}
               {nExtractionResult?.validation && (() => {
@@ -876,8 +905,17 @@ export default function Faktury() {
                               {item.itemType === 'service_item' && (
                                 <span style={{ background: '#fed7aa', color: '#9a3412', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Usługa</span>
                               )}
-                              {item.itemType === 'unknown' && (
-                                <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>?</span>
+                              {item.itemType === 'cost_item' && (
+                                <span style={{ background: '#fce7f3', color: '#9d174d', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Koszt</span>
+                              )}
+                              {(item.itemType === 'unknown' || !item.itemType) && (
+                                <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>Sprawdź</span>
+                              )}
+                              {item.shouldAffectInventory === true && (
+                                <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>↑ Magazyn</span>
+                              )}
+                              {item.warnings?.length > 0 && (
+                                <span title={item.warnings.join('; ')} style={{ background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}>⚠ {item.warnings.length}</span>
                               )}
                             </div>
                           </td>

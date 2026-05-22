@@ -7,6 +7,17 @@ import { detectColumnMap } from './invoiceLineParser.js'
 import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 import { calculateConfidence } from './invoiceValidation.js'
+import {
+  sanitizeAiInvoiceResult, validateAiInvoiceSchema,
+  capConfidenceIfNeeded, guardAgainstServiceToInventoryMatch,
+  rejectUnsafeAiInventoryEffects, mergeLocalAndAiResult,
+} from './invoiceAiResultGuard.js'
+import {
+  rememberProductAlias, findProductByAlias,
+  rememberSupplierItemName, getSupplierItemMapping,
+  exportInvoiceLearningData, importInvoiceLearningData, clearInvoiceLearningData,
+  hashInvoiceText, buildLayoutFingerprint, buildTrainingExample, saveInvoiceTrainingExample, getInvoiceTrainingExamples,
+} from './invoiceLearning.js'
 
 function assert(condition, message) {
   if (!condition) console.error('FAIL:', message)
@@ -172,4 +183,218 @@ assert(serviceItem.matchedProductId === null || serviceItem.matchedProductId ===
 const { itemType: summaryType } = classifyItem({ rawName: 'Razem do zapłaty', cenaNetto: 70, ilosc: 1, jednostka: 'szt' }, 'inventory_purchase_invoice')
 assert(summaryType === 'summary_line', 'Razem do zapłaty powinno być summary_line')
 
-console.log('Tests complete.')
+// ═══════════════════════════════════════════════════════════════
+// A. Play/service invoice regressions
+// ═══════════════════════════════════════════════════════════════
+
+const { itemType: playItemType, shouldAffectInventory: playAffect } = classifyItem(
+  { rawName: 'Usługi telekomunikacyjne', ilosc: 1, cenaNetto: 52.85, jednostka: 'usł.' },
+  'telecom_invoice'
+)
+assert(playItemType === 'service_item', 'Play: Usługi telekomunikacyjne muszą być service_item')
+assert(playAffect === false, 'Play: Usługi telekomunikacyjne nie wpływają na magazyn')
+
+// Line without service keyword but inside telecom_invoice — must still be service_item
+const { itemType: playGeneric, shouldAffectInventory: playGenericAffect } = classifyItem(
+  { rawName: 'TV 4K - Rodzina M 5G', ilosc: 1, cenaNetto: 5.00, jednostka: 'szt' },
+  'telecom_invoice'
+)
+assert(playGeneric === 'service_item', 'Play: dowolna pozycja w telecom_invoice to service_item (bez słów kluczowych)')
+assert(playGenericAffect === false, 'Play: dowolna pozycja w telecom_invoice nie wpływa na magazyn')
+
+assert(isForbiddenAsInvoiceItem('Zapłać online: play.pl'), 'Play: Zapłać online nie może być pozycją')
+assert(isForbiddenAsInvoiceItem('Numer konta: 12 3456 7890'), 'Play: Numer konta nie może być pozycją')
+assert(isForbiddenAsInvoiceItem('Termin płatności 2026-06-01'), 'Play: Termin płatności nie może być pozycją')
+
+// ═══════════════════════════════════════════════════════════════
+// B. Brico/inventory invoice regressions
+// ═══════════════════════════════════════════════════════════════
+
+const { itemType: syfonType, shouldAffectInventory: syfonAffect } = classifyItem(
+  { rawName: 'SYFON UMYWALKOWY BIAŁY 32MM', ilosc: 2, cenaNetto: 19.99, jednostka: 'szt' },
+  'inventory_purchase_invoice'
+)
+assert(syfonType === 'inventory_item', 'Brico: syfon musi być inventory_item')
+assert(syfonAffect === true, 'Brico: syfon wpływa na magazyn')
+
+const { itemType: bateriaType } = classifyItem(
+  { rawName: 'BATERIA AAA 4SZT', ilosc: 3, cenaNetto: 8.50, jednostka: 'opak' },
+  'inventory_purchase_invoice'
+)
+assert(bateriaType === 'inventory_item', 'Brico: bateria musi być inventory_item')
+
+assert(!isForbiddenAsInvoiceItem('SYFON UMYWALKOWY BIAŁY 32MM'), 'Brico: syfon może być pozycją')
+assert(!isForbiddenAsInvoiceItem('BATERIA AAA 4SZT'), 'Brico: bateria może być pozycją')
+
+// ═══════════════════════════════════════════════════════════════
+// C. Mixed invoice regressions
+// ═══════════════════════════════════════════════════════════════
+
+const mixedDoc = 'unknown'
+const { itemType: mixedTowar } = classifyItem(
+  { rawName: 'Syfon umywalkowy', ilosc: 2, cenaNetto: 19.99, jednostka: 'szt' },
+  mixedDoc
+)
+assert(mixedTowar === 'inventory_item', 'Mixed: towar z ceną i ilością to inventory_item')
+
+const { itemType: mixedUsługa, shouldAffectInventory: mixedUsługaAffect } = classifyItem(
+  { rawName: 'Usługa transportowa', ilosc: 1, cenaNetto: 50.00, jednostka: 'usł.' },
+  mixedDoc
+)
+assert(mixedUsługa === 'service_item', 'Mixed: usługa transportowa to service_item')
+assert(mixedUsługaAffect === false, 'Mixed: usługa transportowa nie wpływa na magazyn')
+
+// ═══════════════════════════════════════════════════════════════
+// D. AI result guard tests
+// ═══════════════════════════════════════════════════════════════
+
+// D1: service_item z shouldAffectInventory=true → guard blokuje
+const aiResultServiceInventory = {
+  documentType: 'telecom_invoice',
+  confidence: 70,
+  warnings: [],
+  pozycje: [
+    { rawName: 'Usługi telekomunikacyjne', itemType: 'service_item', shouldAffectInventory: true, cenaNetto: 52.85, ilosc: 1 },
+  ],
+}
+const guarded1 = guardAgainstServiceToInventoryMatch(JSON.parse(JSON.stringify(aiResultServiceInventory)))
+assert(guarded1.pozycje[0].shouldAffectInventory === false, 'Guard: service_item z shouldAffectInventory=true → blokowane')
+assert(guarded1.pozycje[0].warnings?.length > 0, 'Guard: ostrzeżenie dodane dla service_item→inventory')
+
+// D2: confidence 100 → capped do 95
+const aiHigh = { documentType: 'inventory_purchase_invoice', confidence: 100, warnings: [], pozycje: [] }
+const capped = capConfidenceIfNeeded(JSON.parse(JSON.stringify(aiHigh)))
+assert(capped.confidence <= 95, 'Guard: AI confidence 100 → cappowane do max 95')
+
+// D3: AI pozycja bez ceny → shouldAffectInventory=false
+const aiNoCena = {
+  documentType: 'inventory_purchase_invoice',
+  confidence: 80,
+  warnings: [],
+  pozycje: [
+    { rawName: 'Syfon', itemType: 'inventory_item', shouldAffectInventory: true, cenaNetto: 0, ilosc: 2 },
+  ],
+}
+const guarded3 = guardAgainstServiceToInventoryMatch(JSON.parse(JSON.stringify(aiNoCena)))
+assert(guarded3.pozycje[0].shouldAffectInventory === false, 'Guard: pozycja bez ceny → shouldAffectInventory=false')
+assert(guarded3.pozycje[0].warnings?.some(w => w.includes('price')), 'Guard: ostrzeżenie o brakującej cenie')
+
+// D4: telecom_invoice → rejectUnsafeAiInventoryEffects blokuje wszystkie inventory=true
+const aiTelecom = {
+  documentType: 'telecom_invoice',
+  confidence: 90,
+  warnings: [],
+  pozycje: [
+    { rawName: 'Jakiś towar', itemType: 'inventory_item', shouldAffectInventory: true, matchedProductId: 'abc123', cenaNetto: 10, ilosc: 1 },
+  ],
+}
+const rejected = rejectUnsafeAiInventoryEffects(JSON.parse(JSON.stringify(aiTelecom)))
+assert(rejected.pozycje[0].shouldAffectInventory === false, 'Guard: rejectUnsafe blokuje inventory w telecom_invoice')
+assert(rejected.pozycje[0].matchedProductId === null, 'Guard: rejectUnsafe czyści matchedProductId w telecom_invoice')
+assert(rejected.confidence <= 80, 'Guard: rejectUnsafe capuje confidence telecom_invoice do 80')
+
+// D5: validateAiInvoiceSchema
+const { valid: validSchema, errors: schemaErrors } = validateAiInvoiceSchema({
+  documentType: 'inventory_purchase_invoice',
+  confidence: 85,
+  pozycje: [{ rawName: 'Syfon' }],
+})
+assert(validSchema === true, 'Guard: poprawny schema → valid=true')
+
+const { valid: invalidSchema } = validateAiInvoiceSchema({ confidence: 'blah', pozycje: null })
+assert(invalidSchema === false, 'Guard: niepoprawny schema → valid=false')
+
+// D6: sanitizeAiInvoiceResult — null guard
+assert(sanitizeAiInvoiceResult(null) === null, 'Guard: sanitize null → null')
+assert(typeof sanitizeAiInvoiceResult({ documentType: 'test', confidence: 50, pozycje: [] }) === 'object', 'Guard: sanitize poprawnego obiektu')
+
+// D7: mergeLocalAndAiResult — AI uzupełnia brakujące pola
+const localEmpty = { documentType: 'unknown', confidence: 30, rawText: '', warnings: [], fields: { numer: null, data_zakupu: '2026-01-01', pozycje: [] } }
+const aiSuggestion = { documentType: 'inventory_purchase_invoice', confidence: 70, warnings: [], pozycje: [], fields: { numer: 'FV/2026/001' } }
+const merged = mergeLocalAndAiResult(JSON.parse(JSON.stringify(localEmpty)), aiSuggestion)
+assert(merged.documentType === 'inventory_purchase_invoice', 'Merge: AI documentType uzupełnia unknown lokalny')
+assert(merged.fields.numer === 'FV/2026/001', 'Merge: AI uzupełnia brakujące pole numer')
+assert(merged.fields.data_zakupu === '2026-01-01', 'Merge: merge nie nadpisuje istniejących lokalnych danych')
+
+// ═══════════════════════════════════════════════════════════════
+// E. Learning data tests
+// ═══════════════════════════════════════════════════════════════
+
+// Clear before testing to ensure clean state
+clearInvoiceLearningData()
+
+// E1: alias rawName → productId
+rememberProductAlias('Syfon umywalkowy biały 32mm', 'prod-001')
+const foundAlias = findProductByAlias('syfon umywalkowy biały 32mm')
+assert(foundAlias === 'prod-001', 'Learning: rememberProductAlias + findProductByAlias działa')
+
+// E2: case insensitive alias lookup
+const foundAliasUpper = findProductByAlias('SYFON UMYWALKOWY BIAŁY 32MM')
+assert(foundAliasUpper === 'prod-001', 'Learning: alias lookup działa case-insensitive')
+
+// E3: supplier rawName → productId
+rememberSupplierItemName('7792308495', 'Bateria AAA 4szt', 'prod-002')
+const foundSupplier = getSupplierItemMapping('7792308495', 'bateria aaa 4szt')
+assert(foundSupplier === 'prod-002', 'Learning: rememberSupplierItemName + getSupplierItemMapping działa')
+
+// E4: unknown alias → null
+const notFound = findProductByAlias('produkt który nie istnieje w bazie')
+assert(notFound === null, 'Learning: nieznany alias zwraca null')
+
+// E5: hashInvoiceText — różne teksty dają różne hashe
+const h1 = hashInvoiceText('Faktura Play')
+const h2 = hashInvoiceText('Faktura Brico')
+assert(h1 !== null && h2 !== null, 'Learning: hashInvoiceText zwraca wartość')
+assert(h1 !== h2, 'Learning: różne teksty → różne hashe')
+assert(hashInvoiceText('') === null, 'Learning: pusty tekst → null')
+
+// E6: buildLayoutFingerprint
+const mockLayout = { pages: [{ lines: [{ text: 'Faktura VAT' }, { text: 'ACME Sp. z o.o.' }] }] }
+const fp = buildLayoutFingerprint(mockLayout)
+assert(fp !== null, 'Learning: buildLayoutFingerprint zwraca wartość')
+assert(fp.pageCount === 1, 'Learning: fingerprint.pageCount poprawny')
+
+// E7: buildTrainingExample + saveInvoiceTrainingExample + getInvoiceTrainingExamples
+const mockLocal = {
+  documentType: 'unknown', confidence: 40, rawText: 'Faktura Play',
+  fields: { numer: null, data_zakupu: '2026-01-01', sprzedawca_nip: '7792308495', sprzedawca_nazwa: 'P4 Sp. z o.o.', pozycje: [
+    { rawName: 'Usługi telekomunikacyjne', itemType: 'inventory_item', shouldAffectInventory: true, matchedProductId: 'bad-prod', cenaNetto: 52.85, ilosc: 1 }
+  ] },
+}
+const mockCorrected = {
+  documentType: 'telecom_invoice', confidence: 70, rawText: 'Faktura Play',
+  fields: { numer: null, data_zakupu: '2026-01-01', sprzedawca_nip: '7792308495', sprzedawca_nazwa: 'P4 Sp. z o.o.', pozycje: [
+    { rawName: 'Usługi telekomunikacyjne', itemType: 'service_item', shouldAffectInventory: false, matchedProductId: null, cenaNetto: 52.85, ilosc: 1 }
+  ] },
+}
+const example = buildTrainingExample(mockLocal, null, mockCorrected)
+assert(example.id != null, 'Learning: training example ma id')
+assert(example.documentTypeBefore === 'unknown', 'Learning: documentTypeBefore poprawny')
+assert(example.documentTypeAfter === 'telecom_invoice', 'Learning: documentTypeAfter poprawny')
+assert(example.corrections.some(c => c.correctionType === 'wrong_document_type'), 'Learning: wykryto korektę documentType')
+assert(example.corrections.some(c => c.correctionType === 'wrong_item_type'), 'Learning: wykryto korektę itemType')
+assert(example.corrections.some(c => c.correctionType === 'wrong_inventory_effect'), 'Learning: wykryto korektę shouldAffectInventory')
+
+saveInvoiceTrainingExample(example)
+const allExamples = getInvoiceTrainingExamples()
+assert(allExamples.length > 0, 'Learning: saveInvoiceTrainingExample + getInvoiceTrainingExamples działa')
+assert(allExamples[allExamples.length - 1].id === example.id, 'Learning: ostatni example to właśnie dodany')
+
+// E8: export / import round-trip
+const exported = exportInvoiceLearningData()
+assert(typeof exported === 'string' && exported.includes('"aliases"'), 'Learning: exportInvoiceLearningData zwraca JSON')
+
+clearInvoiceLearningData()
+assert(getInvoiceTrainingExamples().length === 0, 'Learning: clearInvoiceLearningData czyści examples')
+assert(findProductByAlias('syfon umywalkowy biały 32mm') === null, 'Learning: clearInvoiceLearningData czyści aliasy')
+
+const importResult = importInvoiceLearningData(exported)
+assert(importResult.success === true, 'Learning: importInvoiceLearningData zwraca success=true')
+assert(findProductByAlias('syfon umywalkowy biały 32mm') === 'prod-001', 'Learning: po imporcie alias jest dostępny')
+assert(getInvoiceTrainingExamples().length > 0, 'Learning: po imporcie training examples są dostępne')
+
+// E9: import z nieprawidłowym JSON → nie crashuje
+const badImport = importInvoiceLearningData('nie-to-json!!!{')
+assert(badImport.success === false, 'Learning: import złego JSON zwraca success=false')
+
+console.log('All tests complete.')
