@@ -5,7 +5,7 @@ import {
   ArrowRight, Building2, Wrench, Home, Briefcase,
   MapPin, Menu, X, TrendingDown, Receipt, Package,
   LayoutDashboard, TrendingUp, RefreshCw, Layers, Shield,
-  Lock, Database, CheckCircle2, XCircle,
+  Lock, Database, CheckCircle2, XCircle, Utensils,
 } from 'lucide-react'
 
 /* ── Scroll reveal ──────────────────────────────────────────── */
@@ -92,7 +92,7 @@ const AUDIENCES = [
   { icon: Building2, color: '#3b82f6', title: 'Firmy z wieloma lokalizacjami',    desc: 'Kontrola stanów w biurach, magazynach, lokalach, punktach i zapleczach.' },
   { icon: Wrench,    color: '#f59e0b', title: 'Serwisy i ekipy terenowe',         desc: 'Wydawanie narzędzi, części i materiałów z pełną historią pobrań.' },
   { icon: Home,      color: '#8b5cf6', title: 'Aparthotele i najem krótkoterminowy', desc: 'Środki czystości, wyposażenie i zapasy pod wiele apartamentów.' },
-  { icon: Warehouse, color: '#06b6d4', title: 'Małe magazyny i zaplecza',         desc: 'Prosty WMS bez korporacyjnego ciężaru — działa od razu.' },
+  { icon: Utensils,  color: '#06b6d4', title: 'Restauracje i gastronomia',          desc: 'Kontrola stanów produktów, zaplecza, dostaw i zużycia bez chaosu i ręcznego liczenia.' },
   { icon: Briefcase, color: '#10b981', title: 'Firmy utrzymania obiektów',        desc: 'Materiały eksploatacyjne, kontrola zużycia i alerty braków.' },
   { icon: Layers,    color: '#ef4444', title: 'Operacje bez magazyniera',         desc: 'Dla firm, gdzie magazynem zajmuje się każdy — system pilnuje porządku.' },
 ]
