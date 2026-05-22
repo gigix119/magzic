@@ -1,3 +1,5 @@
+import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
+
 function approxEqual(a, b, tolerance = 0.02) {
   if (a == null || b == null || !b) return false
   return Math.abs(a - b) / Math.max(Math.abs(b), 0.01) <= tolerance
@@ -64,6 +66,44 @@ export function validateTotals(items, fields) {
   }
 
   return warnings
+}
+
+export function calculateConfidence(result, documentType) {
+  let score = 0
+  let maxScore = 95
+
+  if (result.fields.numer) score += 20
+  if (result.fields.data_zakupu) score += 20
+  if (result.fields.kontrahent_nip) score += 10
+  if (result.validation?.errors?.length === 0) score += 10
+
+  const pozycje = result.fields.pozycje || []
+
+  if (pozycje.length > 0) score += 15
+  if (pozycje.length > 2) score += 5
+
+  const completePozycje = pozycje.filter(p =>
+    (p.rawName || p.nazwa) && p.ilosc > 0 && p.cenaNetto > 0 && p.jednostka
+  )
+  if (completePozycje.length === pozycje.length && pozycje.length > 0) score += 10
+
+  if ((result.validation?.warnings?.length ?? 0) === 0) score += 10
+
+  const errors = result.validation?.errors || []
+  const warnings = result.validation?.warnings || []
+
+  if (errors.length > 0) maxScore = Math.min(maxScore, 60)
+  if (warnings.length > 2) maxScore = Math.min(maxScore, 80)
+
+  const zeroPricePozycje = pozycje.filter(p => p.cenaNetto === 0)
+  if (zeroPricePozycje.length > 0) maxScore = Math.min(maxScore, 65)
+
+  const suspiciousPozycje = pozycje.filter(p =>
+    isForbiddenAsInvoiceItem(p.rawName || p.nazwa || '', {})
+  )
+  if (suspiciousPozycje.length > 0) maxScore = Math.min(maxScore, 45)
+
+  return Math.min(score, maxScore)
 }
 
 export function validateInvoiceExtraction(result) {

@@ -456,6 +456,10 @@ export default function Faktury() {
         if (rawItems.length > 0) {
           const supplierNip = result.fields.kontrahent_nip
           const matched = rawItems.map(item => {
+            // Service items don't get matched to warehouse products (Etap 5)
+            if (item.itemType === 'service_item' || item.shouldAffectInventory === false) {
+              return { ...item, matchedProductId: null, matchedProductNazwa: null, matchScore: 0, skipped: false }
+            }
             // Check learning alias first
             const aliasId = findProductByAlias(item.rawName)
             const supplierAliasId = supplierNip ? getSupplierItemMapping(supplierNip, item.rawName) : null
@@ -806,6 +810,13 @@ export default function Faktury() {
           ) : nShowExtracted && !nShowForm ? (
             /* Phase 1.5: Extracted items review */
             <div>
+              {/* Service/utility invoice warning banner */}
+              {nExtractionResult?.documentType && ['telecom_invoice','utility_invoice','service_cost_invoice'].includes(nExtractionResult.documentType) && (
+                <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 13, color: '#92400e' }}>
+                  <strong>⚠️ Faktura usługowa/kosztowa</strong><br/>
+                  Ta faktura wygląda na dokument usługowy lub kosztowy. Pozycje zostaną zapisane jako koszt i nie zwiększą stanów magazynowych bez Twojego ręcznego zatwierdzenia.
+                </div>
+              )}
               {nExtractionResult?.validation && (() => {
                 const v = nExtractionResult.validation
                 const isError = v.suggestedAction === 'manual_required'
@@ -856,14 +867,27 @@ export default function Faktury() {
                             borderLeft: `3px solid ${borderColor}`,
                           }}
                         >
-                          <td className="px-3 py-2 text-xs" style={{ color: 'var(--text)' }}>{item.rawName}</td>
+                          <td className="px-3 py-2 text-xs" style={{ color: 'var(--text)' }}>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{item.rawName}</span>
+                              {item.itemType === 'inventory_item' && (
+                                <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Towar</span>
+                              )}
+                              {item.itemType === 'service_item' && (
+                                <span style={{ background: '#fed7aa', color: '#9a3412', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Usługa</span>
+                              )}
+                              {item.itemType === 'unknown' && (
+                                <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>?</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-3 py-2">
                             <select
                               value={item.matchedProductId || ''}
                               onChange={e => updateExtractedItem(idx, 'matchedProductId', e.target.value || null)}
                               style={{ ...IS(), fontSize: 11, padding: '4px 8px' }}
                             >
-                              <option value="">— brak dopasowania —</option>
+                              <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
                               {towary.map(t => (
                                 <option key={t.id} value={t.id}>{t.nazwa}</option>
                               ))}

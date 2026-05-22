@@ -4,7 +4,9 @@ import { detectInvoiceStructure } from './invoiceStructureDetector.js'
 import { findTableCandidates, chooseBestTableCandidate } from './invoiceTableDetector.js'
 import { parseInvoiceLineData } from './invoiceLineParser.js'
 import { getTemplateForSupplier, saveTemplateFromExtraction } from './invoiceSupplierTemplates.js'
-import { validateInvoiceExtraction } from './invoiceValidation.js'
+import { validateInvoiceExtraction, calculateConfidence } from './invoiceValidation.js'
+import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
+import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
@@ -24,6 +26,7 @@ export function EMPTY_RESULT() {
       suma_brutto: null,
       pozycje: [],
     },
+    documentType: 'unknown',
     confidence: 0,
     source: 'manual',
     warnings: [],
@@ -59,6 +62,8 @@ function makeItem(raw) {
     confidence: raw.confidence ?? 0.7,
     warnings: [],
     matchedProductId: null,
+    itemType: raw.itemType ?? null,
+    shouldAffectInventory: raw.shouldAffectInventory ?? null,
   }
 }
 
@@ -168,10 +173,11 @@ export async function extractFromFile(file) {
 
     // 5. Table detection — multiple candidates, pick best
     let pozycje = []
+    let tableCandidates = []
     try {
-      const candidates = findTableCandidates(layout)
-      result.debug.tableCandidates = candidates.length
-      const best = chooseBestTableCandidate(candidates)
+      tableCandidates = findTableCandidates(layout)
+      result.debug.tableCandidates = tableCandidates.length
+      const best = chooseBestTableCandidate(tableCandidates)
 
       if (best) {
         result.debug.tableSelected = { page: best.pageNum, score: best.headerScore, rows: best.rowCount }
@@ -181,7 +187,7 @@ export async function extractFromFile(file) {
         for (const row of best.rows) {
           try {
             const parsed = parseInvoiceLineData(row.items || [], colMap)
-            if (parsed && (parsed.nazwa) && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0)) {
+            if (parsed && parsed.nazwa && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0)) {
               pozycje.push(makeItem({ ...parsed, rawName: parsed.nazwa }))
             }
           } catch (e) {
@@ -207,29 +213,77 @@ export async function extractFromFile(file) {
       pozycje = parseInvoiceItems(layout.fullText)
     }
 
+    // 8. Document classification
+    try {
+      result.documentType = classifyDocument(layout.fullText, tableCandidates)
+    } catch (e) {
+      result.debug.classifyError = String(e)
+      result.documentType = 'unknown'
+    }
+
+    // 9. Filter forbidden lines and classify each item
+    const filteredPozycje = []
+    for (const poz of pozycje) {
+      const ctx = { hasPrice: poz.cenaNetto > 0, hasUnit: !!(poz.jednostka) }
+      if (isForbiddenAsInvoiceItem(poz.rawName || '', ctx)) continue
+
+      const { itemType, shouldAffectInventory } = classifyItem(poz, result.documentType)
+      poz.itemType = itemType
+      poz.shouldAffectInventory = shouldAffectInventory
+
+      if (itemType === 'service_item') {
+        if (!poz.jednostka || poz.jednostka === 'szt') { poz.jednostka = 'usł.'; poz.unit = 'usł.' }
+        if (!poz.ilosc || poz.ilosc === 0) { poz.ilosc = 1; poz.quantity = 1 }
+      }
+
+      if (itemType !== 'summary_line' && itemType !== 'payment_info' && poz.rawName && poz.rawName.trim().length > 1) {
+        filteredPozycje.push(poz)
+      }
+    }
+    pozycje = filteredPozycje
     result.fields.pozycje = pozycje
 
-    // 8. Confidence scoring
+    // 10. Preliminary confidence (needed for validateInvoiceExtraction thresholds)
     let conf = 0
     if (result.fields.numer) conf += 25
     if (result.fields.data_zakupu) conf += 25
     if (result.fields.kontrahent_nip) conf += 20
     if (pozycje.length > 0) conf += 30
-    result.confidence = conf
+    result.confidence = Math.min(conf, 95)
     result.source = 'pdf_text'
 
     if (structure.warnings?.length) structure.warnings.forEach(w => result.warnings.push(w))
     if (!pozycje.length) result.warnings.push('Nie udało się automatycznie wykryć pozycji. Dodaj ręcznie klikając "+ Dodaj pozycję".')
-    if (conf < 50) result.warnings.push('Niska pewność odczytu. Sprawdź wszystkie pola przed zatwierdzeniem.')
+    if (result.confidence < 50) result.warnings.push('Niska pewność odczytu. Sprawdź wszystkie pola przed zatwierdzeniem.')
 
-    // 9. Validation
+    // 11. Validation (sets result.validation with errors/warnings/suggestedAction)
     try {
       validateInvoiceExtraction(result)
     } catch (e) {
       result.debug.validationError = String(e)
     }
 
-    // 10. Save supplier template if confident enough
+    // 12. Final confidence using validation data (replaces preliminary)
+    try {
+      const finalConf = calculateConfidence(result, result.documentType)
+      result.confidence = finalConf
+      if (result.validation) {
+        result.validation.confidence = finalConf
+        if (result.validation.errors.length > 0) {
+          result.validation.suggestedAction = 'manual_required'
+        } else if (finalConf < 60 || result.validation.warnings.length > 2) {
+          result.validation.suggestedAction = 'review_required'
+        } else if (finalConf < 85) {
+          result.validation.suggestedAction = 'review_required'
+        } else {
+          result.validation.suggestedAction = 'auto_fill'
+        }
+      }
+    } catch (e) {
+      result.debug.confidenceError = String(e)
+    }
+
+    // 13. Save supplier template if confident enough
     try {
       saveTemplateFromExtraction(result)
     } catch (e) {
@@ -249,6 +303,9 @@ export function parseInvoiceItems(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3)
 
   for (const line of lines) {
+    // Skip forbidden lines before trying to parse
+    if (isForbiddenAsInvoiceItem(line, {})) continue
+
     const match = line.match(
       /^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(szt\.?|opak\.?|rolka|para|kpl\.?|l|kg|ml|m2|mb|godz)\s+([\d][\d\s.,]*)/i
     )
@@ -270,10 +327,13 @@ export function parseInvoiceItems(text) {
 
     const simpleMatch = line.match(/^(.{5,60}?)\s+([\d]+[.,]\d{2})\s*(?:zł|PLN)?$/)
     if (simpleMatch) {
+      const rawName = simpleMatch[1].trim()
+      // Double-check name is not forbidden
+      if (isForbiddenAsInvoiceItem(rawName, {})) continue
       const cena = normalizePolishNumber(simpleMatch[2])
       if (!isNaN(cena) && cena > 0 && cena < 100000) {
         const item = makeItem({
-          rawName: simpleMatch[1].trim(),
+          rawName,
           ilosc: 1,
           jednostka: 'szt',
           cenaNetto: cena,
