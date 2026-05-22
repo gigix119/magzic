@@ -63,3 +63,51 @@ body {
 ::-webkit-scrollbar-track { background: var(--card); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Mobile-first responsive helpers ── */
+
+/* Sidebar: always visible on desktop (cancel any leftover transform) */
+@media (min-width: 1024px) {
+  .sidebar-panel { transform: none !important; }
+}
+
+/* Sidebar: slide off-screen on mobile when closed */
+@media (max-width: 1023px) {
+  .sidebar-panel-closed { transform: translateX(-100%) !important; }
+}
+
+/* Table overflow wrapper — lets tables scroll horizontally on mobile */
+.table-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Page headers with action button wrap on very small screens */
+@media (max-width: 480px) {
+  .page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .page-header .page-header-btn { align-self: stretch; justify-content: center; }
+}
+
+/* Reduce panel main padding on mobile */
+@media (max-width: 767px) {
+  .panel-main { padding: 16px !important; }
+}
+
+/* Modal responsive */
+@media (max-width: 600px) {
+  .modal-inner {
+    max-height: calc(100dvh - 48px) !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* Expanded rows in tables: 2-col → 1-col on mobile */
+@media (max-width: 600px) {
+  .expanded-row-grid { grid-template-columns: 1fr !important; }
+}
+
+/* 2-col form grids in modals: collapse on very small phones */
+@media (max-width: 400px) {
+  .modal-2col { grid-template-columns: 1fr !important; }
+}

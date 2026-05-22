@@ -97,12 +97,12 @@ export default function Kontrahenci() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3 page-header">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Kontrahenci</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{items.length} kontrahentów</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white" style={{ background: '#3b82f6' }}>
+        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: '#3b82f6' }}>
           <Plus size={16} /> Dodaj kontrahenta
         </button>
       </div>
@@ -112,8 +112,8 @@ export default function Kontrahenci() {
         <input style={{ ...IS(), paddingLeft: 36 }} placeholder="Szukaj po nazwie, NIP, email..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-        <table className="w-full text-sm">
+      <div className="rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
+        <table className="w-full text-sm" style={{ minWidth: 480 }}>
           <thead>
             <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Nazwa</th>
@@ -172,7 +172,7 @@ export default function Kontrahenci() {
               <input style={IS(errors.nazwa)} value={form.nazwa} onChange={e => setForm(f => ({ ...f, nazwa: e.target.value }))} placeholder="np. Firma ABC Sp. z o.o." />
               {errors.nazwa && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 modal-2col">
               <div>
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>NIP</label>
                 <input style={IS()} value={form.nip} onChange={e => setForm(f => ({ ...f, nip: e.target.value }))} placeholder="1234567890" />

@@ -222,12 +222,12 @@ export default function Towary() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3 page-header">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Towary</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{items.length} towarów w bazie</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white" style={{ background: '#3b82f6' }}>
+        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: '#3b82f6' }}>
           <Plus size={16} /> Dodaj towar
         </button>
       </div>
@@ -237,8 +237,8 @@ export default function Towary() {
         <input style={{ ...IS(), paddingLeft: 36 }} placeholder="Szukaj towarów..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-        <table className="w-full text-sm">
+      <div className="rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
+        <table className="w-full text-sm" style={{ minWidth: 560 }}>
           <thead>
             <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Nazwa</th>
@@ -307,7 +307,7 @@ export default function Towary() {
                     {isExpanded && (
                       <tr key={`${item.id}-exp`} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td colSpan={7} style={{ padding: 0, background: 'var(--table-sub)' }}>
-                          <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                          <div className="expanded-row-grid" style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                             {/* Stany per magazyn */}
                             <div>
                               <div className="flex items-center gap-1.5 mb-2">
@@ -486,7 +486,7 @@ export default function Towary() {
               <input style={IS(errors.nazwa)} value={form.nazwa} onChange={e => setForm(f => ({ ...f, nazwa: e.target.value }))} placeholder="np. Płyn do mycia podłóg" />
               {errors.nazwa && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 modal-2col">
               <div>
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Typ</label>
                 <input style={IS()} value={form.typ} onChange={e => setForm(f => ({ ...f, typ: e.target.value }))} placeholder="np. Chemiczny" />
@@ -496,7 +496,7 @@ export default function Towary() {
                 <input style={IS()} value={form.jednostka} onChange={e => setForm(f => ({ ...f, jednostka: e.target.value }))} placeholder="np. litr, szt" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 modal-2col">
               <div>
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Kategoria</label>
                 <select style={IS()} value={form.kategoria_id} onChange={e => setForm(f => ({ ...f, kategoria_id: e.target.value }))}>
@@ -513,7 +513,7 @@ export default function Towary() {
             {!editItem && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                 <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>Stan początkowy (opcjonalnie)</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 modal-2col">
                   <div>
                     <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Ilość</label>
                     <input type="number" min="0" step="0.01" style={IS()} value={form.poczatkowy_stan} onChange={e => setForm(f => ({ ...f, poczatkowy_stan: e.target.value }))} placeholder="0" />

@@ -42,12 +42,11 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
-        className="fixed lg:static inset-y-0 left-0 z-30 flex flex-col"
+        className={`fixed lg:static inset-y-0 left-0 z-30 flex flex-col sidebar-panel ${sidebarOpen ? '' : 'sidebar-panel-closed'}`}
         style={{
           width: 220,
           background: 'var(--sidebar)',
           borderRight: '1px solid var(--sidebar-border)',
-          transform: sidebarOpen ? 'translateX(0)' : undefined,
           transition: 'transform 0.2s',
         }}
       >
@@ -142,7 +141,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 panel-main">
           <Outlet />
         </main>
       </div>

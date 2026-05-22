@@ -256,7 +256,8 @@ export default function Alerty() {
             <p className="text-sm">Brak aktywnych alertów</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="table-scroll-x">
+          <table className="w-full text-sm" style={{ minWidth: 460 }}>
             <thead>
               <tr style={{ background: 'var(--table-sub)' }}>
                 <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
@@ -288,6 +289,7 @@ export default function Alerty() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -313,7 +315,8 @@ export default function Alerty() {
             <p className="text-sm">Brak alertów cenowych</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="table-scroll-x">
+          <table className="w-full text-sm" style={{ minWidth: 400 }}>
             <thead>
               <tr style={{ background: 'var(--table-sub)' }}>
                 <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
@@ -348,6 +351,7 @@ export default function Alerty() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

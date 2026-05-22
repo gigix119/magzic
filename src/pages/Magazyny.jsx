@@ -172,12 +172,12 @@ export default function Magazyny() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3 page-header">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Magazyny</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{magazyny.length} magazynów</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white" style={{ background: '#3b82f6' }}>
+        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: '#3b82f6' }}>
           <Plus size={16} /> Dodaj magazyn
         </button>
       </div>
@@ -229,7 +229,8 @@ export default function Magazyny() {
                     {items.length === 0 ? (
                       <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>Brak towarów w tym magazynie</p>
                     ) : (
-                      <table className="w-full text-sm">
+                      <div className="table-scroll-x">
+                      <table className="w-full text-sm" style={{ minWidth: 500 }}>
                         <thead>
                           <tr style={{ background: 'var(--table-sub)' }}>
                             <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
@@ -272,6 +273,7 @@ export default function Magazyny() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     )}
                     {mag.opis && (
                       <div className="px-5 py-3 text-sm" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>{mag.opis}</div>

@@ -215,6 +215,22 @@ export default function Landing() {
           .hero-cta     { flex-direction: column !important; }
           .hero-cta > * { width: 100% !important; text-align: center !important; justify-content: center !important; }
           .trust-row    { flex-wrap: wrap !important; gap: 10px !important; justify-content: center !important; }
+
+          /* Reduce section vertical padding on small phones */
+          .section-pad  { padding-top: 64px !important; padding-bottom: 64px !important; }
+          .section-pad-sm { padding-top: 48px !important; padding-bottom: 48px !important; }
+
+          /* Hero: less padding so content isn't too compressed */
+          .hero-section { padding-top: 80px !important; padding-bottom: 64px !important; }
+
+          /* Mockup: prevent overflow */
+          .hero-mockup  { max-width: 100% !important; overflow: hidden !important; }
+        }
+
+        @media (max-width: 480px) {
+          /* Smaller section padding on very small phones */
+          .section-pad  { padding-top: 52px !important; padding-bottom: 52px !important; padding-left: 16px !important; padding-right: 16px !important; }
+          .hero-section { padding-top: 72px !important; padding-bottom: 52px !important; }
         }
       `}</style>
 
@@ -282,7 +298,7 @@ export default function Landing() {
       </header>
 
       {/* ══ HERO ══════════════════════════════════════════════ */}
-      <section style={{
+      <section className="hero-section" style={{
         paddingTop: 120, paddingBottom: 120, position: 'relative', overflow: 'hidden',
         background: '#060d1a',
         backgroundImage: 'linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px)',
@@ -340,7 +356,7 @@ export default function Landing() {
             </div>
 
             {/* Mockup */}
-            <div className="hf" style={{ animation: 'float 5.5s ease-in-out infinite' }}>
+            <div className="hf hero-mockup" style={{ animation: 'float 5.5s ease-in-out infinite' }}>
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', inset: -28, background: 'radial-gradient(circle, rgba(59,130,246,.25) 0%, transparent 68%)', filter: 'blur(24px)', pointerEvents: 'none' }} />
                 <div style={{ position: 'relative', background: '#fff', borderRadius: 20, border: '1px solid rgba(59,130,246,.18)', overflow: 'hidden', boxShadow: '0 48px 100px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.9)' }}>
@@ -428,7 +444,7 @@ export default function Landing() {
       </section>
 
       {/* ══ PROBLEM ═══════════════════════════════════════════ */}
-      <section id="problem" style={{ padding: '96px 24px', background: '#f8fafc' }}>
+      <section id="problem" className="section-pad" style={{ padding: '96px 24px', background: '#f8fafc' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto' }}>
           <Reveal>
             <div style={{ textAlign: 'center', marginBottom: 64 }}>
@@ -459,7 +475,7 @@ export default function Landing() {
       </section>
 
       {/* ══ JAK TO DZIAŁA ═════════════════════════════════════ */}
-      <section style={{ padding: '96px 24px', background: '#fff' }}>
+      <section className="section-pad" style={{ padding: '96px 24px', background: '#fff' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto' }}>
           <div className="how-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
 
@@ -557,7 +573,7 @@ export default function Landing() {
       </section>
 
       {/* ══ FUNKCJE (bento) ═══════════════════════════════════ */}
-      <section id="funkcje" style={{ padding: '96px 24px', background: '#f8fafc' }}>
+      <section id="funkcje" className="section-pad" style={{ padding: '96px 24px', background: '#f8fafc' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto' }}>
           <Reveal>
             <div style={{ textAlign: 'center', marginBottom: 64 }}>
@@ -643,7 +659,7 @@ export default function Landing() {
       </section>
 
       {/* ══ AI (dark) ══════════════════════════════════════════ */}
-      <section id="ai" style={{
+      <section id="ai" className="section-pad" style={{
         padding: '96px 24px', position: 'relative', overflow: 'hidden',
         background: '#060d1a',
         backgroundImage: 'linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px)',
@@ -711,7 +727,7 @@ export default function Landing() {
       </section>
 
       {/* ══ DLA KOGO ══════════════════════════════════════════ */}
-      <section id="dla-kogo" style={{ padding: '96px 24px', background: '#fff' }}>
+      <section id="dla-kogo" className="section-pad" style={{ padding: '96px 24px', background: '#fff' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto' }}>
           <Reveal>
             <div style={{ textAlign: 'center', marginBottom: 64 }}>
@@ -745,7 +761,7 @@ export default function Landing() {
       </section>
 
       {/* ══ PRZED / PO ════════════════════════════════════════ */}
-      <section style={{ padding: '96px 24px', background: '#f8fafc' }}>
+      <section className="section-pad" style={{ padding: '96px 24px', background: '#f8fafc' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto' }}>
           <Reveal>
             <div style={{ textAlign: 'center', marginBottom: 56 }}>

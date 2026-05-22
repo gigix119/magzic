@@ -169,12 +169,12 @@ export default function Pakiety() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3 page-header">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Pakiety sprzątania</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{pakiety.length} pakietów</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white" style={{ background: '#3b82f6' }}>
+        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: '#3b82f6' }}>
           <Plus size={16} /> Nowy pakiet
         </button>
       </div>

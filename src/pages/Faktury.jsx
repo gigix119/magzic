@@ -425,14 +425,14 @@ export default function Faktury() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3 page-header">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Faktury</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{faktury.length} faktur</p>
         </div>
         <button
           onClick={openNewModal}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white"
+          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn"
           style={{ background: '#3b82f6' }}
         >
           <Plus size={16} /> Nowa faktura
@@ -523,7 +523,8 @@ export default function Faktury() {
                 {isOpen && (
                   <div style={{ borderTop: '1px solid var(--border)' }}>
                     {poz.length > 0 ? (
-                      <table className="w-full text-sm">
+                      <div className="table-scroll-x">
+                      <table className="w-full text-sm" style={{ minWidth: 480 }}>
                         <thead>
                           <tr style={{ background: 'var(--table-sub)' }}>
                             <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
@@ -560,6 +561,7 @@ export default function Faktury() {
                           </tr>
                         </tfoot>
                       </table>
+                      </div>
                     ) : (
                       <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>Brak pozycji</p>
                     )}

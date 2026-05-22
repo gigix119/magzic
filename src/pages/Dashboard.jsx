@@ -139,7 +139,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 2: stock status */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard icon={CheckCircle2}  label="Stany OK"       value={stockStatus.ok}    color="#22c55e" />
         <StatCard icon={TrendingDown}  label="Stany Niskie"   value={stockStatus.low}   color="#f59e0b" />
         <StatCard icon={AlertTriangle} label="Brak stanu"     value={stockStatus.empty} color="#ef4444" />
