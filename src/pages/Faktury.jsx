@@ -11,7 +11,7 @@ import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
-import { zatwierdźFakturę } from '../utils/magazyn'
+import { zatwierdźFakturę, cofnijDoRoboczej } from '../utils/magazyn'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping } from '../utils/invoiceLearning'
@@ -39,7 +39,7 @@ const emptyFak = {
   magazyn_id: '',
   notatki: '',
 }
-const emptyPoz = { towar_id: '', ilosc: '', cena_netto: '', vat_procent: 23 }
+const emptyPoz = { towar_id: '', ilosc: '', cena_netto: '', vat_procent: 23, magazyn_id: '' }
 
 const AI_TYP_MAP = {
   'faktura': 'zakup', 'faktura vat': 'zakup', 'faktura zakupu': 'zakup', 'zakup': 'zakup',
@@ -119,6 +119,8 @@ export default function Faktury() {
   const [nExtractionResult, setNExtractionResult] = useState(null)
   const [qualityMetrics, setQualityMetrics] = useState(null)
   const [extractedResult, setExtractedResult] = useState(null)
+  const [showZatwierdzModal, setShowZatwierdzModal] = useState(false)
+  const [zatwierdzFak, setZatwierdzFak] = useState(null)
 
   // ─────────────────────────────────────────────────────────────
 
@@ -216,9 +218,9 @@ export default function Faktury() {
   }
 
   // ── Add position to existing invoice ──────────────────────────
-  function openAddPoz(fakId) {
-    setTargetFakId(fakId)
-    setPozForm(emptyPoz)
+  function openAddPoz(fak) {
+    setTargetFakId(fak.id)
+    setPozForm({ ...emptyPoz, magazyn_id: fak.magazyn_id || '' })
     setPozErrors({})
     setShowPozModal(true)
   }
@@ -240,11 +242,12 @@ export default function Faktury() {
     const { error } = await supabase.from('pozycje_faktury').insert([{
       faktura_id: targetFakId,
       towar_id: pozForm.towar_id,
+      magazyn_id: pozForm.magazyn_id || null,
       ilosc: Number(pozForm.ilosc),
       cena_netto: Number(pozForm.cena_netto),
       vat_procent: Number(pozForm.vat_procent) || 23,
     }])
-    if (error) { console.error(error); addToast(error.message, 'error'); setSavingPoz(false); return }
+    if (error) { console.error(error); addToast(`Błąd zapisu pozycji: ${error.message}`, 'error'); setSavingPoz(false); return }
 
     addToast('Pozycja dodana', 'success')
     setShowPozModal(false)
@@ -259,19 +262,41 @@ export default function Faktury() {
     else { addToast('Pozycja usunięta', 'success'); fetchData() }
   }
 
-  async function handleZatwierdz(fak) {
+  function handleZatwierdz(fak) {
     if (fak.status === 'zatwierdzona') { addToast('Faktura już zatwierdzona', 'error'); return }
     const pozFaktury = pozycje[fak.id] || []
     if (pozFaktury.length === 0) { addToast('Dodaj najpierw pozycje do faktury', 'error'); return }
-    if (!fak.magazyn_id) { addToast('Wybierz magazyn docelowy', 'error'); return }
+    setZatwierdzFak(fak)
+    setShowZatwierdzModal(true)
+  }
+
+  async function doZatwierdz() {
+    if (!zatwierdzFak) return
+    const fak = zatwierdzFak
+    setShowZatwierdzModal(false)
+    setZatwierdzFak(null)
     const mag = magazyny.find(m => m.id === fak.magazyn_id)
     const result = await zatwierdźFakturę(fak.id)
     if (result.success) {
-      addToast(`Faktura ${fak.numer} zatwierdzona — zaktualizowano ${result.zaktualizowane?.length || 0} pozycji w ${mag?.nazwa || 'magazynie'}`, 'success')
+      const info = result.zaktualizowane?.length
+        ? `zaktualizowano ${result.zaktualizowane.length} pozycji w ${mag?.nazwa || 'magazynie'}`
+        : 'brak pozycji towarowych — faktura oznaczona jako zatwierdzona'
+      addToast(`Faktura ${fak.numer} zatwierdzona — ${info}`, 'success')
       fetchData()
       savePriceAlertsForFaktura(fak).catch(err => console.error('savePriceAlerts:', err))
     } else {
       addToast(result.error || 'Błąd zatwierdzenia', 'error')
+    }
+  }
+
+  async function handleCofnij(fak) {
+    if (!window.confirm(`Cofnąć fakturę "${fak.numer}" do roboczej? Stany magazynowe zostaną odwrócone.`)) return
+    const result = await cofnijDoRoboczej(fak.id)
+    if (result.success) {
+      addToast(`Faktura ${fak.numer} cofnięta do roboczej`, 'success')
+      fetchData()
+    } else {
+      addToast(result.error || 'Błąd cofnięcia', 'error')
     }
   }
 
@@ -599,7 +624,7 @@ export default function Faktury() {
         }
 
         // Insert position
-        await supabase.from('pozycje_faktury').insert([{
+        const { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([{
           faktura_id: fakData.id,
           towar_id: towarId,
           magazyn_id: poz.magazyn_id || null,
@@ -607,6 +632,10 @@ export default function Faktury() {
           cena_netto: Number(poz.cena_netto) || 0,
           vat_procent: 23,
         }])
+        if (pozInsertErr) {
+          console.error('Błąd zapisu pozycji:', pozInsertErr)
+          addToast(`Błąd zapisu pozycji "${poz.nazwa}": ${pozInsertErr.message}`, 'error')
+        }
       }
 
       addToast(`Faktura ${nForm.numer.trim()} zapisana jako robocza — zatwierdź aby zaktualizować stany`, 'success')
@@ -704,7 +733,7 @@ export default function Faktury() {
                         <button onClick={() => handleZatwierdz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#22c55e' }} title="Zatwierdź fakturę">
                           <CheckCircle2 size={12} /> Zatwierdź
                         </button>
-                        <button onClick={() => openAddPoz(fak.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }} title="Dodaj pozycję">
+                        <button onClick={() => openAddPoz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }} title="Dodaj pozycję">
                           <Plus size={12} /> Dodaj poz.
                         </button>
                         {fak.plik_url && (
@@ -717,13 +746,23 @@ export default function Faktury() {
                       </>
                     )}
                     {fak.status === 'zatwierdzona' && (
-                      <button
-                        onClick={() => setExpanded(isOpen ? null : fak.id)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                        style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
-                      >
-                        {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Zobacz pozycje
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setExpanded(isOpen ? null : fak.id)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                        >
+                          {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Pozycje
+                        </button>
+                        <button
+                          onClick={() => handleCofnij(fak)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid #fcd34d' }}
+                          title="Cofnij do roboczej i odwróć stany magazynowe"
+                        >
+                          Cofnij
+                        </button>
+                      </>
                     )}
                     {fak.status === 'anulowana' && (
                       <>
@@ -785,7 +824,7 @@ export default function Faktury() {
                     )}
 
                     <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
-                      <button onClick={() => openAddPoz(fak.id)} className="flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                      <button onClick={() => openAddPoz(fak)} className="flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
                         <Plus size={12} /> Dodaj pozycję
                       </button>
                     </div>
@@ -1526,6 +1565,18 @@ export default function Faktury() {
                 {pozErrors.cena_netto && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
               </div>
 
+              <div>
+                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Magazyn docelowy (dla towarów)</label>
+                <select
+                  style={IS()}
+                  value={pozForm.magazyn_id}
+                  onChange={e => setPozForm(f => ({ ...f, magazyn_id: e.target.value }))}
+                >
+                  <option value="">— brak (usługa / koszt) —</option>
+                  {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
+                </select>
+              </div>
+
               {(Number(pozForm.ilosc) > 0 || Number(pozForm.cena_netto) > 0) && (
                 <div className="rounded-lg px-4 py-3 space-y-1" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
                   <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
@@ -1550,6 +1601,85 @@ export default function Faktury() {
                 </button>
               </div>
             </form>
+          </Modal>
+        )
+      })()}
+
+      {/* ════════════════════════════════════════════════════════════
+          ZATWIERDZENIE — MODAL POTWIERDZENIA
+          ════════════════════════════════════════════════════════════ */}
+      {showZatwierdzModal && zatwierdzFak && (() => {
+        const poz = pozycje[zatwierdzFak.id] || []
+        const towarowe = poz.filter(p => p.towar_id)
+        const bezTowaru = poz.filter(p => !p.towar_id)
+        const mag = magazyny.find(m => m.id === zatwierdzFak.magazyn_id)
+        return (
+          <Modal
+            title={`Zatwierdź fakturę ${zatwierdzFak.numer}`}
+            onClose={() => { setShowZatwierdzModal(false); setZatwierdzFak(null) }}
+            maxWidth={520}
+          >
+            <div className="space-y-4">
+              <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+                Zatwierdzenie zaktualizuje stany magazynowe dla pozycji towarowych.
+              </p>
+
+              {towarowe.length > 0 && (
+                <div className="rounded-lg p-3 space-y-1.5" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                  <p className="text-xs font-semibold" style={{ color: '#166534' }}>
+                    ✅ Do przyjęcia na magazyn ({towarowe.length} poz.):
+                  </p>
+                  {towarowe.map(p => {
+                    const m = magazyny.find(x => x.id === (p.magazyn_id || zatwierdzFak.magazyn_id))
+                    return (
+                      <div key={p.id} className="text-xs" style={{ color: '#166534' }}>
+                        · {p.towary?.nazwa || '—'} × {p.ilosc} {p.towary?.jednostka || 'szt.'} → {m?.nazwa || mag?.nazwa || '?'}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {bezTowaru.length > 0 && (
+                <div className="rounded-lg p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
+                  <p className="text-xs font-semibold" style={{ color: '#92400e' }}>
+                    ⚠ {bezTowaru.length} poz. bez przypisanego towaru — nie trafią do magazynu
+                  </p>
+                  {bezTowaru.map(p => (
+                    <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
+                      · {p.towary?.nazwa || '(brak nazwy)'} × {p.ilosc}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {towarowe.length === 0 && (
+                <div className="rounded-lg p-3" style={{ background: '#fef2f2', border: '1px solid #fca5a5' }}>
+                  <p className="text-xs" style={{ color: '#991b1b' }}>
+                    ❌ Brak pozycji towarowych — żadna pozycja nie trafi do magazynu. Faktura zostanie oznaczona jako zatwierdzona.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowZatwierdzModal(false); setZatwierdzFak(null) }}
+                  className="flex-1 rounded-lg py-2 text-sm font-medium"
+                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="button"
+                  onClick={doZatwierdz}
+                  className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                  style={{ background: '#22c55e' }}
+                >
+                  Zatwierdź fakturę
+                </button>
+              </div>
+            </div>
           </Modal>
         )
       })()}

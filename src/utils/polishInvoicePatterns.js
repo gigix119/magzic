@@ -2,20 +2,37 @@
 
 export function normalizePolishNumber(str) {
   if (str === null || str === undefined || str === '') return NaN
-  const s = String(str).trim().replace(/ /g, ' ')
-  // Remove currency symbols and whitespace
-  const clean = s.replace(/[zł$€£\s]/g, '')
+  const s = String(str).trim()
+
+  // "7,-" or "7,--"
+  if (/^\d+[,.-]{1,2}$/.test(s)) return parseFloat(s.replace(/[,.-]+$/, ''))
+
+  // Remove currency symbols and non-breaking spaces
+  const clean = s.replace(/[zł$€£ ]/g, '').trim()
   if (!clean) return NaN
-  // Both dot AND comma: dot = thousands separator (1.234,56 → 1234.56)
+
+  // "2 071,54" — space/NBSP as thousands separator, comma as decimal
+  if (/^\d{1,3}[\s ]\d{3},\d{1,2}$/.test(clean)) {
+    return parseFloat(clean.replace(/[\s ]/g, '').replace(',', '.'))
+  }
+
+  // "1.234,56" — dot thousands, comma decimal
+  if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(clean)) {
+    return parseFloat(clean.replace(/\./g, '').replace(',', '.'))
+  }
+
+  // Both dot AND comma (remaining): dot = thousands, comma = decimal
   if (clean.includes('.') && clean.includes(',')) {
     return parseFloat(clean.replace(/\./g, '').replace(',', '.'))
   }
-  // Only comma: decimal separator (1234,56 or 1 234,56)
+
+  // Only comma: decimal separator (1234,56)
   if (clean.includes(',')) {
-    return parseFloat(clean.replace(',', '.'))
+    return parseFloat(clean.replace(/[\s ]/g, '').replace(',', '.'))
   }
-  // Only dot or integer
-  return parseFloat(clean)
+
+  // Plain integer or float with spaces as thousands
+  return parseFloat(clean.replace(/[\s ]/g, '')) || NaN
 }
 
 export function normalizeDate(dateStr) {

@@ -179,58 +179,146 @@ export async function getRuchyTowaru(towarId, limit = 20) {
 }
 
 export async function zatwierdźFakturę(fakturaId) {
-  const { data: fak, error: fErr } = await supabase
+  // 1. Pobierz fakturę z pełnymi danymi
+  const { data: faktura, error: fakturaError } = await supabase
     .from('faktury')
-    .select('*, pozycje_faktury(*)')
+    .select(`*, pozycje_faktury(id, towar_id, magazyn_id, ilosc, cena_netto, vat_procent, towary(nazwa, jednostka))`)
     .eq('id', fakturaId)
     .single()
-  if (fErr) return { success: false, error: fErr.message }
 
-  if (!fak.pozycje_faktury?.length) {
-    return { success: false, error: 'Faktura nie ma żadnych pozycji' }
+  if (fakturaError || !faktura) {
+    return { success: false, error: fakturaError?.message || 'Nie znaleziono faktury' }
   }
 
-  const magazynId = fak.magazyn_id
-  if (!magazynId) {
-    return { success: false, error: 'Faktura nie ma przypisanego magazynu docelowego' }
+  // 2. Walidacja
+  const pozycje = faktura.pozycje_faktury || []
+  if (pozycje.length === 0) {
+    return { success: false, error: 'Faktura nie ma pozycji' }
+  }
+  if (faktura.status === 'zatwierdzona') {
+    return { success: false, error: 'Faktura już zatwierdzona' }
   }
 
+  // Tylko pozycje towarowe (mają towar_id i magazyn)
+  const pozycjeTowary = pozycje.filter(p =>
+    p.towar_id && (p.magazyn_id || faktura.magazyn_id)
+  )
+  const pozycjePoziome = pozycje.filter(p => !p.towar_id || (!p.magazyn_id && !faktura.magazyn_id))
+
+  // 3. Dla każdej pozycji towarowej — upsert stanu magazynowego
+  const errors = []
   const zaktualizowane = []
-  for (const poz of fak.pozycje_faktury) {
+
+  for (const poz of pozycjeTowary) {
+    const magazynId = poz.magazyn_id || faktura.magazyn_id
+
     const { data: aktualny } = await supabase
       .from('stany_magazynowe')
-      .select('ilosc')
+      .select('id, ilosc')
       .eq('towar_id', poz.towar_id)
-      .eq('magazyn_id', fak.magazyn_id)
-      .single()
+      .eq('magazyn_id', magazynId)
+      .maybeSingle()
 
     const nowaIlosc = (aktualny?.ilosc || 0) + Number(poz.ilosc)
 
-    const { error: upsertErr } = await supabase
+    const { error: upsertError } = await supabase
       .from('stany_magazynowe')
       .upsert(
-        { towar_id: poz.towar_id, magazyn_id: fak.magazyn_id, ilosc: nowaIlosc },
+        {
+          towar_id: poz.towar_id,
+          magazyn_id: magazynId,
+          ilosc: nowaIlosc,
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: 'towar_id,magazyn_id' }
       )
 
-    if (upsertErr) { console.error('stany upsert:', upsertErr); continue }
+    if (upsertError) {
+      errors.push(`${poz.towary?.nazwa || poz.towar_id}: ${upsertError.message}`)
+      continue
+    }
 
+    // Zapisz ruch magazynowy (niekrytyczny)
     await supabase.from('ruchy_magazynowe').insert([{
       towar_id: poz.towar_id,
-      magazyn_docelowy_id: fak.magazyn_id,
+      magazyn_docelowy_id: magazynId,
       ilosc: Number(poz.ilosc),
       typ: 'invoice_purchase',
+      powod: `Faktura ${faktura.numer}`,
       faktura_id: fakturaId,
-      powod: `Faktura ${fak.numer}`,
     }])
 
-    zaktualizowane.push(poz.towar_id)
+    zaktualizowane.push({ towar: poz.towary?.nazwa, ilosc: poz.ilosc, nowaIlosc })
   }
 
-  await supabase.from('faktury').update({ status: 'zatwierdzona' }).eq('id', fakturaId)
+  if (errors.length > 0) {
+    return { success: false, error: `Błędy aktualizacji stanów: ${errors.join('; ')}` }
+  }
+
+  // 4. Zaktualizuj status i wartość netto faktury
+  const wartoscNetto = pozycje.reduce((s, p) => s + (Number(p.ilosc) * Number(p.cena_netto)), 0)
+
+  const { error: updateError } = await supabase
+    .from('faktury')
+    .update({ status: 'zatwierdzona', wartosc_netto: wartoscNetto })
+    .eq('id', fakturaId)
+
+  if (updateError) {
+    return { success: false, error: `Błąd aktualizacji statusu: ${updateError.message}` }
+  }
 
   refreshInventory()
-  return { success: true, zaktualizowane }
+  return { success: true, zaktualizowane, pominiete: pozycjePoziome.length }
+}
+
+export async function cofnijDoRoboczej(fakturaId) {
+  // 1. Pobierz fakturę z pozycjami
+  const { data: faktura } = await supabase
+    .from('faktury')
+    .select('*, pozycje_faktury(towar_id, magazyn_id, ilosc)')
+    .eq('id', fakturaId)
+    .single()
+
+  if (!faktura || faktura.status !== 'zatwierdzona') {
+    return { success: false, error: 'Faktura nie jest zatwierdzona' }
+  }
+
+  // 2. Odwróć stany magazynowe
+  for (const poz of faktura.pozycje_faktury || []) {
+    if (!poz.towar_id) continue
+    const magazynId = poz.magazyn_id || faktura.magazyn_id
+    if (!magazynId) continue
+
+    const { data: stan } = await supabase
+      .from('stany_magazynowe')
+      .select('ilosc')
+      .eq('towar_id', poz.towar_id)
+      .eq('magazyn_id', magazynId)
+      .maybeSingle()
+
+    const nowaIlosc = Math.max(0, (stan?.ilosc || 0) - Number(poz.ilosc))
+
+    await supabase
+      .from('stany_magazynowe')
+      .upsert(
+        { towar_id: poz.towar_id, magazyn_id: magazynId, ilosc: nowaIlosc },
+        { onConflict: 'towar_id,magazyn_id' }
+      )
+  }
+
+  // 3. Usuń powiązane ruchy magazynowe
+  await supabase.from('ruchy_magazynowe').delete().eq('faktura_id', fakturaId)
+
+  // 4. Zmień status na robocza
+  const { error } = await supabase
+    .from('faktury')
+    .update({ status: 'robocza' })
+    .eq('id', fakturaId)
+
+  if (error) return { success: false, error: error.message }
+
+  refreshInventory()
+  return { success: true }
 }
 
 export async function wykonajPakiet(pakietId, magazynId) {
