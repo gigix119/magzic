@@ -1,9 +1,37 @@
-export function normalizeProductName(name) {
-  return name
+function normDiacritics(text) {
+  return String(text)
     .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
+    .replace(/[ąćęłńóśźż]/g, c => ({ ą:'a',ć:'c',ę:'e',ł:'l',ń:'n',ó:'o',ś:'s',ź:'z',ż:'z' })[c] || c)
+}
+
+const TECH_PARAM_PATTERNS = [
+  /\b(\d+(?:[.,]\d+)?)\s*w\b/i,
+  /\b(\d+(?:[.,]\d+)?)\s*ml\b/i,
+  /\b(\d+(?:[.,]\d+)?)\s*l\b/i,
+  /\b(\d+(?:[.,]\d+)?)\s*kg\b/i,
+  /\b(\d+(?:[.,]\d+)?)\s*g\b(?!u)/i,
+  /\b(\d+(?:[.,]\d+)?)\s*m2\b/i,
+  /\b(\d+(?:[.,]\d+)?)\s*mb\b/i,
+  /\b(g9|e27|e14|e40|b22|gu10|gu5\.?3)\b/i,
+  /\b(\d{3,4})\s*x\s*(\d{3,4})\b/i,
+  /\b(\d+(?:[.,]\d+)?)\s*%/,
+]
+
+function extractTechParams(name) {
+  const n = normDiacritics(name)
+  const params = []
+  for (const pat of TECH_PARAM_PATTERNS) {
+    const m = n.match(pat)
+    if (m) params.push(m[0].toLowerCase().replace(/\s+/g, '').replace(',', '.'))
+  }
+  return params
+}
+
+export function normalizeProductName(name) {
+  return normDiacritics(name)
     .replace(/[.,;:!?]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function similarityScore(a, b) {
@@ -23,18 +51,83 @@ export function similarityScore(a, b) {
   return intersection.length / union.size
 }
 
+export function advancedSimilarity(rawName, product, aliasLookup = null) {
+  if (!rawName || !product) return { score: 0, confidenceLabel: 'weak', reasons: [], warnings: [] }
+
+  const reasons = []
+  const warnings = []
+
+  if (aliasLookup) {
+    const aliasId = aliasLookup(rawName)
+    if (aliasId === product.id) {
+      return { score: 1.0, confidenceLabel: 'strong', reasons: ['alias match'], warnings: [] }
+    }
+  }
+
+  const na = normalizeProductName(rawName)
+  const nb = normalizeProductName(product.nazwa || '')
+  const nt = normalizeProductName(product.typ || '')
+
+  if (na === nb) {
+    return { score: 1.0, confidenceLabel: 'strong', reasons: ['exact match'], warnings: [] }
+  }
+
+  let baseScore = 0
+
+  if (na.includes(nb) || nb.includes(na)) {
+    baseScore = 0.85
+    reasons.push('contains match')
+  } else {
+    const tokensA = new Set(na.split(' ').filter(t => t.length > 2))
+    const tokensB = new Set(nb.split(' ').filter(t => t.length > 2))
+    const intersection = [...tokensA].filter(t => tokensB.has(t))
+    const union = new Set([...tokensA, ...tokensB])
+    baseScore = union.size > 0 ? intersection.length / union.size : 0
+    if (baseScore > 0) reasons.push(`token ${Math.round(baseScore * 100)}%`)
+
+    if (nt) {
+      const typScore = similarityScore(rawName, product.typ || '') * 0.9
+      if (typScore > baseScore) {
+        baseScore = typScore
+        reasons.push(`typ ${Math.round(typScore * 100)}%`)
+      }
+    }
+  }
+
+  const paramsRaw = extractTechParams(rawName)
+  const paramsProduct = extractTechParams(product.nazwa || '')
+
+  if (paramsRaw.length > 0 && paramsProduct.length > 0) {
+    const matching = paramsRaw.filter(p => paramsProduct.includes(p))
+    const conflicting = paramsRaw.filter(p => {
+      const unit = p.replace(/[\d.]+/, '').trim()
+      return unit && paramsProduct.some(pp => pp.replace(/[\d.]+/, '').trim() === unit && pp !== p)
+    })
+
+    if (matching.length > 0) {
+      baseScore = Math.min(1.0, baseScore + 0.15)
+      reasons.push(`param: ${matching.join(', ')}`)
+    }
+    if (conflicting.length > 0) {
+      baseScore = Math.max(0, baseScore - 0.3)
+      warnings.push(`param conflict: ${conflicting.join(', ')}`)
+    }
+  }
+
+  const score = Math.round(baseScore * 1000) / 1000
+  const confidenceLabel = score >= 0.85 ? 'strong' : score >= 0.65 ? 'review' : 'weak'
+  return { score, confidenceLabel, reasons, warnings }
+}
+
 export function findBestMatch(name, products, threshold = 0.5) {
   let best = null
   let bestScore = 0
 
   for (const product of products) {
-    const score = similarityScore(name, product.nazwa)
-    const scoreTyp = similarityScore(name, product.typ || '')
-    const maxScore = Math.max(score, scoreTyp)
-
-    if (maxScore > bestScore && maxScore >= threshold) {
-      bestScore = maxScore
-      best = { product, score: maxScore }
+    const { score } = advancedSimilarity(name, product)
+    if (score > bestScore && score >= threshold) {
+      bestScore = score
+      best = { product, score }
     }
   }
 

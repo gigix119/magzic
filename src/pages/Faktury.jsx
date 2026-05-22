@@ -13,7 +13,8 @@ import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
 import { zatwierdźFakturę } from '../utils/magazyn'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
-import { findBestMatch } from '../utils/productNormalizer'
+import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
+import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping } from '../utils/invoiceLearning'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
@@ -111,6 +112,7 @@ export default function Faktury() {
   const [nPriceData, setNPriceData] = useState({})
   const [nExtractedItems, setNExtractedItems] = useState([])
   const [nShowExtracted, setNShowExtracted] = useState(false)
+  const [nExtractionResult, setNExtractionResult] = useState(null)
 
   // ─────────────────────────────────────────────────────────────
 
@@ -275,6 +277,7 @@ export default function Faktury() {
     setNShowForm(false)
     setNShowExtracted(false)
     setNExtractedItems([])
+    setNExtractionResult(null)
     setNAiCount(0)
     setNForm({ ...emptyFak, magazyn_id: magazyny[0]?.id || '' })
     setNFormErr({})
@@ -329,6 +332,18 @@ export default function Faktury() {
   function commitExtractedItems() {
     const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
     const active = nExtractedItems.filter(item => !item.skipped)
+
+    // Learning — remember confirmed product mappings
+    const supplierNip = nExtractionResult?.fields?.kontrahent_nip
+    const supplierId = nForm.kontrahent_id
+    for (const item of active) {
+      if (!item.matchedProductId || !item.rawName) continue
+      rememberProductAlias(item.rawName, item.matchedProductId)
+      if (supplierNip) rememberSupplierItemName(supplierNip, item.rawName, item.matchedProductId)
+      const price = item.unitPriceNet ?? item.cenaNetto ?? 0
+      if (price > 0 && supplierId) rememberTypicalPrice(item.matchedProductId, supplierId, price)
+    }
+
     const newPositions = active.map(item => mkPos({
       nazwa: item.rawName,
       typ: '',
@@ -404,7 +419,7 @@ export default function Faktury() {
     setNExtractStatus('Analizuję plik PDF…')
 
     try {
-      const { extractFromFile, parseInvoiceItems } = await import('../utils/invoiceExtractor')
+      const { extractFromFile } = await import('../utils/invoiceExtractor')
       setNExtractStatus('Odczytuję tekst z dokumentu…')
 
       const result = await extractFromFile(nFile)
@@ -416,7 +431,7 @@ export default function Faktury() {
         if (result.fields.numer) setNForm(f => ({ ...f, numer: result.fields.numer }))
         if (result.fields.data_zakupu) setNForm(f => ({ ...f, data_zakupu: result.fields.data_zakupu }))
 
-        // NIP → lookup kontrahent via Supabase (Problem 6)
+        // NIP → lookup kontrahent via Supabase
         if (result.fields.kontrahent_nip) {
           const nip = result.fields.kontrahent_nip.replace(/\D/g, '')
           const { data: matchKontrahent } = await supabase
@@ -433,18 +448,34 @@ export default function Faktury() {
         }
 
         setNAiCount(1)
+        setNExtractionResult(result)
 
-        // Parse line items from raw text
+        // Use structurally-parsed items (already in result.fields.pozycje)
         setNExtractStatus('Dopasowuję pozycje do towarów…')
-        const rawItems = parseInvoiceItems(result.rawText)
+        const rawItems = result.fields.pozycje || []
         if (rawItems.length > 0) {
+          const supplierNip = result.fields.kontrahent_nip
           const matched = rawItems.map(item => {
-            const m = findBestMatch(item.rawName, towary)
+            // Check learning alias first
+            const aliasId = findProductByAlias(item.rawName)
+            const supplierAliasId = supplierNip ? getSupplierItemMapping(supplierNip, item.rawName) : null
+            const knownId = aliasId || supplierAliasId
+            if (knownId) {
+              const knownProduct = towary.find(t => t.id === knownId)
+              return { ...item, matchedProductId: knownId, matchedProductNazwa: knownProduct?.nazwa ?? null, matchScore: 1.0, skipped: false }
+            }
+            // Advanced similarity with diacritics + tech params
+            let bestScore = 0
+            let bestProduct = null
+            for (const towar of towary) {
+              const { score } = advancedSimilarity(item.rawName, towar)
+              if (score > bestScore) { bestScore = score; bestProduct = towar }
+            }
             return {
               ...item,
-              matchedProductId: m?.product.id ?? null,
-              matchedProductNazwa: m?.product.nazwa ?? null,
-              matchScore: m?.score ?? 0,
+              matchedProductId: bestScore >= 0.5 ? (bestProduct?.id ?? null) : null,
+              matchedProductNazwa: bestScore >= 0.5 ? (bestProduct?.nazwa ?? null) : null,
+              matchScore: bestScore,
               skipped: false,
             }
           })
@@ -775,6 +806,29 @@ export default function Faktury() {
           ) : nShowExtracted && !nShowForm ? (
             /* Phase 1.5: Extracted items review */
             <div>
+              {nExtractionResult?.validation && (() => {
+                const v = nExtractionResult.validation
+                const isError = v.suggestedAction === 'manual_required'
+                const isWarn = v.suggestedAction === 'review_required'
+                const bg = isError ? '#1a0000' : isWarn ? '#1a1200' : '#001a00'
+                const fg = isError ? '#f87171' : isWarn ? '#fbbf24' : '#86efac'
+                const border = isError ? '#7f1d1d' : isWarn ? '#78350f' : '#166534'
+                const label = isError ? '⚠ Wymagane ręczne uzupełnienie' : isWarn ? '⚡ Weryfikacja zalecana' : '✓ Dane odczytane'
+                const msgs = [...v.errors.slice(0, 2), ...v.warnings.slice(0, 2)]
+                return (
+                  <div className="rounded-lg px-4 py-3 mb-3 text-xs" style={{ background: bg, color: fg, border: `1px solid ${border}` }}>
+                    <div className="flex items-center gap-2 font-semibold text-sm">
+                      <span>{label}</span>
+                      <span className="ml-auto opacity-70">Pewność: {nExtractionResult.confidence}%</span>
+                    </div>
+                    {msgs.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 opacity-85">
+                        {msgs.map((m, i) => <li key={i}>· {m}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })()}
               <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
                 Znaleziono <strong>{nExtractedItems.filter(i => !i.skipped).length}</strong> pozycji w dokumencie — sprawdź dopasowania i zatwierdź
               </p>
