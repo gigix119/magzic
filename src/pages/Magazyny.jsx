@@ -34,7 +34,6 @@ function StanBadge({ ilosc, min }) {
 export default function Magazyny() {
   const { addToast } = useToast()
   const [magazyny, setMagazyny] = useState([])
-  const [stany, setStany] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editItem, setEditItem] = useState(null)
@@ -42,46 +41,88 @@ export default function Magazyny() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
   const [form, setForm] = useState(empty)
+  const [confirmDeleteMag, setConfirmDeleteMag] = useState(null)
 
   // action modal
-  const [actionModal, setActionModal] = useState(null) // null | 'add' | 'issue' | 'transfer' | 'korekta'
-  const [actionRow, setActionRow] = useState(null)     // stany row
-  const [actionMag, setActionMag] = useState(null)     // current magazyn
+  const [actionModal, setActionModal] = useState(null)
+  const [actionRow, setActionRow] = useState(null)
+  const [actionMag, setActionMag] = useState(null)
   const [aForm, setAForm] = useState({})
   const [aSaving, setASaving] = useState(false)
 
-  async function fetchData() {
-    const [{ data: mag, error: e1 }, { data: s }] = await Promise.all([
-      supabase.from('magazyny').select('*').order('nazwa'),
-      supabase.from('stany_magazynowe').select('*, towary(id, nazwa, jednostka, stan_minimalny, kategoria)'),
-    ])
-    if (e1) { console.error(e1); addToast(e1.message, 'error') }
-    setMagazyny(mag || [])
-    setStany(s || [])
+  async function loadMagazyny() {
+    const { data: mag, error: magError } = await supabase
+      .from('magazyny')
+      .select('id, nazwa, lokalizacja, opis, aktywny')
+      .eq('aktywny', true)
+      .order('nazwa')
+
+    if (magError) {
+      console.error('Błąd magazynów:', magError)
+      addToast('Błąd ładowania magazynów', 'error')
+      setLoading(false)
+      return
+    }
+
+    const { data: stany, error: stanyError } = await supabase
+      .from('stany_magazynowe')
+      .select(`
+        id,
+        towar_id,
+        magazyn_id,
+        ilosc,
+        updated_at,
+        towary(
+          id, nazwa, typ, jednostka, stan_minimalny, aktywny,
+          kategorie(nazwa)
+        )
+      `)
+      .gt('ilosc', 0)
+
+    if (stanyError) {
+      console.error('Błąd stany_magazynowe:', stanyError)
+      addToast('Błąd ładowania stanów', 'error')
+      setLoading(false)
+      return
+    }
+
+    if (import.meta.env.DEV) {
+      console.group('[Magazyny] diagnostic')
+      console.log('Magazyny:', mag?.length)
+      console.log('Rekordy stany_magazynowe (ilosc>0):', stany?.length)
+      const perMag = {}
+      stany?.forEach(s => { perMag[s.magazyn_id] = (perMag[s.magazyn_id] || 0) + 1 })
+      console.log('Stany per magazyn_id:', perMag)
+      console.log('Przykładowe rekordy:', stany?.slice(0, 3))
+      console.groupEnd()
+    }
+
+    const stanyPerMagazyn = {}
+    for (const stan of stany || []) {
+      if (!stanyPerMagazyn[stan.magazyn_id]) stanyPerMagazyn[stan.magazyn_id] = []
+      stanyPerMagazyn[stan.magazyn_id].push(stan)
+    }
+
+    const magazynyZStatami = (mag || []).map(m => {
+      const stanyMagazynu = stanyPerMagazyn[m.id] || []
+      const liczbaTowarow = stanyMagazynu.length
+      const lacznaIlosc = stanyMagazynu.reduce((s, r) => s + Number(r.ilosc), 0)
+      const belowMin = stanyMagazynu.filter(s =>
+        s.ilosc < (s.towary?.stan_minimalny || 0)
+      ).length
+      return { ...m, liczbaTowarow, lacznaIlosc, belowMin, stany: stanyMagazynu }
+    })
+
+    setMagazyny(magazynyZStatami)
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
-
   useEffect(() => {
-    window.addEventListener('inventory-updated', fetchData)
-    return () => window.removeEventListener('inventory-updated', fetchData)
+    loadMagazyny()
+    const handler = () => loadMagazyny()
+    window.addEventListener('inventory-updated', handler)
+    return () => window.removeEventListener('inventory-updated', handler)
   }, [])
-
-  function getStanyFor(id) {
-    return stany.filter(s => s.magazyn_id === id && Number(s.ilosc) > 0)
-  }
-
-  function getSummary(id) {
-    const items = stany.filter(s => s.magazyn_id === id && Number(s.ilosc) > 0)
-    const liczbaTowarow = new Set(items.map(s => s.towar_id)).size
-    const lacznaIlosc = items.reduce((sum, s) => sum + Number(s.ilosc), 0)
-    const belowMin = items.filter(s => {
-      const min = s.towary?.stan_minimalny
-      return min != null && Number(s.ilosc) < Number(min)
-    }).length
-    return { count: liczbaTowarow, total: lacznaIlosc, belowMin }
-  }
 
   function openCreate() { setEditItem(null); setForm(empty); setErrors({}); setShowModal(true) }
 
@@ -110,15 +151,14 @@ export default function Magazyny() {
       ({ error } = await supabase.from('magazyny').insert([payload]))
     }
     if (error) { console.error(error); addToast(error.message, 'error') }
-    else { addToast(editItem ? 'Magazyn zaktualizowany' : 'Magazyn dodany', 'success'); setShowModal(false); fetchData() }
+    else { addToast(editItem ? 'Magazyn zaktualizowany' : 'Magazyn dodany', 'success'); setShowModal(false); loadMagazyny() }
     setSaving(false)
   }
 
   async function handleDelete(item) {
-    if (!window.confirm(`Usunąć magazyn "${item.nazwa}"?`)) return
     const { error } = await supabase.from('magazyny').delete().eq('id', item.id)
     if (error) { console.error(error); addToast(error.message, 'error') }
-    else { addToast('Magazyn usunięty', 'success'); fetchData() }
+    else { addToast('Magazyn usunięty', 'success'); setConfirmDeleteMag(null); loadMagazyny() }
   }
 
   function openAction(type, row, mag) {
@@ -159,7 +199,7 @@ export default function Magazyny() {
     if (result?.success) {
       addToast('Operacja wykonana', 'success')
       setActionModal(null)
-      fetchData()
+      loadMagazyny()
     } else {
       addToast(result?.error || 'Błąd operacji', 'error')
     }
@@ -190,9 +230,9 @@ export default function Magazyny() {
           </div>
         ) : (
           magazyny.map(mag => {
-            const items = getStanyFor(mag.id)
-            const summary = getSummary(mag.id)
+            const items = mag.stany || []
             const isOpen = expanded === mag.id
+            const isConfirmDelete = confirmDeleteMag === mag.id
             return (
               <div key={mag.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
                 <div className="flex items-center gap-4 px-5 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
@@ -208,19 +248,41 @@ export default function Magazyny() {
                             <MapPin size={11} /> {mag.lokalizacja}
                           </span>
                         )}
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{summary.count} rodzajów towarów</span>
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{summary.total} szt. łącznie</span>
-                        {summary.belowMin > 0 && (
-                          <span className="text-xs font-medium" style={{ color: '#f59e0b' }}>⚠ {summary.belowMin} poniżej minimum</span>
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{mag.liczbaTowarow} rodzajów towarów</span>
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{mag.lacznaIlosc} szt. łącznie</span>
+                        {mag.belowMin > 0 && (
+                          <span className="text-xs font-medium" style={{ color: '#f59e0b' }}>⚠ {mag.belowMin} poniżej minimum</span>
                         )}
                       </div>
                     </div>
                     <Badge variant={mag.aktywny ? 'green' : 'zinc'}>{mag.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge>
                     {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}
                   </button>
+
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => openEdit(mag)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                    <button onClick={() => handleDelete(mag)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                    {isConfirmDelete ? (
+                      <>
+                        <button
+                          onClick={() => handleDelete(mag)}
+                          className="rounded-lg px-2 py-1 text-xs font-medium text-white"
+                          style={{ background: '#dc2626' }}
+                        >
+                          Usuń
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteMag(null)}
+                          className="rounded-lg px-2 py-1 text-xs font-medium"
+                          style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                        >
+                          Anuluj
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => openEdit(mag)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
+                        <button onClick={() => setConfirmDeleteMag(mag.id)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -230,49 +292,49 @@ export default function Magazyny() {
                       <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>Brak towarów w tym magazynie</p>
                     ) : (
                       <div className="table-scroll-x">
-                      <table className="w-full text-sm" style={{ minWidth: 500 }}>
-                        <thead>
-                          <tr style={{ background: 'var(--table-sub)' }}>
-                            <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
-                            <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Kategoria</th>
-                            <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Ilość</th>
-                            <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Jedn.</th>
-                            <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Min.</th>
-                            <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
-                            <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Akcje</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map(s => (
-                            <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                              <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{s.towary?.nazwa || '—'}</td>
-                              <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{s.towary?.kategoria || '—'}</td>
-                              <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{Number(s.ilosc)}</td>
-                              <td className="px-5 py-3 text-right" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || '—'}</td>
-                              <td className="px-5 py-3 text-right" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace', fontSize: 12 }}>{s.towary?.stan_minimalny ?? '—'}</td>
-                              <td className="px-5 py-3 text-center">
-                                <StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} />
-                              </td>
-                              <td className="px-5 py-3">
-                                <div className="flex items-center justify-center gap-1">
-                                  <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
-                                    <PackagePlus size={13} />
-                                  </button>
-                                  <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-                                    <PackageMinus size={13} />
-                                  </button>
-                                  <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
-                                    <ArrowLeftRight size={13} />
-                                  </button>
-                                  <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
-                                    <SlidersHorizontal size={13} />
-                                  </button>
-                                </div>
-                              </td>
+                        <table className="w-full text-sm" style={{ minWidth: 500 }}>
+                          <thead>
+                            <tr style={{ background: 'var(--table-sub)' }}>
+                              <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
+                              <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Kategoria</th>
+                              <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Ilość</th>
+                              <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Jedn.</th>
+                              <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Min.</th>
+                              <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
+                              <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Akcje</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {items.map(s => (
+                              <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                                <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{s.towary?.nazwa || '—'}</td>
+                                <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{s.towary?.kategorie?.nazwa || '—'}</td>
+                                <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{Number(s.ilosc)}</td>
+                                <td className="px-5 py-3 text-right" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || '—'}</td>
+                                <td className="px-5 py-3 text-right" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace', fontSize: 12 }}>{s.towary?.stan_minimalny ?? '—'}</td>
+                                <td className="px-5 py-3 text-center">
+                                  <StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} />
+                                </td>
+                                <td className="px-5 py-3">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                                      <PackagePlus size={13} />
+                                    </button>
+                                    <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                                      <PackageMinus size={13} />
+                                    </button>
+                                    <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
+                                      <ArrowLeftRight size={13} />
+                                    </button>
+                                    <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+                                      <SlidersHorizontal size={13} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                     {mag.opis && (

@@ -345,6 +345,38 @@ export async function cofnijDoRoboczej(fakturaId) {
   return { success: true }
 }
 
+export async function sprawdzPowiazaniaTowaru(towarId) {
+  const [stanyRes, ruchyRes, pozycjeRes] = await Promise.all([
+    supabase
+      .from('stany_magazynowe')
+      .select('id, ilosc, magazyn_id, magazyny(nazwa)')
+      .eq('towar_id', towarId),
+    supabase
+      .from('ruchy_magazynowe')
+      .select('id', { count: 'exact', head: true })
+      .eq('towar_id', towarId),
+    supabase
+      .from('pozycje_faktury')
+      .select('id', { count: 'exact', head: true })
+      .eq('towar_id', towarId),
+  ])
+
+  const stanyAktywne = (stanyRes.data || []).filter(s => Number(s.ilosc) > 0)
+  const stanLaczny = (stanyRes.data || []).reduce((s, r) => s + Number(r.ilosc), 0)
+
+  return {
+    stany: stanyRes.data || [],
+    stanyAktywne,
+    stanLaczny,
+    liczbaRuchow: ruchyRes.count || 0,
+    liczbaPozycjiFaktur: pozycjeRes.count || 0,
+    moznaUsunac:
+      stanLaczny === 0 &&
+      (ruchyRes.count || 0) === 0 &&
+      (pozycjeRes.count || 0) === 0,
+  }
+}
+
 export async function wykonajPakiet(pakietId, magazynId) {
   const { data: elementy, error } = await supabase
     .from('elementy_pakietu')

@@ -5,6 +5,7 @@ import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import { dodajStan, wydajStan, transferujStan, korektaStan, getRuchyTowaru } from '../utils/magazyn'
+import TowarDeleteModal from '../components/TowarDeleteModal'
 import {
   Plus, Minus, Search, Package, Pencil, Trash2,
   ArrowLeftRight, SlidersHorizontal, ChevronDown, ChevronUp,
@@ -48,6 +49,8 @@ export default function Towary() {
   const [stanMap, setStanMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [pokazZarchiwizowane, setPokazZarchiwizowane] = useState(false)
+  const [deleteTowar, setDeleteTowar] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -72,8 +75,10 @@ export default function Towary() {
   const [rowHistoria, setRowHistoria] = useState({})
 
   async function fetchData() {
+    let tQuery = supabase.from('towary').select('*, kategorie(nazwa)').order('nazwa')
+    if (!pokazZarchiwizowane) tQuery = tQuery.is('archived_at', null)
     const [{ data: t, error: e1 }, { data: k }, { data: m }, { data: s }] = await Promise.all([
-      supabase.from('towary').select('*, kategorie(nazwa)').order('nazwa'),
+      tQuery,
       supabase.from('kategorie').select('*').order('nazwa'),
       supabase.from('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
       supabase.from('stany_magazynowe').select('towar_id, magazyn_id, ilosc, magazyny(nazwa)'),
@@ -90,7 +95,7 @@ export default function Towary() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [pokazZarchiwizowane])
 
   useEffect(() => {
     window.addEventListener('inventory-updated', fetchData)
@@ -210,11 +215,8 @@ export default function Towary() {
     setSaving(false)
   }
 
-  async function handleDelete(item) {
-    if (!window.confirm(`Usunąć towar "${item.nazwa}"?`)) return
-    const { error } = await supabase.from('towary').delete().eq('id', item.id)
-    if (error) { console.error(error); addToast(error.message, 'error') }
-    else { addToast('Towar usunięty', 'success'); fetchData() }
+  function handleDelete(item) {
+    setDeleteTowar(item)
   }
 
   // ── Action modals ───────────────────────────────────────────
@@ -287,9 +289,20 @@ export default function Towary() {
         </button>
       </div>
 
-      <div className="relative mb-4">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted)' }} />
-        <input style={{ ...IS(), paddingLeft: 36 }} placeholder="Szukaj towarów..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted)' }} />
+          <input style={{ ...IS(), paddingLeft: 36 }} placeholder="Szukaj towarów..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <label style={{ fontSize: 12, color: 'var(--text-2)', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={pokazZarchiwizowane}
+            onChange={e => setPokazZarchiwizowane(e.target.checked)}
+            style={{ accentColor: '#3b82f6' }}
+          />
+          Pokaż zarchiwizowane
+        </label>
       </div>
 
       <div className="rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
@@ -340,7 +353,12 @@ export default function Towary() {
                           {isExpanded
                             ? <ChevronUp size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />
                             : <ChevronDown size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
-                          <span className="font-medium" style={{ color: 'var(--text)' }}>{item.nazwa}</span>
+                          <span className="font-medium" style={{ color: item.archived_at ? 'var(--muted)' : 'var(--text)' }}>{item.nazwa}</span>
+                          {item.archived_at && (
+                            <span style={{ fontSize: 10, padding: '1px 6px', background: '#f1f5f9', color: '#64748b', borderRadius: 4 }}>
+                              Zarchiwizowany
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'var(--text-2)' }}>{item.typ || '—'}</td>
@@ -678,6 +696,15 @@ export default function Towary() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {deleteTowar && (
+        <TowarDeleteModal
+          towar={deleteTowar}
+          onClose={() => setDeleteTowar(null)}
+          onSuccess={() => { setDeleteTowar(null); fetchData() }}
+          addToast={addToast}
+        />
       )}
 
       {/* ── CRUD MODAL ────────────────────────────────────────── */}
