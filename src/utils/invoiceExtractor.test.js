@@ -398,3 +398,104 @@ const badImport = importInvoiceLearningData('nie-to-json!!!{')
 assert(badImport.success === false, 'Learning: import złego JSON zwraca success=false')
 
 console.log('All tests complete.')
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT: runInvoiceParserSelfTest — callable from InvoiceLearningDebugPanel
+// Returns { passed, failed, total, failures[] }
+// ═══════════════════════════════════════════════════════════════
+
+export async function runInvoiceParserSelfTest() {
+  const results = { passed: 0, failed: 0, total: 0, failures: [] }
+
+  function assert(condition, message) {
+    results.total++
+    if (condition) {
+      results.passed++
+      console.log('✅ PASS:', message)
+    } else {
+      results.failed++
+      results.failures.push(message)
+      console.error('❌ FAIL:', message)
+    }
+  }
+
+  const { classifyDocument, classifyItem, isForbiddenLine } =
+    await import('./invoiceDocumentClassifier.js')
+  const { calculateConfidence } = await import('./invoiceValidation.js')
+  const { normalizePolishNumber } = await import('./polishInvoicePatterns.js')
+  const { isForbiddenAsInvoiceItem } = await import('./invoiceLineGuards.js')
+
+  // ── Normalizacja liczb ────────────────────────────────────────
+  assert(normalizePolishNumber('1 234,56') === 1234.56, 'normalizePolishNumber 1 234,56')
+  assert(normalizePolishNumber('45.00') === 45.00, 'normalizePolishNumber 45.00')
+  assert(normalizePolishNumber('1.234,56') === 1234.56, 'normalizePolishNumber 1.234,56 (dot=thousands)')
+  assert(normalizePolishNumber('0,99') === 0.99, 'normalizePolishNumber 0,99')
+  assert(isNaN(normalizePolishNumber('')), 'normalizePolishNumber pusty string → NaN')
+
+  // ── Forbidden lines ───────────────────────────────────────────
+  assert(isForbiddenLine('Razem netto 125,48'), 'isForbiddenLine: Razem netto')
+  assert(isForbiddenLine('Zapłać online: play.pl'), 'isForbiddenLine: Zapłać online')
+  assert(isForbiddenLine('Numer konta: 12 3456'), 'isForbiddenLine: Numer konta')
+  assert(!isForbiddenLine('SYFON UMYWALKOWY BIAŁY'), 'isForbiddenLine: syfon allowed')
+  assert(!isForbiddenLine('CLIN PŁYN DO SZYB 750ML'), 'isForbiddenLine: CLIN allowed')
+
+  assert(isForbiddenAsInvoiceItem('Do zapłaty 70,00'), 'isForbiddenAsInvoiceItem: Do zapłaty')
+  assert(!isForbiddenAsInvoiceItem('BATERIA AAA 4SZT'), 'isForbiddenAsInvoiceItem: Bateria allowed')
+
+  // ── Klasyfikacja dokumentów ───────────────────────────────────
+  const playText = 'usługi telekomunikacyjne abonament p4 sp rozliczenie konta'
+  assert(classifyDocument(playText, []) === 'telecom_invoice', 'classifyDocument: Play → telecom_invoice')
+
+  const bricoText = 'cena jednostkowa wartość netto jm syfon żarówka'
+  const bricoTable = [{ columnMap: { ILOSC: { x: 200 }, JEDNOSTKA: { x: 250 } }, rowCount: 3 }]
+  assert(classifyDocument(bricoText, bricoTable) === 'inventory_purchase_invoice', 'classifyDocument: Brico → inventory_purchase_invoice')
+
+  // ── classifyItem ─────────────────────────────────────────────
+  const { itemType: t1, shouldAffectInventory: a1 } = classifyItem(
+    { rawName: 'Usługi telekomunikacyjne', ilosc: 1, cenaNetto: 52.85, jednostka: 'usł.' },
+    'telecom_invoice'
+  )
+  assert(t1 === 'service_item', 'classifyItem: Usługi telekomunikacyjne → service_item')
+  assert(a1 === false, 'classifyItem: telecom → shouldAffectInventory=false')
+
+  const { itemType: t2, shouldAffectInventory: a2 } = classifyItem(
+    { rawName: 'Abonament TV 4G', ilosc: 1, cenaNetto: 5.00, jednostka: 'szt' },
+    'telecom_invoice'
+  )
+  assert(t2 === 'service_item', 'classifyItem: dowolna pozycja w telecom_invoice → service_item')
+  assert(a2 === false, 'classifyItem: telecom pozycja bez słów kluczowych → inventory=false')
+
+  const { itemType: t3, shouldAffectInventory: a3 } = classifyItem(
+    { rawName: 'SYFON UMYWALKOWY 32MM', ilosc: 2, cenaNetto: 19.99, jednostka: 'szt' },
+    'inventory_purchase_invoice'
+  )
+  assert(t3 === 'inventory_item', 'classifyItem: syfon w inventory_purchase_invoice → inventory_item')
+  assert(a3 === true, 'classifyItem: syfon → shouldAffectInventory=true')
+
+  const { itemType: t4 } = classifyItem(
+    { rawName: 'Razem do zapłaty', cenaNetto: 70, ilosc: 1, jednostka: 'szt' },
+    'inventory_purchase_invoice'
+  )
+  assert(t4 === 'summary_line', 'classifyItem: Razem do zapłaty → summary_line')
+
+  // ── Confidence max 95 ────────────────────────────────────────
+  const perfectResult = {
+    fields: {
+      numer: 'FV/001', data_zakupu: '2026-05-22',
+      kontrahent_nip: '1234567890',
+      pozycje: [
+        { itemType: 'inventory_item', ilosc: 1, cenaNetto: 10, wartoscNetto: 10, matchScore: 0.9 },
+      ],
+    },
+    validation: { errors: [], warnings: [] },
+    documentType: 'inventory_purchase_invoice',
+  }
+  const conf = calculateConfidence(perfectResult, 'inventory_purchase_invoice')
+  assert(conf <= 95, 'calculateConfidence: max 95%')
+  assert(conf > 0, 'calculateConfidence: > 0 dla kompletnego wyniku')
+
+  console.log(`\n📊 Self-test: ${results.passed}/${results.total} passed`)
+  if (results.failures.length > 0) console.error('Failed:', results.failures)
+
+  return results
+}

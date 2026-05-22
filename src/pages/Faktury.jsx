@@ -16,6 +16,9 @@ import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from 
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping } from '../utils/invoiceLearning'
 import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
+import { calculateInvoiceQualityMetrics, getQualityBadge } from '../utils/invoiceQualityMetrics'
+import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
+import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
@@ -114,6 +117,8 @@ export default function Faktury() {
   const [nExtractedItems, setNExtractedItems] = useState([])
   const [nShowExtracted, setNShowExtracted] = useState(false)
   const [nExtractionResult, setNExtractionResult] = useState(null)
+  const [qualityMetrics, setQualityMetrics] = useState(null)
+  const [extractedResult, setExtractedResult] = useState(null)
 
   // ─────────────────────────────────────────────────────────────
 
@@ -279,6 +284,8 @@ export default function Faktury() {
     setNShowExtracted(false)
     setNExtractedItems([])
     setNExtractionResult(null)
+    setQualityMetrics(null)
+    setExtractedResult(null)
     setNAiCount(0)
     setNForm({ ...emptyFak, magazyn_id: magazyny[0]?.id || '' })
     setNFormErr({})
@@ -450,6 +457,8 @@ export default function Faktury() {
 
         setNAiCount(1)
         setNExtractionResult(result)
+        setQualityMetrics(calculateInvoiceQualityMetrics(result))
+        setExtractedResult(result)
 
         // Use structurally-parsed items (already in result.fields.pozycje)
         setNExtractStatus('Dopasowuję pozycje do towarów…')
@@ -601,6 +610,24 @@ export default function Faktury() {
       }
 
       addToast(`Faktura ${nForm.numer.trim()} zapisana jako robocza — zatwierdź aby zaktualizować stany`, 'success')
+
+      // Correction tracking — diff what parser extracted vs what user approved
+      if (extractedResult && extractedResult.source !== 'manual') {
+        try {
+          const kontrahentNazwa = kontrahenci.find(k => k.id === nForm.kontrahent_id)?.nazwa
+          const approvedResult = {
+            ...extractedResult,
+            fields: {
+              ...extractedResult.fields,
+              numer: nForm.numer.trim(),
+              data_zakupu: nForm.data_zakupu,
+              kontrahent_nazwa: kontrahentNazwa || extractedResult.fields?.kontrahent_nazwa,
+            },
+          }
+          saveCorrectionEvent(extractedResult, approvedResult)
+        } catch { /* non-critical */ }
+      }
+
       setShowNModal(false)
       fetchData()
     } catch (err) {
@@ -846,6 +873,65 @@ export default function Faktury() {
                   <strong>Faktura mieszana</strong> — tylko pozycje oznaczone jako <strong>Towar</strong> wpłyną na magazyn.
                 </div>
               )}
+              {/* Quality metrics panel */}
+              {qualityMetrics && (
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>📊 Jakość odczytu</span>
+                    <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: getQualityBadge(qualityMetrics).bg, color: getQualityBadge(qualityMetrics).color }}>
+                      {getQualityBadge(qualityMetrics).label}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Źródło</div>
+                      <div style={{ fontWeight: 500 }}>
+                        {qualityMetrics.source === 'pdf_text' ? '📄 Lokalny' : qualityMetrics.source?.includes('ai') ? '🤖 AI' : '✍️ Ręczny'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Pewność</div>
+                      <div style={{ fontWeight: 500, color: qualityMetrics.confidence >= 85 ? '#16a34a' : qualityMetrics.confidence >= 60 ? '#d97706' : '#dc2626' }}>
+                        {qualityMetrics.confidence}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Typ dokumentu</div>
+                      <div style={{ fontWeight: 500 }}>
+                        {qualityMetrics.documentType === 'inventory_purchase_invoice' ? '🏭 Zakupowy'
+                          : qualityMetrics.documentType?.includes('telecom') ? '📱 Telecom'
+                          : qualityMetrics.documentType?.includes('service') ? '🔧 Usługowy'
+                          : qualityMetrics.documentType?.includes('utility') ? '⚡ Media'
+                          : '❓ Nieznany'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Pozycje</div>
+                      <div style={{ fontWeight: 500 }}>{qualityMetrics.itemCount} ({qualityMetrics.inventoryItemCount} towarów, {qualityMetrics.serviceItemCount} usług)</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Matematyka</div>
+                      <div style={{ fontWeight: 500, color: qualityMetrics.mathValid ? '#16a34a' : '#dc2626' }}>
+                        {qualityMetrics.mathValid ? '✅ OK' : '❌ Sprawdź'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Ostrzeżenia</div>
+                      <div style={{ fontWeight: 500, color: qualityMetrics.warningsCount === 0 ? '#16a34a' : '#d97706' }}>
+                        {qualityMetrics.warningsCount}
+                      </div>
+                    </div>
+                  </div>
+                  {qualityMetrics.errorsCount > 0 && (
+                    <div style={{ marginTop: 8, padding: '6px 10px', background: '#fef2f2', borderRadius: 4, color: '#991b1b', fontSize: 11 }}>
+                      ❌ {qualityMetrics.errorsCount} błędów — wymagane ręczne uzupełnienie
+                    </div>
+                  )}
+                  <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
+                    System przygotował propozycję. Sprawdź dane przed zatwierdzeniem.
+                  </div>
+                </div>
+              )}
               {nExtractionResult?.validation && (() => {
                 const v = nExtractionResult.validation
                 const isError = v.suggestedAction === 'manual_required'
@@ -994,10 +1080,28 @@ export default function Faktury() {
             <div style={{ maxHeight: 'calc(90vh - 130px)', overflowY: 'auto', paddingRight: 2 }}>
               {/* AI success banner */}
               {nAiCount > 0 && (
-                <div className="rounded-lg px-4 py-3 mb-5 text-sm font-medium flex items-center gap-2"
+                <div className="rounded-lg px-4 py-3 mb-3 text-sm font-medium flex items-center gap-2"
                   style={{ background: '#052e16', color: '#86efac', border: '1px solid #166534' }}>
                   <Bot size={15} />
                   Odczytano dane z dokumentu — sprawdź i uzupełnij pola
+                </div>
+              )}
+
+              {/* Quality metrics summary in form phase */}
+              {qualityMetrics && (
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600 }}>📊 Jakość odczytu:</span>
+                    <span style={{ padding: '1px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: getQualityBadge(qualityMetrics).bg, color: getQualityBadge(qualityMetrics).color }}>
+                      {getQualityBadge(qualityMetrics).label}
+                    </span>
+                    <span style={{ color: qualityMetrics.confidence >= 85 ? '#16a34a' : qualityMetrics.confidence >= 60 ? '#d97706' : '#dc2626', fontWeight: 500 }}>
+                      {qualityMetrics.confidence}%
+                    </span>
+                    <span style={{ color: '#64748b' }}>· {qualityMetrics.itemCount} poz. ({qualityMetrics.inventoryItemCount}T {qualityMetrics.serviceItemCount}U)</span>
+                    {!qualityMetrics.mathValid && <span style={{ color: '#dc2626', fontWeight: 500 }}>· ❌ Sprawdź matematykę</span>}
+                    {qualityMetrics.warningsCount > 0 && <span style={{ color: '#d97706' }}>· ⚠ {qualityMetrics.warningsCount} ostrzeżeń</span>}
+                  </div>
                 </div>
               )}
 
@@ -1449,6 +1553,9 @@ export default function Faktury() {
           </Modal>
         )
       })()}
+
+      {/* Dev panel — visible in development mode only */}
+      {import.meta.env.DEV && <InvoiceLearningDebugPanel />}
     </div>
   )
 }
