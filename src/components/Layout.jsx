@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../supabase'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
   Sparkles, Bell, Menu, X, Sun, Moon, LogOut,
@@ -14,15 +15,43 @@ const navItems = [
   { to: '/kontrahenci', icon: Users, label: 'Kontrahenci' },
   { to: '/faktury', icon: FileText, label: 'Faktury' },
   { to: '/pakiety', icon: Sparkles, label: 'Pakiety sprzątania' },
-  { to: '/alerty', icon: Bell, label: 'Alerty' },
+  { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
 ]
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [alertCount, setAlertCount] = useState(0)
   const { theme, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const dark = theme === 'dark'
+
+  useEffect(() => {
+    async function fetchAlertCount() {
+      try {
+        const [{ count: priceCount }, { data: stany }] = await Promise.all([
+          supabase
+            .from('alerty_cenowe_faktury')
+            .select('id', { count: 'exact', head: true })
+            .eq('przeczytany', false),
+          supabase
+            .from('stany_magazynowe')
+            .select('ilosc, towary!inner(stan_minimalny, aktywny)')
+            .eq('towary.aktywny', true)
+            .not('towary.stan_minimalny', 'is', null),
+        ])
+        const stockCount = (stany || []).filter(
+          s => s.ilosc < (s.towary?.stan_minimalny ?? Infinity)
+        ).length
+        setAlertCount((priceCount ?? 0) + stockCount)
+      } catch {
+        // Table may not exist yet — silently ignore
+      }
+    }
+    fetchAlertCount()
+    const interval = setInterval(fetchAlertCount, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   async function handleSignOut() {
     await signOut()
@@ -71,7 +100,7 @@ export default function Layout() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label, showBadge }) => (
             <NavLink
               key={to}
               to={to}
@@ -85,7 +114,17 @@ export default function Layout() {
               onMouseLeave={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = '' }}
             >
               <Icon size={16} />
-              <span>{label}</span>
+              <span className="flex-1">{label}</span>
+              {showBadge && alertCount > 0 && (
+                <span style={{
+                  background: '#ef4444', color: '#fff',
+                  borderRadius: 10, padding: '1px 6px',
+                  fontSize: 11, fontWeight: 700,
+                  minWidth: 18, textAlign: 'center', lineHeight: '16px',
+                }}>
+                  {alertCount > 99 ? '99+' : alertCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

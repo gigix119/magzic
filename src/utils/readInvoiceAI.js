@@ -54,7 +54,8 @@ function readAsText(file) {
 export async function readInvoiceAI(file) {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
   if (!apiKey || apiKey === 'TU_WKLEJ_NOWY_KLUCZ') {
-    throw new Error('Brak klucza API. Sprawdź plik .env')
+    const { extractFromFile } = await import('./invoiceExtractor')
+    return extractFromFile(file)
   }
   if (file.size > MAX_SIZE) {
     throw new Error('Plik jest za duży. Maksymalny rozmiar to 10MB.')

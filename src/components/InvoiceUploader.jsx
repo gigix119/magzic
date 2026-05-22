@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
-import { Upload, File, Table2, Image, X, Bot, Loader2, RefreshCw } from 'lucide-react'
+import { Upload, File, Table2, Image, X, RefreshCw } from 'lucide-react'
 
-export default function InvoiceUploader({ file, onFileSelect, onClear, onAnalyze, analyzing, analyzed = false }) {
+export default function InvoiceUploader({ file, onFileSelect, onClear, onAnalyze, analyzing, analyzed = false, statusText = '' }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
 
@@ -80,26 +80,29 @@ export default function InvoiceUploader({ file, onFileSelect, onClear, onAnalyze
       )}
 
       {file && (
-        <button
-          type="button"
-          onClick={onAnalyze}
-          disabled={analyzing}
-          className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white w-full"
-          style={{
-            background: analyzing ? '#6b7280' : analyzed ? '#2563eb' : '#7c3aed',
-            opacity: analyzing ? 0.85 : 1,
-            cursor: analyzing ? 'not-allowed' : 'pointer',
-            transition: 'background 0.2s',
-          }}
-        >
-          {analyzing ? (
-            <><Loader2 size={15} className="animate-spin" /> Analizuję dokument...</>
-          ) : analyzed ? (
-            <><RefreshCw size={15} /> Ponów odczyt AI</>
-          ) : (
-            <><Bot size={15} /> Odczytaj fakturę AI</>
-          )}
-        </button>
+        <div>
+          <button
+            type="button"
+            onClick={onAnalyze}
+            disabled={analyzing}
+            className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white w-full"
+            style={{
+              background: analyzing ? '#94a3b8' : '#3b82f6',
+              cursor: analyzing ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            {analyzing ? '⏳' : analyzed ? <RefreshCw size={15} /> : '📄'}
+            {analyzing
+              ? (statusText || 'Odczytuję dokument…')
+              : analyzed
+                ? 'Ponów odczyt'
+                : 'Odczytaj dokument'}
+          </button>
+          <p className="text-xs mt-1.5" style={{ color: '#64748b' }}>
+            Obsługuje PDF z warstwą tekstową. Możesz też wypełnić formularz ręcznie.
+          </p>
+        </div>
       )}
 
       {file && !analyzing && (

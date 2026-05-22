@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
-import { Plus, AlertTriangle, TrendingDown, Bell, Percent, Trash2, Zap, Clock, Lightbulb } from 'lucide-react'
+import { Plus, AlertTriangle, TrendingDown, TrendingUp, Bell, Percent, Trash2, Zap, Clock, Lightbulb, CheckCheck } from 'lucide-react'
 
 const IS = (err) => ({
   background: 'var(--input-bg)',
@@ -28,6 +28,8 @@ export default function Alerty() {
   const { addToast } = useToast()
   const [allAlerts, setAllAlerts] = useState([])
   const [alertyCenowe, setAlertyCenowe] = useState([])
+  const [priceAlerts, setPriceAlerts] = useState([])
+  const [priceAlertsLoading, setPriceAlertsLoading] = useState(false)
   const [towary, setTowary] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -103,7 +105,54 @@ export default function Alerty() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  async function fetchPriceAlerts() {
+    setPriceAlertsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('alerty_cenowe_faktury')
+        .select('*, towary(nazwa), faktury(numer), kontrahenci(nazwa)')
+        .eq('przeczytany', false)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        if (error.code === '42P01') { setPriceAlerts([]); return } // table not created yet
+        throw error
+      }
+      const sorted = (data || []).slice().sort(
+        (a, b) => (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9)
+      )
+      setPriceAlerts(sorted)
+    } catch (err) {
+      console.error('fetchPriceAlerts:', err)
+      addToast('Błąd ładowania alertów cenowych', 'error')
+    } finally {
+      setPriceAlertsLoading(false)
+    }
+  }
+
+  async function markPriceAlertRead(id) {
+    const { error } = await supabase
+      .from('alerty_cenowe_faktury')
+      .update({ przeczytany: true })
+      .eq('id', id)
+    if (error) { console.error(error); addToast(error.message, 'error'); return }
+    setPriceAlerts(prev => prev.filter(a => a.id !== id))
+  }
+
+  async function markAllPriceAlertsRead() {
+    const ids = priceAlerts.map(a => a.id)
+    if (!ids.length) return
+    const { error } = await supabase
+      .from('alerty_cenowe_faktury')
+      .update({ przeczytany: true })
+      .in('id', ids)
+    if (error) { console.error(error); addToast(error.message, 'error'); return }
+    setPriceAlerts([])
+    addToast('Wszystkie alerty oznaczone jako przeczytane', 'success')
+  }
+
+  useEffect(() => { fetchData(); fetchPriceAlerts() }, [])
 
   function validate() {
     const e = {}
@@ -351,6 +400,114 @@ export default function Alerty() {
               ))}
             </tbody>
           </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Alerty cenowe z zakupów ── */}
+      <div className="rounded-xl overflow-hidden mt-6" style={{ border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between px-5 py-3" style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-2">
+            <TrendingUp size={16} style={{ color: '#3b82f6' }} />
+            <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Wykryte anomalie cenowe w zakupach</h2>
+            {priceAlerts.length > 0 && <Badge variant="blue">{priceAlerts.length} nieprzeczytanych</Badge>}
+          </div>
+          <div className="flex items-center gap-2">
+            {priceAlerts.length > 1 && (
+              <button
+                onClick={markAllPriceAlertsRead}
+                className="flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 font-medium text-white"
+                style={{ background: '#22c55e' }}
+              >
+                <CheckCheck size={12} /> Wszystkie przeczytane
+              </button>
+            )}
+            <button
+              onClick={fetchPriceAlerts}
+              disabled={priceAlertsLoading}
+              className="text-xs rounded-lg px-3 py-1.5 font-medium"
+              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+            >
+              {priceAlertsLoading ? 'Sprawdzam…' : 'Odśwież'}
+            </button>
+          </div>
+        </div>
+
+        {priceAlertsLoading ? (
+          <div className="text-center py-8" style={{ background: 'var(--table-even)', color: 'var(--muted)', fontSize: 13 }}>
+            Ładuję alerty…
+          </div>
+        ) : priceAlerts.length === 0 ? (
+          <div className="text-center py-10" style={{ background: 'var(--table-even)', color: 'var(--muted)' }}>
+            <p className="text-sm">Brak nieprzeczytanych anomalii cenowych</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              Alerty są generowane automatycznie przy zatwierdzaniu faktur
+            </p>
+          </div>
+        ) : (
+          <div className="table-scroll-x">
+            <table className="w-full text-sm" style={{ minWidth: 620 }}>
+              <thead>
+                <tr style={{ background: 'var(--table-sub)' }}>
+                  <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
+                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Faktura</th>
+                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Dostawca</th>
+                  <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Typ alertu</th>
+                  <th className="text-left px-4 py-2.5 font-medium hidden lg:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Opis</th>
+                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena</th>
+                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Różnica %</th>
+                  <th className="text-center px-4 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Priorytet</th>
+                  <th className="px-3 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {priceAlerts.map((alert, idx) => {
+                  const cfg = SEV_CONFIG[alert.severity] || SEV_CONFIG.low
+                  return (
+                    <tr
+                      key={alert.id}
+                      className="table-row"
+                      style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}
+                    >
+                      <td className="px-5 py-3 font-medium" style={{ color: 'var(--text)' }}>
+                        {alert.towary?.nazwa || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
+                        {alert.faktury?.numer || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
+                        {alert.kontrahenci?.nazwa || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-medium" style={{ color: cfg.color }}>
+                        {alert.title}
+                      </td>
+                      <td className="px-4 py-3 text-xs hidden lg:table-cell" style={{ color: 'var(--text-2)', maxWidth: 260 }}>
+                        {alert.description}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>
+                        {alert.cena_aktualna != null ? `${Number(alert.cena_aktualna).toFixed(2)} zł` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: alert.roznica_procent > 0 ? '#dc2626' : '#16a34a' }}>
+                        {alert.roznica_procent != null ? `${Number(alert.roznica_procent).toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          onClick={() => markPriceAlertRead(alert.id)}
+                          className="p-1.5 rounded-lg"
+                          style={{ color: '#22c55e' }}
+                          title="Oznacz jako przeczytane"
+                        >
+                          <CheckCheck size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

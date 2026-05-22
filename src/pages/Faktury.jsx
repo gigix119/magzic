@@ -11,11 +11,12 @@ import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
-import { readInvoiceAI } from '../utils/readInvoiceAI'
 import { zatwierdźFakturę } from '../utils/magazyn'
+import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
+import { findBestMatch } from '../utils/productNormalizer'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
-  Upload, Download, File, Image, Table2, X, Bot, CheckCircle2,
+  Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
 } from 'lucide-react'
 
 const IS = (err) => ({
@@ -95,10 +96,11 @@ export default function Faktury() {
   const [pozErrors, setPozErrors] = useState({})
   const [savingPoz, setSavingPoz] = useState(false)
 
-  // ── New AI invoice modal ───────────────────────────────────────
+  // ── New invoice modal ─────────────────────────────────────────
   const [showNModal, setShowNModal] = useState(false)
   const [nFile, setNFile] = useState(null)
   const [nAiLoading, setNAiLoading] = useState(false)
+  const [nExtractStatus, setNExtractStatus] = useState('')
   const [nShowForm, setNShowForm] = useState(false)
   const [nAiCount, setNAiCount] = useState(0)
   const [nForm, setNForm] = useState(emptyFak)
@@ -106,6 +108,9 @@ export default function Faktury() {
   const [nPositions, setNPositions] = useState([])
   const [nSaving, setNSaving] = useState(false)
   const [nKontrahentHint, setNKontrahentHint] = useState('')
+  const [nPriceData, setNPriceData] = useState({})
+  const [nExtractedItems, setNExtractedItems] = useState([])
+  const [nShowExtracted, setNShowExtracted] = useState(false)
 
   // ─────────────────────────────────────────────────────────────
 
@@ -256,73 +261,223 @@ export default function Faktury() {
     if (result.success) {
       addToast(`Faktura ${fak.numer} zatwierdzona — zaktualizowano ${result.zaktualizowane?.length || 0} pozycji w ${mag?.nazwa || 'magazynie'}`, 'success')
       fetchData()
+      savePriceAlertsForFaktura(fak).catch(err => console.error('savePriceAlerts:', err))
     } else {
       addToast(result.error || 'Błąd zatwierdzenia', 'error')
     }
   }
 
-  // ── New AI invoice modal ───────────────────────────────────────
+  // ── New invoice modal ─────────────────────────────────────────
   function openNewModal() {
     setNFile(null)
     setNAiLoading(false)
+    setNExtractStatus('')
     setNShowForm(false)
+    setNShowExtracted(false)
+    setNExtractedItems([])
     setNAiCount(0)
     setNForm({ ...emptyFak, magazyn_id: magazyny[0]?.id || '' })
     setNFormErr({})
     setNPositions([])
     setNKontrahentHint('')
+    setNPriceData({})
     setShowNModal(true)
+  }
+
+  async function analyzePositionPriceById(key, towarId, cena) {
+    const towarNazwa = towary.find(t => t.id === towarId)?.nazwa || ''
+    setNPriceData(d => ({ ...d, [key]: { loading: true } }))
+    try {
+      const history = await getPriceHistoryCached(towarId, supabase)
+      const analyzed = analyzePriceHistory(history)
+      const kontrahentNazwa = kontrahenci.find(k => k.id === nForm.kontrahent_id)?.nazwa || ''
+      const alerts = cena > 0 ? generatePriceAlerts({ cena_netto: cena }, analyzed, kontrahentNazwa) : []
+      setNPriceData(d => ({
+        ...d,
+        [key]: { loading: false, towarNazwa, matchScore: 1.0, history: analyzed, alerts },
+      }))
+    } catch (err) {
+      console.error('analyzePositionPriceById:', err)
+      setNPriceData(d => ({ ...d, [key]: { error: 'Błąd pobierania historii cen' } }))
+    }
+  }
+
+  async function analyzePositionPrice(pos) {
+    if (!pos.nazwa.trim()) return
+    const match = findBestMatch(pos.nazwa, towary)
+    if (!match) {
+      setNPriceData(d => ({ ...d, [pos._key]: { error: 'Nie znaleziono pasującego towaru w bazie' } }))
+      return
+    }
+    await analyzePositionPriceById(pos._key, match.product.id, Number(pos.cena_netto))
   }
 
   function goToManualForm() {
     setNPositions([mkPos({ magazyn_id: magazyny[0]?.id || '' })])
+    setNShowExtracted(false)
     setNShowForm(true)
   }
 
+  function updateExtractedItem(idx, field, value) {
+    setNExtractedItems(items => items.map((item, i) => i === idx ? { ...item, [field]: value } : item))
+  }
+
+  function toggleSkipExtracted(idx) {
+    setNExtractedItems(items => items.map((item, i) => i === idx ? { ...item, skipped: !item.skipped } : item))
+  }
+
+  function commitExtractedItems() {
+    const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
+    const active = nExtractedItems.filter(item => !item.skipped)
+    const newPositions = active.map(item => mkPos({
+      nazwa: item.rawName,
+      typ: '',
+      ilosc: item.quantity,
+      jednostka: item.unit,
+      cena_netto: item.unitPriceNet,
+      magazyn_id: defaultMag,
+      _towarId: item.matchedProductId || null,
+    }))
+    setNPositions(newPositions)
+    setNShowExtracted(false)
+    setNShowForm(true)
+
+    // Auto-analyze prices for matched positions
+    const initData = {}
+    newPositions.forEach((pos, i) => {
+      if (active[i]?.matchedProductId) initData[pos._key] = { loading: true }
+    })
+    if (Object.keys(initData).length > 0) {
+      setNPriceData(initData)
+      newPositions.forEach((pos, i) => {
+        const item = active[i]
+        if (item?.matchedProductId) {
+          analyzePositionPriceById(pos._key, item.matchedProductId, Number(item.unitPriceNet))
+        }
+      })
+    }
+  }
+
+  async function savePriceAlertsForFaktura(fak) {
+    const pozFaktury = pozycje[fak.id] || []
+    if (!pozFaktury.length) return
+    const kontrahentNazwa = kontrahenci.find(k => k.id === fak.kontrahent_id)?.nazwa || ''
+    const toInsert = []
+
+    for (const poz of pozFaktury) {
+      if (!poz.towar_id) continue
+      try {
+        const history = await getPriceHistoryCached(poz.towar_id, supabase)
+        const analyzed = analyzePriceHistory(history)
+        if (!analyzed) continue
+        const prAlerts = generatePriceAlerts({ cena_netto: Number(poz.cena_netto) }, analyzed, kontrahentNazwa)
+        for (const alert of prAlerts) {
+          toInsert.push({
+            towar_id: poz.towar_id,
+            faktura_id: fak.id,
+            kontrahent_id: fak.kontrahent_id || null,
+            typ: alert.type,
+            severity: alert.severity,
+            title: alert.title,
+            description: alert.description,
+            cena_aktualna: Number(poz.cena_netto),
+            cena_referencyjna: analyzed.ostatniaCena ?? null,
+            roznica_procent: analyzed.ostatniaCena
+              ? ((Number(poz.cena_netto) - analyzed.ostatniaCena) / analyzed.ostatniaCena * 100)
+              : null,
+          })
+        }
+      } catch (err) {
+        console.error('savePriceAlertsForFaktura poz:', err)
+      }
+    }
+
+    if (!toInsert.length) return
+    const { error } = await supabase.from('alerty_cenowe_faktury').insert(toInsert)
+    if (error) console.error('savePriceAlertsForFaktura insert:', error)
+    else addToast(`Zapisano ${toInsert.length} alertów cenowych`, 'info')
+  }
+
   async function handleReadAI() {
+    if (!nFile) return
     setNAiLoading(true)
+    setNExtractStatus('Analizuję plik PDF…')
+
     try {
-      const result = await readInvoiceAI(nFile)
+      const { extractFromFile, parseInvoiceItems } = await import('../utils/invoiceExtractor')
+      setNExtractStatus('Odczytuję tekst z dokumentu…')
 
-      const detectedTyp = AI_TYP_MAP[(result.typ || '').toLowerCase()] || 'zakup'
-      const validDate = result.data_zakupu && /^\d{4}-\d{2}-\d{2}$/.test(result.data_zakupu)
-        ? result.data_zakupu
-        : new Date().toISOString().slice(0, 10)
+      const result = await extractFromFile(nFile)
 
-      let kontrahentId = ''
-      if (result.kontrahent_nazwa) {
-        setNKontrahentHint(result.kontrahent_nazwa)
-        const match = kontrahenci.find(k =>
-          k.nazwa.toLowerCase().includes(result.kontrahent_nazwa.toLowerCase()) ||
-          result.kontrahent_nazwa.toLowerCase().includes(k.nazwa.toLowerCase())
-        )
-        if (match) kontrahentId = match.id
+      if (result.source === 'pdf_text') {
+        setNExtractStatus('Znaleziono tekst w PDF — sprawdź dane')
+
+        // Fill header fields
+        if (result.fields.numer) setNForm(f => ({ ...f, numer: result.fields.numer }))
+        if (result.fields.data_zakupu) setNForm(f => ({ ...f, data_zakupu: result.fields.data_zakupu }))
+
+        // NIP → lookup kontrahent via Supabase (Problem 6)
+        if (result.fields.kontrahent_nip) {
+          const nip = result.fields.kontrahent_nip.replace(/\D/g, '')
+          const { data: matchKontrahent } = await supabase
+            .from('kontrahenci')
+            .select('id, nazwa')
+            .eq('nip', nip)
+            .maybeSingle()
+          if (matchKontrahent) {
+            setNForm(f => ({ ...f, kontrahent_id: matchKontrahent.id }))
+            addToast(`Dopasowano kontrahenta: ${matchKontrahent.nazwa}`, 'success')
+          } else {
+            addToast(`NIP ${result.fields.kontrahent_nip} — nie znaleziono kontrahenta. Wybierz ręcznie.`, 'info')
+          }
+        }
+
+        setNAiCount(1)
+
+        // Parse line items from raw text
+        setNExtractStatus('Dopasowuję pozycje do towarów…')
+        const rawItems = parseInvoiceItems(result.rawText)
+        if (rawItems.length > 0) {
+          const matched = rawItems.map(item => {
+            const m = findBestMatch(item.rawName, towary)
+            return {
+              ...item,
+              matchedProductId: m?.product.id ?? null,
+              matchedProductNazwa: m?.product.nazwa ?? null,
+              matchScore: m?.score ?? 0,
+              skipped: false,
+            }
+          })
+          setNExtractedItems(matched)
+          setNShowExtracted(true)
+          result.warnings.forEach(w => addToast(w, 'info'))
+          if (result.confidence >= 40) {
+            addToast(
+              `Odczytano dane (pewność: ${result.confidence}%). Sprawdź pozycje przed zatwierdzeniem.`,
+              'success'
+            )
+          }
+          return // exit — Phase 1.5 takes over
+        }
+      } else {
+        setNExtractStatus('Wypełnij dane ręcznie')
       }
 
-      setNForm({
-        numer: result.numer || '',
-        data_zakupu: validDate,
-        kontrahent_id: kontrahentId,
-        typ: detectedTyp,
-        notatki: result.notatki || '',
-      })
-
-      const defaultMag = magazyny[0]?.id || ''
-      const poz = (result.pozycje || []).map(p => mkPos({
-        nazwa: p.nazwa || '',
-        typ: p.typ || '',
-        ilosc: Number(p.ilosc) || 1,
-        jednostka: p.jednostka || 'szt',
-        cena_netto: Number(p.cena_netto) || 0,
-        magazyn_id: defaultMag,
-      }))
-      setNPositions(poz)
-      setNAiCount(poz.length)
+      result.warnings.forEach(w => addToast(w, 'info'))
+      if (result.confidence >= 40) {
+        addToast(
+          `Odczytano dane (pewność: ${result.confidence}%). Sprawdź przed zatwierdzeniem.`,
+          'success'
+        )
+      }
       setNShowForm(true)
-    } catch (err) {
-      addToast(err.message, 'error')
+    } catch {
+      setNExtractStatus('Nie udało się odczytać — wypełnij ręcznie')
+      addToast('Błąd odczytu pliku. Wypełnij formularz ręcznie.', 'error')
+      setNShowForm(true)
+    } finally {
+      setNAiLoading(false)
     }
-    setNAiLoading(false)
   }
 
   function addNPos() {
@@ -378,9 +533,9 @@ export default function Faktury() {
       for (const poz of nPositions) {
         if (!poz.nazwa.trim()) continue
 
-        // Find existing towar by typ (case-insensitive)
-        let towarId = null
-        if (poz.typ.trim()) {
+        // Use explicit match from extraction, or fall back to search by typ
+        let towarId = poz._towarId || null
+        if (!towarId && poz.typ.trim()) {
           const { data: found } = await supabase.from('towary')
             .select('id').ilike('typ', poz.typ.trim()).eq('aktywny', true).limit(1).maybeSingle()
           if (found) towarId = found.id
@@ -592,9 +747,9 @@ export default function Faktury() {
         <Modal
           title="Nowa faktura"
           onClose={() => setShowNModal(false)}
-          maxWidth={nShowForm ? 940 : 560}
+          maxWidth={nShowForm ? 940 : nShowExtracted ? 800 : 560}
         >
-          {!nShowForm ? (
+          {!nShowForm && !nShowExtracted ? (
             /* Phase 1: Upload zone */
             <div className="space-y-4">
               <InvoiceUploader
@@ -604,6 +759,7 @@ export default function Faktury() {
                 onAnalyze={handleReadAI}
                 analyzing={nAiLoading}
                 analyzed={nAiCount > 0}
+                statusText={nExtractStatus}
               />
               <div className="text-center pt-1">
                 <button
@@ -612,7 +768,108 @@ export default function Faktury() {
                   className="text-xs"
                   style={{ color: 'var(--muted)' }}
                 >
-                  Pomiń AI — wypełnij ręcznie
+                  Pomiń — wypełnij ręcznie
+                </button>
+              </div>
+            </div>
+          ) : nShowExtracted && !nShowForm ? (
+            /* Phase 1.5: Extracted items review */
+            <div>
+              <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
+                Znaleziono <strong>{nExtractedItems.filter(i => !i.skipped).length}</strong> pozycji w dokumencie — sprawdź dopasowania i zatwierdź
+              </p>
+              <div className="table-scroll-x" style={{ maxHeight: 360, overflowY: 'auto' }}>
+                <table className="w-full text-sm" style={{ minWidth: 580 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--table-sub)', position: 'sticky', top: 0 }}>
+                      <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Odczytana nazwa</th>
+                      <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Towar w bazie</th>
+                      <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Ilość</th>
+                      <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Cena</th>
+                      <th className="text-center px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Pewność</th>
+                      <th className="px-2 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nExtractedItems.map((item, idx) => {
+                      const borderColor = item.matchScore >= 0.8 ? '#16a34a' : item.matchScore >= 0.5 ? '#d97706' : '#ef4444'
+                      return (
+                        <tr
+                          key={idx}
+                          style={{
+                            opacity: item.skipped ? 0.35 : 1,
+                            borderTop: '1px solid var(--border)',
+                            borderLeft: `3px solid ${borderColor}`,
+                          }}
+                        >
+                          <td className="px-3 py-2 text-xs" style={{ color: 'var(--text)' }}>{item.rawName}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={item.matchedProductId || ''}
+                              onChange={e => updateExtractedItem(idx, 'matchedProductId', e.target.value || null)}
+                              style={{ ...IS(), fontSize: 11, padding: '4px 8px' }}
+                            >
+                              <option value="">— brak dopasowania —</option>
+                              {towary.map(t => (
+                                <option key={t.id} value={t.id}>{t.nazwa}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              value={item.quantity}
+                              onChange={e => updateExtractedItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                              style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 72, textAlign: 'right' }}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPriceNet}
+                              onChange={e => updateExtractedItem(idx, 'unitPriceNet', parseFloat(e.target.value) || 0)}
+                              style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
+                            {item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleSkipExtracted(idx)}
+                              className="text-xs px-2 py-1 rounded"
+                              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                            >
+                              {item.skipped ? 'Przywróć' : 'Pomiń'}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={goToManualForm}
+                  className="rounded-lg py-2 px-4 text-sm font-medium"
+                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                >
+                  Pomiń pozycje — tylko dane faktury
+                </button>
+                <button
+                  type="button"
+                  onClick={commitExtractedItems}
+                  className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                  style={{ background: '#3b82f6' }}
+                >
+                  Dodaj {nExtractedItems.filter(i => !i.skipped).length} pozycji do faktury →
                 </button>
               </div>
             </div>
@@ -624,7 +881,7 @@ export default function Faktury() {
                 <div className="rounded-lg px-4 py-3 mb-5 text-sm font-medium flex items-center gap-2"
                   style={{ background: '#052e16', color: '#86efac', border: '1px solid #166534' }}>
                   <Bot size={15} />
-                  AI odczytało {nAiCount} {nAiCount === 1 ? 'pozycję' : nAiCount < 5 ? 'pozycje' : 'pozycji'} — sprawdź dane i zatwierdź
+                  Odczytano dane z dokumentu — sprawdź i uzupełnij pola
                 </div>
               )}
 
@@ -797,6 +1054,67 @@ export default function Faktury() {
                             <option value="">— wybierz magazyn —</option>
                             {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
                           </select>
+
+                          {/* ── Analiza ceny ── */}
+                          {(() => {
+                            const pd = nPriceData[p._key]
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => analyzePositionPrice(p)}
+                                  disabled={pd?.loading}
+                                  className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 font-medium"
+                                  style={{ background: 'var(--table-sub)', color: '#3b82f6', border: '1px solid var(--border)', width: 'fit-content' }}
+                                >
+                                  <TrendingUp size={11} />
+                                  {pd?.loading ? 'Sprawdzam…' : 'Sprawdź cenę'}
+                                </button>
+                                {pd && !pd.loading && !pd.error && (
+                                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
+                                    <div style={{ fontWeight: 600, marginBottom: 6, color: '#374151' }}>
+                                      📊 Analiza ceny — {pd.towarNazwa}
+                                      {pd.matchScore < 1 && (
+                                        <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 6 }}>
+                                          (dopasowanie {Math.round(pd.matchScore * 100)}%)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {pd.history ? (
+                                      <>
+                                        <div style={{ color: '#6b7280' }}>Ostatnia cena: <strong>{pd.history.ostatniaCena?.toFixed(2)} zł</strong></div>
+                                        <div style={{ color: '#6b7280' }}>Średnia: <strong>{pd.history.sredniaCena?.toFixed(2)} zł</strong></div>
+                                        <div style={{ color: '#6b7280' }}>Zakres: {pd.history.najnizszaCena?.toFixed(2)} – {pd.history.najwyzszaCena?.toFixed(2)} zł</div>
+                                        {pd.history.najlepszyDostawca && (
+                                          <div style={{ color: '#059669', marginTop: 4 }}>
+                                            Najlepszy dostawca: <strong>{pd.history.najlepszyDostawca.nazwa}</strong> ({pd.history.najlepszyDostawca.sredniaCena.toFixed(2)} zł, {pd.history.najlepszyDostawca.liczbaZakupow} zakupów)
+                                          </div>
+                                        )}
+                                        {pd.alerts.map((alert, i) => (
+                                          <div key={i} style={{
+                                            marginTop: 6, padding: '4px 8px', borderRadius: 4,
+                                            background: alert.severity === 'high' ? '#fef2f2' : alert.severity === 'medium' ? '#fffbeb' : '#f0fdf4',
+                                            color: alert.severity === 'high' ? '#dc2626' : alert.severity === 'medium' ? '#d97706' : '#16a34a',
+                                            fontWeight: 500,
+                                          }}>
+                                            {alert.title}: {alert.description}
+                                          </div>
+                                        ))}
+                                        {pd.alerts.length === 0 && (
+                                          <div style={{ color: '#16a34a', marginTop: 4, fontWeight: 500 }}>✓ Cena w normie</div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div style={{ color: '#94a3b8' }}>Brak historii zakupów dla tego towaru.</div>
+                                    )}
+                                  </div>
+                                )}
+                                {pd?.error && (
+                                  <div style={{ color: '#94a3b8', fontSize: 11 }}>{pd.error}</div>
+                                )}
+                              </>
+                            )
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -838,6 +1156,7 @@ export default function Faktury() {
                       onAnalyze={handleReadAI}
                       analyzing={nAiLoading}
                       analyzed={nAiCount > 0}
+                      statusText={nExtractStatus}
                     />
                   </div>
                 )}

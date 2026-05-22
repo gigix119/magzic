@@ -1,16 +1,30 @@
-# React + Vite
+# magzic — System zarządzania magazynem AI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+System magazynowy dla blueapart.pl zbudowany w React + Vite + Supabase.
 
-Currently, two official plugins are available:
+## Uruchomienie lokalne
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Sklonuj repo
+2. Skopiuj `.env.example` do `.env` i wypełnij wartości
+3. `npm install`
+4. `npm run dev`
 
-## React Compiler
+## Zmienne środowiskowe
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Zobacz `.env.example`
 
-## Expanding the ESLint configuration
+## Supabase
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Po pierwszym uruchomieniu wklej w Supabase SQL Editor:
+- `price_alerts_migration.sql`
+
+## Deploy
+
+Projekt jest wdrożony na Cloudflare Pages.
+Połączony z GitHub — każdy push na `main` automatycznie deployuje.
+
+## Konto admina
+
+Utwórz w Supabase Dashboard:  
+Authentication → Users → Add user  
+Email: administrator@blueapart.pl
