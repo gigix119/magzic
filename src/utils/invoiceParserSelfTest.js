@@ -23,7 +23,12 @@ import {
   isReadyToSave,
   validatePositionBeforeInvoiceSave,
   preparePositionsForInvoiceSave,
+  validatePositionForInvoiceDraft,
+  validatePositionForInventoryImpact,
+  preparePositionsForInvoiceDraft,
+  preparePositionsForInventoryImpact,
 } from './invoicePositionValidator.js'
+import { mapActionablePositionToInvoiceLine } from './invoiceLineMapper.js'
 import {
   isLikelyInventoryProductName,
   estimateProductNameConfidence,
@@ -629,6 +634,130 @@ export async function runInvoiceParserSelfTest() {
     validatePositionBeforeInvoiceSave({ nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, _towarId: 'tid-syfon', matchScore: 1.0 }, fakeTowarList).ok)
   check('save guard regression: service_item + cena > 0 → ok (service_cost is ready)',
     isReadyToSave(getAssignmentStatus({ rawName: 'Abonament', itemType: 'service_item', shouldAffectInventory: false, unitPriceNet: 52.85, skipped: false }, fakeTowarList)))
+
+  // ── Draft / review line validation (tests 55–69) ─────────────────
+
+  // Test 55: validatePositionForInvoiceDraft — pozycja bez productId → ok (draft nie wymaga)
+  const draftNoProd = { nazwa: 'PRALKA WGG244ZEPL BOSCH', ilosc: 1, unitPriceNet: 2999, skipped: false }
+  check('draft: validatePositionForInvoiceDraft — bez productId → ok',
+    validatePositionForInvoiceDraft(draftNoProd).ok)
+
+  // Test 56: validatePositionForInvoiceDraft — service_cost bez warehouseId → ok
+  const draftService = { nazwa: 'Usługi telekomunikacyjne Play', itemType: 'service_item', ilosc: 1, unitPriceNet: 52.85, shouldAffectInventory: false, skipped: false }
+  check('draft: validatePositionForInvoiceDraft — service bez magazynu → ok',
+    validatePositionForInvoiceDraft(draftService).ok)
+
+  // Test 57: validatePositionForInvoiceDraft — metadata line → blocked
+  const draftMeta = { nazwa: 'Uwagi / Remarks / Nr wiersza', ilosc: 1, unitPriceNet: 10, skipped: false }
+  check('draft: validatePositionForInvoiceDraft — metadata → not ok',
+    !validatePositionForInvoiceDraft(draftMeta).ok)
+
+  // Test 58: validatePositionForInvoiceDraft — cena=0 → ok but warning
+  const draftZeroPrice = { nazwa: 'PRALKA WGG244ZEPL BOSCH', ilosc: 1, unitPriceNet: 0, skipped: false }
+  const draftZeroResult = validatePositionForInvoiceDraft(draftZeroPrice)
+  check('draft: validatePositionForInvoiceDraft — cena=0 → ok (z warningiem)',
+    draftZeroResult.ok)
+  check('draft: validatePositionForInvoiceDraft — cena=0 → warning o braku ceny',
+    draftZeroResult.warnings.length > 0)
+
+  // Test 59: validatePositionForInvoiceDraft — nazwa pusta → error
+  const draftNoName = { nazwa: '', ilosc: 1, unitPriceNet: 10, skipped: false }
+  check('draft: validatePositionForInvoiceDraft — pusta nazwa → not ok',
+    !validatePositionForInvoiceDraft(draftNoName).ok)
+
+  // Test 60: validatePositionForInvoiceDraft — skipped → not ok
+  check('draft: validatePositionForInvoiceDraft — skipped → not ok',
+    !validatePositionForInvoiceDraft({ nazwa: 'Test', ilosc: 1, unitPriceNet: 10, skipped: true }).ok)
+
+  // Test 61: validatePositionForInventoryImpact — brak productId → error
+  const invNoProd = { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, magazyn_id: 'mag-1', _towarId: null, matchScore: 1.0 }
+  check('inventory: validatePositionForInventoryImpact — brak productId → not ok',
+    !validatePositionForInventoryImpact(invNoProd, fakeTowarList).ok)
+
+  // Test 62: validatePositionForInventoryImpact — brak warehouseId → error
+  const invNoWH = { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, magazyn_id: null, _towarId: 'tid-syfon', matchScore: 1.0 }
+  check('inventory: validatePositionForInventoryImpact — brak magazynu → not ok',
+    !validatePositionForInventoryImpact(invNoWH, fakeTowarList).ok)
+
+  // Test 63: validatePositionForInventoryImpact — cena=0 → error
+  const invZeroPrice = { nazwa: 'Syfon', cena_netto: 0, ilosc: 1, magazyn_id: 'mag-1', _towarId: 'tid-syfon', matchScore: 1.0 }
+  check('inventory: validatePositionForInventoryImpact — cena=0 → not ok',
+    !validatePositionForInventoryImpact(invZeroPrice, fakeTowarList).ok)
+
+  // Test 64: validatePositionForInventoryImpact — prawidłowa pozycja → ok
+  const invOk = { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 2, magazyn_id: 'mag-1', _towarId: 'tid-syfon', matchScore: 1.0 }
+  check('inventory: validatePositionForInventoryImpact — prawidłowa → ok',
+    validatePositionForInventoryImpact(invOk, fakeTowarList).ok)
+
+  // Test 65: preparePositionsForInvoiceDraft — review positions → draftLines
+  const mixedForDraft = [
+    { nazwa: 'PRALKA WGG244ZEPL BOSCH', ilosc: 1, unitPriceNet: 2999, skipped: false },
+    { nazwa: 'Syfon umywalkowy', ilosc: 2, unitPriceNet: 0, skipped: false },
+    { nazwa: 'Uwagi / Remarks / Nr wiersza', ilosc: 1, unitPriceNet: 5, skipped: false },
+    { nazwa: '', ilosc: 1, unitPriceNet: 10, skipped: false },
+  ]
+  const prepDraft = preparePositionsForInvoiceDraft(mixedForDraft)
+  check('draft: preparePositionsForInvoiceDraft — 2 draft lines (pralka + syfon)',
+    prepDraft.draftLines.length === 2)
+  check('draft: preparePositionsForInvoiceDraft — blocked metadata i pusta nazwa',
+    prepDraft.blocked.length === 2)
+  check('draft: preparePositionsForInvoiceDraft — draft lines mają shouldAffectInventory=false',
+    prepDraft.draftLines.every(l => l.shouldAffectInventory === false))
+  check('draft: preparePositionsForInvoiceDraft — draft lines mają _isDraft=true',
+    prepDraft.draftLines.every(l => l._isDraft === true))
+  check('draft: preparePositionsForInvoiceDraft — draft lines mają invoiceLineStatus review_required',
+    prepDraft.draftLines.every(l => l.invoiceLineStatus === 'review_required'))
+
+  // Test 66: preparePositionsForInvoiceDraft — nie przepuszcza skipped
+  const withSkipped = [
+    { nazwa: 'Syfon', ilosc: 1, unitPriceNet: 10, skipped: true },
+    { nazwa: 'Bateria', ilosc: 1, unitPriceNet: 5, skipped: false },
+  ]
+  const prepSkipped = preparePositionsForInvoiceDraft(withSkipped)
+  check('draft: preparePositionsForInvoiceDraft — nie przepuszcza skipped',
+    prepSkipped.draftLines.length === 1 && prepSkipped.draftLines[0].nazwa === 'Bateria')
+
+  // Test 67: preparePositionsForInventoryImpact — filtruje shouldAffectInventory=false
+  const mixedForInv = [
+    { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, magazyn_id: 'mag-1', _towarId: 'tid-syfon', matchScore: 1.0, shouldAffectInventory: true },
+    { nazwa: 'Abonament', cena_netto: 52.85, ilosc: 1, magazyn_id: null, _towarId: null, matchScore: 0, shouldAffectInventory: false },
+    { nazwa: 'PRALKA', cena_netto: 2999, ilosc: 1, magazyn_id: 'mag-1', _towarId: null, matchScore: 0, shouldAffectInventory: true, _isDraft: true },
+  ]
+  const prepInv = preparePositionsForInventoryImpact(mixedForInv, fakeTowarList)
+  check('inventory: preparePositionsForInventoryImpact — 1 ready (syfon z towarem)',
+    prepInv.readyForStock.length === 1)
+  check('inventory: preparePositionsForInventoryImpact — 1 blocked (pralka bez towaru, nie _isDraft)',
+    prepInv.blocked.length === 1)
+
+  // Test 68: mapActionablePositionToInvoiceLine — bez productId → name zachowane, shouldAffectInventory=false
+  const lineNoProd = mapActionablePositionToInvoiceLine({
+    rawName: 'PRALKA WGG244ZEPL BOSCH',
+    ilosc: 1,
+    unitPriceNet: 2999,
+    matchedProductId: null,
+  })
+  check('mapper: bez productId → name z rawName',
+    lineNoProd.name === 'PRALKA WGG244ZEPL BOSCH')
+  check('mapper: bez productId → shouldAffectInventory=false',
+    lineNoProd.shouldAffectInventory === false)
+  check('mapper: bez productId → invoiceLineStatus review_required',
+    lineNoProd.invoiceLineStatus === 'review_required')
+  check('mapper: bez productId → inventoryImpactStatus=blocked',
+    lineNoProd.inventoryImpactStatus === 'blocked')
+
+  // Test 69: mapActionablePositionToInvoiceLine — service → shouldAffectInventory=false bez productId
+  const lineService = mapActionablePositionToInvoiceLine({
+    rawName: 'Usługi telekomunikacyjne Play',
+    itemType: 'service_item',
+    shouldAffectInventory: false,
+    ilosc: 1,
+    unitPriceNet: 52.85,
+    matchedProductId: null,
+  })
+  check('mapper: service_item → shouldAffectInventory=false',
+    lineService.shouldAffectInventory === false)
+  check('mapper: service_item → name zachowane',
+    lineService.name === 'Usługi telekomunikacyjne Play')
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length

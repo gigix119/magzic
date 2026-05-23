@@ -1,3 +1,5 @@
+import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
+
 const METADATA_LINE_TYPES = new Set(['summary_line', 'payment_info'])
 
 const TRASH_KEYWORDS = [
@@ -123,4 +125,142 @@ export function preparePositionsForInvoiceSave(positions, towary = []) {
   }
 
   return { readyToSave, blocked, warnings }
+}
+
+// ── Draft / review line validation (invoice line ≠ stock movement) ────────────
+
+/**
+ * Minimal validation for adding a position as a draft invoice line.
+ * Does NOT require productId, warehouseId, or matchScore.
+ * Only requires a non-empty, non-metadata name.
+ */
+export function validatePositionForInvoiceDraft(position) {
+  const errors = []
+  const warnings = []
+
+  if (!position) return { ok: false, errors: ['Brak pozycji'], warnings }
+  if (position.skipped) return { ok: false, errors: ['Pozycja pominięta'], warnings }
+  if (METADATA_LINE_TYPES.has(position.lineType)) {
+    return { ok: false, errors: ['Linia to metadane faktury, nie pozycja'], warnings }
+  }
+
+  const rawName = (position.nazwa || position.rawName || '').trim()
+  if (!rawName || rawName.length < 2) {
+    errors.push('Brak nazwy pozycji (minimum 2 znaki)')
+    return { ok: false, errors, warnings }
+  }
+
+  if (isForbiddenAsInvoiceItem(rawName, {})) {
+    errors.push(`Nazwa jest metadaną lub śmieciem: "${rawName.slice(0, 60)}"`)
+    return { ok: false, errors, warnings }
+  }
+
+  const price = Number(position.cena_netto ?? position.cenaNetto ?? position.unitPriceNet ?? 0)
+  if (price <= 0) {
+    warnings.push('Cena = 0 — pozycja robocza bez wartości, nie wpłynie na magazyn')
+  }
+
+  const qty = Number(position.ilosc ?? position.quantity ?? 0)
+  if (qty <= 0) {
+    warnings.push('Ilość = 0 — uzupełnij przed zatwierdzeniem')
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+/**
+ * Hard validation for inventory impact (stock movement).
+ * Requires productId, warehouseId, price > 0, qty > 0.
+ */
+export function validatePositionForInventoryImpact(position, towary = []) {
+  const errors = []
+  const warnings = []
+
+  const price = Number(position.cena_netto ?? position.cenaNetto ?? position.unitPriceNet ?? 0)
+  if (price <= 0) errors.push('Cena netto musi być > 0 aby wpłynąć na magazyn')
+
+  const qty = Number(position.ilosc ?? position.quantity ?? 0)
+  if (qty <= 0) errors.push('Ilość musi być > 0')
+
+  const towarId = position._towarId || position.towar_id || position.matchedProductId || null
+  if (!towarId) {
+    errors.push('Brak powiązania z towarem — nie można zaktualizować magazynu')
+  } else {
+    const product = towary.find(t => t.id === towarId)
+    if (!product) {
+      errors.push(`Towar ID "${towarId}" nie istnieje w bazie`)
+    } else if (!product.nazwa || product.nazwa.length < 2) {
+      errors.push(`Towar "${product.nazwa}" ma zbyt krótką nazwę`)
+    }
+  }
+
+  const warehouseId = position.magazyn_id || null
+  if (!warehouseId) errors.push('Brak magazynu — wymagany do aktualizacji stanów')
+
+  const matchScore = Number(position.matchScore ?? 0)
+  if (matchScore > 0 && matchScore < 0.85) {
+    warnings.push(`Niskie dopasowanie towaru (${Math.round(matchScore * 100)}%) — zweryfikuj ręcznie`)
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+/**
+ * Splits positions into draftLines (can be added to invoice) and blocked (garbage/metadata).
+ * Draft positions have shouldAffectInventory=false and invoiceLineStatus='review_required'.
+ * @returns {{ draftLines: object[], blocked: Array<{position: object, errors: string[]}>, warnings: string[] }}
+ */
+export function preparePositionsForInvoiceDraft(positions) {
+  const draftLines = []
+  const blocked = []
+  const warnings = []
+
+  for (const pos of (positions || [])) {
+    if (pos.skipped) continue
+    if (METADATA_LINE_TYPES.has(pos.lineType)) continue
+
+    const { ok, errors, warnings: posWarnings } = validatePositionForInvoiceDraft(pos)
+    if (posWarnings.length > 0) {
+      warnings.push(...posWarnings.map(w => `${(pos.nazwa || pos.rawName || '').slice(0, 30)}: ${w}`))
+    }
+
+    if (ok) {
+      draftLines.push({
+        ...pos,
+        _isDraft: true,
+        shouldAffectInventory: false,
+        invoiceLineStatus: 'review_required',
+      })
+    } else {
+      blocked.push({ position: pos, errors })
+    }
+  }
+
+  return { draftLines, blocked, warnings }
+}
+
+/**
+ * Filters positions that are ready for inventory impact (stock movement).
+ * @returns {{ readyForStock: object[], blocked: Array<{position: object, errors: string[]}>, warnings: string[] }}
+ */
+export function preparePositionsForInventoryImpact(positions, towary = []) {
+  const readyForStock = []
+  const blocked = []
+  const warnings = []
+
+  for (const pos of (positions || [])) {
+    if (pos.shouldAffectInventory === false) continue
+    if (pos._isDraft) continue
+
+    const { ok, errors, warnings: posWarnings } = validatePositionForInventoryImpact(pos, towary)
+    warnings.push(...posWarnings)
+
+    if (ok) {
+      readyForStock.push(pos)
+    } else {
+      blocked.push({ position: pos, errors })
+    }
+  }
+
+  return { readyForStock, blocked, warnings }
 }

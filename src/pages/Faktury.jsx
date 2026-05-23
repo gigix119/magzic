@@ -21,7 +21,7 @@ import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { rankProductCandidates } from '../utils/invoiceScoringEngine'
-import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave } from '../utils/invoicePositionValidator'
+import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft } from '../utils/invoicePositionValidator'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
@@ -124,6 +124,7 @@ export default function Faktury() {
   const [extractedResult, setExtractedResult] = useState(null)
   const [showZatwierdzModal, setShowZatwierdzModal] = useState(false)
   const [zatwierdzFak, setZatwierdzFak] = useState(null)
+  const [nDraftZeroPriceConfirmed, setNDraftZeroPriceConfirmed] = useState(false)
 
   // ─────────────────────────────────────────────────────────────
 
@@ -320,6 +321,7 @@ export default function Faktury() {
     setNPositions([])
     setNKontrahentHint('')
     setNPriceData({})
+    setNDraftZeroPriceConfirmed(false)
     setShowNModal(true)
   }
 
@@ -424,6 +426,62 @@ export default function Faktury() {
         }
       })
     }
+  }
+
+  function commitDraftExtractedItems() {
+    const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
+    const active = nExtractedItems.filter(item => !item.skipped)
+
+    // Take items that are NOT already ready (those go via commitExtractedItems)
+    const draftCandidates = active.filter(item => {
+      const s = getAssignmentStatus(item, towary)
+      return s === 'needs_review' || s === 'needs_product' || s === 'needs_price' || s === 'service_cost'
+    })
+
+    if (draftCandidates.length === 0) {
+      addToast('Brak pozycji do dodania jako robocze.', 'info')
+      return
+    }
+
+    // Check for zero-price items requiring explicit confirmation
+    const hasZeroPrice = draftCandidates.some(i => !((i.unitPriceNet ?? 0) > 0))
+    if (hasZeroPrice && !nDraftZeroPriceConfirmed) {
+      addToast('Część pozycji ma cenę 0. Zaznacz potwierdzenie przed dodaniem.', 'error')
+      return
+    }
+
+    const candidatePositions = draftCandidates.map(item => mkPos({
+      nazwa: item.rawName || item.nazwa || '',
+      typ: '',
+      ilosc: item.quantity ?? 1,
+      jednostka: item.unit || 'szt',
+      cena_netto: item.unitPriceNet ?? 0,
+      magazyn_id: defaultMag,
+      _towarId: item.matchedProductId || null,
+      itemType: item.itemType,
+      shouldAffectInventory: false,
+      matchScore: item.matchScore ?? 0,
+      _isDraft: true,
+      invoiceLineStatus: 'review_required',
+    }))
+
+    const { draftLines, blocked } = preparePositionsForInvoiceDraft(candidatePositions)
+
+    if (blocked.length > 0) {
+      blocked.forEach(({ position, errors }) => {
+        addToast(`Pominięto "${(position.nazwa || '').slice(0, 40)}": ${errors[0]}`, 'info')
+      })
+    }
+
+    if (draftLines.length === 0) {
+      addToast('Brak pozycji spełniających minimalne wymagania (nazwa, nie-metadata).', 'error')
+      return
+    }
+
+    setNPositions(prev => [...prev, ...draftLines])
+    setNShowExtracted(false)
+    setNShowForm(true)
+    addToast(`Dodano ${draftLines.length} pozycji roboczych do weryfikacji. Nie wpłyną na magazyn.`, 'info')
   }
 
   async function savePriceAlertsForFaktura(fak) {
@@ -664,30 +722,27 @@ export default function Faktury() {
       for (const poz of nPositions) {
         if (!poz.nazwa.trim()) continue
 
-        // Use explicit match from extraction, or fall back to search by typ
+        // Use explicit match from extraction
         let towarId = poz._towarId || null
-        if (!towarId && poz.typ.trim()) {
+
+        // For non-draft positions: try to find by typ (manual form only)
+        if (!towarId && !poz._isDraft && poz.shouldAffectInventory !== false && poz.typ?.trim()) {
           const { data: found } = await supabase.from('towary')
             .select('id').ilike('typ', poz.typ.trim()).eq('aktywny', true).limit(1).maybeSingle()
           if (found) towarId = found.id
         }
 
-        // If no match, create new towar
-        if (!towarId) {
-          const { data: newT, error: tErr } = await supabase.from('towary').insert([{
-            nazwa: poz.nazwa.trim(),
-            typ: poz.typ.trim() || null,
-            jednostka: poz.jednostka || null,
-            aktywny: true,
-          }]).select('id').single()
-          if (tErr) { console.error('Błąd tworzenia towaru:', tErr); continue }
-          towarId = newT.id
+        // Draft / service / review lines → insert with towar_id=null (no auto-create)
+        // Non-draft without towar → skip (do not auto-create, rule: NIE twórz towarów automatycznie)
+        if (!towarId && !poz._isDraft && poz.shouldAffectInventory !== false) {
+          console.warn('[faktury] Pominięto pozycję bez towaru:', poz.nazwa)
+          continue
         }
 
-        // Insert position
+        // Insert position (towar_id may be null for draft/service lines)
         const { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([{
           faktura_id: fakData.id,
-          towar_id: towarId,
+          towar_id: towarId || null,
           magazyn_id: poz.magazyn_id || null,
           ilosc: Number(poz.ilosc) || 0,
           cena_netto: Number(poz.cena_netto) || 0,
@@ -1086,15 +1141,25 @@ export default function Faktury() {
               {(() => {
                 const statuses = nExtractedItems.map(i => getAssignmentStatus(i, towary))
                 const readyCount = statuses.filter(s => isReadyToSave(s)).length
+                const serviceCostCount = statuses.filter(s => s === 'service_cost').length
                 const reviewCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
                 const ignoredCount = statuses.filter(s => s === 'ignored').length
+                const draftableCount = reviewCount + (statuses.filter(s => s === 'service_cost').length - (isReadyToSave('service_cost') ? statuses.filter(s => s === 'service_cost').length : 0))
                 return (
-                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
-                    Znaleziono <strong>{nExtractedItems.length}</strong> pozycji —{' '}
-                    <span style={{ color: '#16a34a' }}>{readyCount} gotowych</span>
-                    {reviewCount > 0 && <span style={{ color: '#d97706' }}>, {reviewCount} do weryfikacji</span>}
-                    {ignoredCount > 0 && <span style={{ color: 'var(--muted)' }}>, {ignoredCount} pominiętych</span>}
-                  </p>
+                  <div className="mb-3">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                      Znaleziono <strong>{nExtractedItems.length}</strong> pozycji —{' '}
+                      <span style={{ color: '#16a34a' }}>gotowe do magazynu: {readyCount}</span>
+                      {reviewCount > 0 && <span style={{ color: '#d97706' }}>, do weryfikacji: {reviewCount}</span>}
+                      {serviceCostCount > 0 && <span style={{ color: '#7c3aed' }}>, koszty/usługi: {serviceCostCount}</span>}
+                      {ignoredCount > 0 && <span style={{ color: 'var(--muted)' }}>, odrzucone metadane: {ignoredCount}</span>}
+                    </p>
+                    {(reviewCount > 0 || draftableCount > 0) && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                        Pozycje do weryfikacji możesz dodać do faktury jako robocze. Nie zwiększą stanów magazynowych, dopóki nie wybierzesz towaru i magazynu.
+                      </p>
+                    )}
+                  </div>
                 )
               })()}
               <div className="table-scroll-x" style={{ maxHeight: 360, overflowY: 'auto' }}>
@@ -1258,29 +1323,80 @@ export default function Faktury() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex gap-3 mt-4">
+              {/* Zero-price draft confirmation */}
+              {(() => {
+                const active = nExtractedItems.filter(i => !i.skipped)
+                const draftStatuses = active.filter(i => {
+                  const s = getAssignmentStatus(i, towary)
+                  return s === 'needs_review' || s === 'needs_product' || s === 'needs_price' || s === 'service_cost'
+                })
+                const hasZeroPrice = draftStatuses.some(i => !((i.unitPriceNet ?? 0) > 0))
+                if (!hasZeroPrice) return null
+                return (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 12, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      id="draftZeroConfirm"
+                      checked={nDraftZeroPriceConfirmed}
+                      onChange={e => setNDraftZeroPriceConfirmed(e.target.checked)}
+                      style={{ marginTop: 2, flexShrink: 0 }}
+                    />
+                    <label htmlFor="draftZeroConfirm" style={{ color: '#92400e', cursor: 'pointer' }}>
+                      Rozumiem, że pozycje bez ceny zostaną dodane jako robocze i nie wpłyną na magazyn.
+                    </label>
+                  </div>
+                )
+              })()}
+              <div className="flex gap-2 mt-3 flex-wrap">
                 <button
                   type="button"
                   onClick={goToManualForm}
-                  className="rounded-lg py-2 px-4 text-sm font-medium"
-                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                  className="rounded-lg py-2 px-3 text-sm font-medium"
+                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)', flexShrink: 0 }}
                 >
-                  Pomiń pozycje — tylko dane faktury
+                  Pomiń pozycje
                 </button>
                 {(() => {
-                  const readyCount = nExtractedItems.filter(i => isReadyToSave(getAssignmentStatus(i, towary))).length
+                  const statuses = nExtractedItems.map(i => getAssignmentStatus(i, towary))
+                  const readyCount = statuses.filter(s => isReadyToSave(s)).length
+                  const draftCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
+                  const active = nExtractedItems.filter(i => !i.skipped)
+                  const hasZeroPrice = active.some(i => {
+                    const s = getAssignmentStatus(i, towary)
+                    return (s === 'needs_review' || s === 'needs_product' || s === 'needs_price') && !((i.unitPriceNet ?? 0) > 0)
+                  })
+                  const draftDisabled = draftCount === 0 || (hasZeroPrice && !nDraftZeroPriceConfirmed)
                   return (
-                    <button
-                      type="button"
-                      onClick={commitExtractedItems}
-                      disabled={readyCount === 0}
-                      className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                      style={{ background: readyCount > 0 ? '#3b82f6' : '#94a3b8', cursor: readyCount > 0 ? 'pointer' : 'not-allowed' }}
-                    >
-                      {readyCount > 0
-                        ? `Dodaj ${readyCount} pozycji do faktury →`
-                        : 'Brak gotowych pozycji — uzupełnij ceny i dopasowania'}
-                    </button>
+                    <>
+                      {draftCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={commitDraftExtractedItems}
+                          disabled={draftDisabled}
+                          className="rounded-lg py-2 px-3 text-sm font-semibold"
+                          style={{
+                            background: draftDisabled ? '#f1f5f9' : '#fef9c3',
+                            color: draftDisabled ? '#94a3b8' : '#78350f',
+                            border: `1px solid ${draftDisabled ? '#e2e8f0' : '#fde047'}`,
+                            cursor: draftDisabled ? 'not-allowed' : 'pointer',
+                            flexShrink: 0,
+                          }}
+                        >
+                          Dodaj {draftCount} roboczych do weryfikacji
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={commitExtractedItems}
+                        disabled={readyCount === 0}
+                        className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                        style={{ background: readyCount > 0 ? '#3b82f6' : '#94a3b8', cursor: readyCount > 0 ? 'pointer' : 'not-allowed', minWidth: 140 }}
+                      >
+                        {readyCount > 0
+                          ? `Dodaj ${readyCount} gotowych →`
+                          : 'Brak gotowych pozycji'}
+                      </button>
+                    </>
                   )
                 })()}
               </div>
