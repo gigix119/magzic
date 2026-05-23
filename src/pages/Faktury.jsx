@@ -16,7 +16,7 @@ import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from 
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping } from '../utils/invoiceLearning'
 import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
-import { calculateInvoiceQualityMetrics, getQualityBadge } from '../utils/invoiceQualityMetrics'
+import { calculateInvoiceQualityMetrics, getQualityBadge, shouldRequireManualReview, getQualityWarnings } from '../utils/invoiceQualityMetrics'
 import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import {
@@ -973,6 +973,19 @@ export default function Faktury() {
                       — zastosowano reguły specyficzne dla tego dostawcy
                     </div>
                   )}
+                  {shouldRequireManualReview(qualityMetrics) && (() => {
+                    const warnings = getQualityWarnings(qualityMetrics)
+                    return (
+                      <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 4, fontSize: 11, color: '#9a3412' }}>
+                        <strong>⚠ Sprawdź dane przed zatwierdzeniem.</strong> System nie zapisze zmian automatycznie.
+                        {warnings.length > 0 && (
+                          <ul style={{ margin: '4px 0 0 16px' }}>
+                            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    )
+                  })()}
                   <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
                     System przygotował propozycję. Sprawdź dane przed zatwierdzeniem.
                   </div>

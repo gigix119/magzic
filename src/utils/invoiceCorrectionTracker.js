@@ -1,4 +1,23 @@
-const CORRECTIONS_KEY = 'magzic_invoice_corrections'
+const CORRECTIONS_KEY = 'magzic_invoice_correction_events'
+const MAX_EVENTS = 500
+
+// ── Core diff ────────────────────────────────────────────────────────────────
+
+export function classifyCorrection(fieldPath, oldValue, newValue) {
+  if (oldValue == null && newValue != null) return 'missing_value'
+  if (oldValue != null && newValue == null) return 'false_positive'
+  if (fieldPath.endsWith('.documentType') || fieldPath === 'documentType') return 'wrong_document_type'
+  if (fieldPath.endsWith('.itemType')) return 'wrong_item_type'
+  if (fieldPath.endsWith('.shouldAffectInventory')) return 'wrong_inventory_effect'
+  if (fieldPath.endsWith('.matchedProductId')) return 'wrong_product_match'
+  if (fieldPath.endsWith('.cenaNetto') || fieldPath.endsWith('.cena_netto')) return 'wrong_price'
+  if (fieldPath.endsWith('.ilosc')) return 'wrong_quantity'
+  if (fieldPath.endsWith('.jednostka')) return 'wrong_unit'
+  if (fieldPath.endsWith('.vat') || fieldPath.endsWith('.vat_procent')) return 'wrong_vat'
+  if (fieldPath.includes('pozycje') && oldValue == null) return 'false_negative'
+  if (fieldPath.includes('pozycje') && newValue == null) return 'false_positive'
+  return 'wrong_value'
+}
 
 export function diffInvoiceExtraction(extracted, approved) {
   const corrections = []
@@ -12,7 +31,7 @@ export function diffInvoiceExtraction(extracted, approved) {
         fieldPath: `fields.${field}`,
         oldValue: oldVal,
         newValue: newVal,
-        correctionType: !oldVal ? 'missing_value' : 'wrong_value',
+        correctionType: classifyCorrection(`fields.${field}`, oldVal, newVal),
       })
     }
   }
@@ -48,6 +67,9 @@ export function diffInvoiceExtraction(extracted, approved) {
     if (ep.itemType !== ap.itemType) {
       corrections.push({ fieldPath: `pozycje[${i}].itemType`, oldValue: ep.itemType, newValue: ap.itemType, correctionType: 'wrong_item_type' })
     }
+    if (ep.shouldAffectInventory !== ap.shouldAffectInventory) {
+      corrections.push({ fieldPath: `pozycje[${i}].shouldAffectInventory`, oldValue: ep.shouldAffectInventory, newValue: ap.shouldAffectInventory, correctionType: 'wrong_inventory_effect' })
+    }
     if (Math.abs((ep.cenaNetto || 0) - (ap.cenaNetto || 0)) > 0.01) {
       corrections.push({ fieldPath: `pozycje[${i}].cenaNetto`, oldValue: ep.cenaNetto, newValue: ap.cenaNetto, correctionType: 'wrong_price' })
     }
@@ -62,6 +84,21 @@ export function diffInvoiceExtraction(extracted, approved) {
   return corrections
 }
 
+// ── Summary ───────────────────────────────────────────────────────────────────
+
+export function buildCorrectionSummary(corrections) {
+  const byType = {}
+  let total = 0
+  for (const c of corrections) {
+    byType[c.correctionType] = (byType[c.correctionType] || 0) + 1
+    total++
+  }
+  const mostCommon = Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([type, count]) => ({ type, count }))
+  return { total, byType, mostCommon }
+}
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
 export function saveCorrectionEvent(extracted, approved) {
   if (!extracted || !approved) return
   const corrections = diffInvoiceExtraction(extracted, approved)
@@ -69,25 +106,25 @@ export function saveCorrectionEvent(extracted, approved) {
 
   const event = {
     id: crypto.randomUUID(),
-    parserVersion: '1.0',
+    parserVersion: '2.0',
     supplierNip: extracted.fields?.kontrahent_nip,
     supplierName: extracted.fields?.kontrahent_nazwa,
     documentTypeBefore: extracted.documentType,
     documentTypeAfter: approved.documentType || extracted.documentType,
     source: extracted.source,
     confidenceBefore: extracted.confidence,
+    confidenceAfter: approved.confidence,
     corrections,
+    summary: buildCorrectionSummary(corrections),
     createdAt: new Date().toISOString(),
   }
 
   try {
     const events = JSON.parse(localStorage.getItem(CORRECTIONS_KEY) || '[]')
     events.push(event)
-    if (events.length > 200) events.splice(0, events.length - 200)
+    if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS)
     localStorage.setItem(CORRECTIONS_KEY, JSON.stringify(events))
-  } catch (e) {
-    console.error('Błąd zapisu correctionEvent:', e)
-  }
+  } catch { /* non-critical */ }
 
   return event
 }
@@ -101,7 +138,7 @@ export function exportCorrectionEvents() {
 }
 
 export function clearCorrectionEvents() {
-  localStorage.removeItem(CORRECTIONS_KEY)
+  try { localStorage.removeItem(CORRECTIONS_KEY) } catch { /* ignore */ }
 }
 
 export function getCorrectionStats() {

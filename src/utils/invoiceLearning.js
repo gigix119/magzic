@@ -238,3 +238,83 @@ export function clearInvoiceLearningData() {
     try { localStorage.removeItem(key) } catch { /* ignore */ }
   }
 }
+
+// ── All-in-one export/import/clear (includes corrections + golden samples) ───
+
+export function exportAllInvoiceLearningData() {
+  try {
+    const correctionEvents = JSON.parse(localStorage.getItem('magzic_invoice_correction_events') || '[]')
+    const goldenSamples = JSON.parse(localStorage.getItem('magzic_invoice_golden_samples') || '[]')
+    return JSON.stringify({
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      aliases: getStore(KEYS.aliases),
+      supplierMappings: getStore(KEYS.supplierMappings),
+      typicalPrices: getStore(KEYS.typicalPrices),
+      trainingExamples: getStoreArray(KEYS.trainingExamples),
+      correctionEvents,
+      goldenSamples,
+    }, null, 2)
+  } catch (err) {
+    return JSON.stringify({ error: err.message })
+  }
+}
+
+export function importAllInvoiceLearningData(jsonString) {
+  try {
+    const data = JSON.parse(jsonString)
+    if (!data || typeof data !== 'object') throw new Error('Invalid format')
+
+    const counts = {}
+
+    if (data.aliases) {
+      const existing = getStore(KEYS.aliases)
+      const merged = { ...existing, ...data.aliases }
+      saveStore(KEYS.aliases, merged)
+      counts.aliases = Object.keys(data.aliases).length
+    }
+    if (data.supplierMappings) {
+      const existing = getStore(KEYS.supplierMappings)
+      const merged = { ...existing, ...data.supplierMappings }
+      saveStore(KEYS.supplierMappings, merged)
+      counts.supplierMappings = Object.keys(data.supplierMappings).length
+    }
+    if (data.typicalPrices) {
+      saveStore(KEYS.typicalPrices, data.typicalPrices)
+      counts.typicalPrices = Object.keys(data.typicalPrices).length
+    }
+    if (Array.isArray(data.trainingExamples)) {
+      const existing = getStoreArray(KEYS.trainingExamples)
+      const combined = [...existing, ...data.trainingExamples].slice(-MAX_TRAINING_EXAMPLES)
+      saveStore(KEYS.trainingExamples, combined)
+      counts.trainingExamples = data.trainingExamples.length
+    }
+    if (Array.isArray(data.correctionEvents)) {
+      try {
+        const existing = JSON.parse(localStorage.getItem('magzic_invoice_correction_events') || '[]')
+        const combined = [...existing, ...data.correctionEvents].slice(-500)
+        localStorage.setItem('magzic_invoice_correction_events', JSON.stringify(combined))
+        counts.correctionEvents = data.correctionEvents.length
+      } catch { /* quota */ }
+    }
+    if (Array.isArray(data.goldenSamples)) {
+      try {
+        const existing = JSON.parse(localStorage.getItem('magzic_invoice_golden_samples') || '[]')
+        const existingIds = new Set(existing.map(s => s.id))
+        const newSamples = data.goldenSamples.filter(s => !existingIds.has(s.id))
+        localStorage.setItem('magzic_invoice_golden_samples', JSON.stringify([...existing, ...newSamples]))
+        counts.goldenSamples = newSamples.length
+      } catch { /* quota */ }
+    }
+
+    return { success: true, importedCounts: counts }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+}
+
+export function clearAllInvoiceLearningData() {
+  clearInvoiceLearningData()
+  try { localStorage.removeItem('magzic_invoice_correction_events') } catch { /* ignore */ }
+  try { localStorage.removeItem('magzic_invoice_golden_samples') } catch { /* ignore */ }
+}

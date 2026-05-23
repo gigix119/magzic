@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { exportInvoiceLearningData, importInvoiceLearningData, clearInvoiceLearningData } from '../utils/invoiceLearning'
-import { exportGoldenSamples, importGoldenSamples, getGoldenSamples } from '../utils/invoiceGoldenSamples'
+import { exportInvoiceLearningData, importInvoiceLearningData, getInvoiceTrainingExamples, exportAllInvoiceLearningData, importAllInvoiceLearningData, clearAllInvoiceLearningData } from '../utils/invoiceLearning'
+import { exportGoldenSamples, importGoldenSamples, getGoldenSamples, clearGoldenSamples } from '../utils/invoiceGoldenSamples'
 import { getCorrectionEvents, exportCorrectionEvents, clearCorrectionEvents, getCorrectionStats } from '../utils/invoiceCorrectionTracker'
 
 export default function InvoiceLearningDebugPanel() {
@@ -22,6 +22,7 @@ export default function InvoiceLearningDebugPanel() {
 
   const corrStats = getCorrectionStats()
   const goldenCount = getGoldenSamples().length
+  const trainingCount = getInvoiceTrainingExamples().length
 
   function download(data, filename) {
     const blob = new Blob([data], { type: 'application/json' })
@@ -33,16 +34,22 @@ export default function InvoiceLearningDebugPanel() {
     URL.revokeObjectURL(url)
   }
 
+  const handleExportAll = () => download(exportAllInvoiceLearningData(), `magzic-all-learning-${Date.now()}.json`)
   const handleExportLearning = () => download(exportInvoiceLearningData(), `magzic-learning-${Date.now()}.json`)
   const handleExportGolden = () => download(exportGoldenSamples(), `magzic-golden-${Date.now()}.json`)
   const handleExportCorrections = () => download(exportCorrectionEvents(), `magzic-corrections-${Date.now()}.json`)
 
-  const handleImportLearning = async (e) => {
+  const handleImportAll = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     const text = await file.text()
-    const result = importInvoiceLearningData(text)
-    alert(result.success ? 'Import OK' : 'Błąd: ' + result.error)
+    const result = importAllInvoiceLearningData(text)
+    if (result.success) {
+      const counts = Object.entries(result.importedCounts || {}).map(([k, v]) => `${k}: ${v}`).join(', ')
+      alert('Import OK — ' + (counts || 'brak zmian'))
+    } else {
+      alert('Błąd: ' + result.error)
+    }
     e.target.value = ''
   }
 
@@ -55,24 +62,29 @@ export default function InvoiceLearningDebugPanel() {
     e.target.value = ''
   }
 
+  const handleClearGolden = () => {
+    if (!window.confirm('Wyczyścić wszystkie golden samples?')) return
+    clearGoldenSamples()
+    alert('Golden samples wyczyszczone')
+  }
+
   const handleClear = () => {
-    if (!window.confirm('Wyczyścić wszystkie dane uczące i korekty?')) return
-    clearInvoiceLearningData()
-    clearCorrectionEvents()
-    alert('Dane wyczyszczone')
+    if (!window.confirm('Wyczyścić WSZYSTKIE dane uczące (aliasy, mappingi, ceny, przykłady treningowe, korekty, golden samples)?')) return
+    clearAllInvoiceLearningData()
+    alert('Wszystkie dane wyczyszczone')
   }
 
   const handleRunTests = async () => {
     try {
-      const module = await import('../utils/invoiceExtractor.test.js')
+      const module = await import('../utils/invoiceParserSelfTest.js')
       if (module.runInvoiceParserSelfTest) {
         const result = await module.runInvoiceParserSelfTest()
         setTestResult(result)
       } else {
-        setTestResult({ passed: 0, failed: 0, total: 0, failures: ['Brak eksportowanej funkcji runInvoiceParserSelfTest'] })
+        setTestResult({ passed: 0, failed: 0, total: 0, failures: ['Brak eksportowanej funkcji runInvoiceParserSelfTest'], results: [] })
       }
     } catch (e) {
-      setTestResult({ passed: 0, failed: 0, total: 0, failures: [String(e)] })
+      setTestResult({ passed: 0, failed: 0, total: 0, failures: [String(e)], results: [] })
     }
   }
 
@@ -83,6 +95,7 @@ export default function InvoiceLearningDebugPanel() {
     { label: 'Zdarzenia korekt', value: corrStats.totalEvents },
     { label: 'Korekty łącznie', value: corrStats.totalCorrections },
     { label: 'Golden samples', value: goldenCount },
+    { label: 'Przykłady treningowe', value: trainingCount },
   ]
 
   return (
@@ -100,7 +113,7 @@ export default function InvoiceLearningDebugPanel() {
       {expanded && (
         <div style={{ padding: 16, fontSize: 12 }}>
           {/* Statystyki */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
             {stats.map(({ label, value }) => (
               <div key={label} style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{value}</div>
@@ -109,21 +122,23 @@ export default function InvoiceLearningDebugPanel() {
             ))}
           </div>
 
-          {/* Przyciski */}
+          {/* Przyciski eksportu/importu */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <button onClick={handleExportLearning} style={btnStyle('#3b82f6')}>⬇️ Eksportuj learning</button>
-            <button onClick={handleExportGolden} style={btnStyle('#059669')}>⬇️ Eksportuj golden samples</button>
-            <button onClick={handleExportCorrections} style={btnStyle('#7c3aed')}>⬇️ Eksportuj korekty</button>
-            <label style={{ ...btnStyle('#0891b2'), cursor: 'pointer' }}>
-              ⬆️ Importuj learning
-              <input type="file" accept=".json" onChange={handleImportLearning} style={{ display: 'none' }} />
+            <button onClick={handleExportAll} style={btnStyle('#1e3a5f')}>⬇️ Eksportuj wszystko</button>
+            <label style={{ ...btnStyle('#1e3a5f'), cursor: 'pointer' }}>
+              ⬆️ Importuj wszystko
+              <input type="file" accept=".json" onChange={handleImportAll} style={{ display: 'none' }} />
             </label>
+            <button onClick={handleExportLearning} style={btnStyle('#3b82f6')}>⬇️ Learning</button>
+            <button onClick={handleExportGolden} style={btnStyle('#059669')}>⬇️ Golden samples</button>
+            <button onClick={handleExportCorrections} style={btnStyle('#7c3aed')}>⬇️ Korekty</button>
             <label style={{ ...btnStyle('#047857'), cursor: 'pointer' }}>
               ⬆️ Importuj golden
               <input type="file" accept=".json" onChange={handleImportGolden} style={{ display: 'none' }} />
             </label>
             <button onClick={handleRunTests} style={btnStyle('#d97706')}>▶️ Self-test parsera</button>
-            <button onClick={handleClear} style={btnStyle('#dc2626')}>🗑️ Wyczyść dane</button>
+            <button onClick={handleClearGolden} style={btnStyle('#b45309')}>🗑️ Wyczyść golden</button>
+            <button onClick={handleClear} style={btnStyle('#dc2626')}>🗑️ Wyczyść wszystko</button>
           </div>
 
           {/* Wynik testów */}
@@ -134,10 +149,24 @@ export default function InvoiceLearningDebugPanel() {
               borderRadius: 6, fontSize: 11,
             }}>
               <strong>Testy: {testResult.passed}/{testResult.total} passed</strong>
-              {testResult.failures?.length > 0 && (
-                <ul style={{ margin: '4px 0 0 16px', color: '#dc2626' }}>
-                  {testResult.failures.map((f, i) => <li key={i}>{f}</li>)}
-                </ul>
+              {testResult.failed > 0 && (
+                <div style={{ marginTop: 4, color: '#dc2626' }}>
+                  {testResult.failures?.map((f, i) => (
+                    <div key={i}>❌ {typeof f === 'string' ? f : `${f.name}: ${f.message}`}</div>
+                  ))}
+                </div>
+              )}
+              {testResult.results?.length > 0 && (
+                <details style={{ marginTop: 6 }}>
+                  <summary style={{ cursor: 'pointer', color: '#64748b' }}>Wszystkie testy ({testResult.results.length})</summary>
+                  <div style={{ marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
+                    {testResult.results.map((r, i) => (
+                      <div key={i} style={{ color: r.passed ? '#16a34a' : '#dc2626' }}>
+                        {r.passed ? '✅' : '❌'} {r.name}{!r.passed && r.message ? ` — ${r.message}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
             </div>
           )}
@@ -161,6 +190,8 @@ export default function InvoiceLearningDebugPanel() {
               <li>Dodaj 3–5 faktur od tego samego dostawcy</li>
               <li>Po każdym odczycie popraw pozycje i zatwierdź</li>
               <li>Przypisuj rawName do właściwych towarów</li>
+              <li>Oznaczaj czy pozycja wpływa na magazyn (Towar vs Usługa)</li>
+              <li>Golden samples są ważniejsze niż same PDF-y — zapisuj wzorcowe faktury</li>
               <li>Eksportuj learning data raz na miesiąc</li>
               <li>Dla skanów potrzebny będzie OCR/server-side</li>
             </ol>

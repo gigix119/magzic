@@ -4,6 +4,7 @@ export function validateGoldenSample(sample) {
   if (!sample.name) return { valid: false, error: 'Brak nazwy' }
   if (!sample.documentType) return { valid: false, error: 'Brak documentType' }
   if (!sample.expectedOutput) return { valid: false, error: 'Brak expectedOutput' }
+  if (!Array.isArray(sample.expectedOutput?.pozycje)) return { valid: false, error: 'expectedOutput.pozycje musi być tablicą' }
   return { valid: true }
 }
 
@@ -66,6 +67,10 @@ export function importGoldenSamples(json) {
   } catch (e) {
     return { success: false, error: e.message }
   }
+}
+
+export function clearGoldenSamples() {
+  try { localStorage.removeItem(GOLDEN_KEY) } catch { /* ignore */ }
 }
 
 export function saveGoldenSampleFromExtraction(result, name) {
