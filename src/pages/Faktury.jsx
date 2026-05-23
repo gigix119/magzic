@@ -817,14 +817,22 @@ export default function Faktury() {
         }
 
         // Insert position (towar_id may be null for draft/service lines)
-        const { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([{
+        // raw_name: store PDF name for display in draft lines (requires rawname_migration.sql)
+        const insertPayload = {
           faktura_id: fakData.id,
           towar_id: towarId || null,
           magazyn_id: poz.magazyn_id || null,
           ilosc: Number(poz.ilosc) || 0,
           cena_netto: Number(poz.cena_netto) || 0,
           vat_procent: Number(poz.vat_procent) || 23,
-        }])
+          raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
+        }
+        let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
+        // Fallback: if raw_name column does not exist yet (migration not run), retry without it
+        if (pozInsertErr?.code === '42703') {
+          const { raw_name: _rn, ...payloadWithoutRawName } = insertPayload
+          ;({ error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([payloadWithoutRawName]))
+        }
         if (pozInsertErr) {
           console.error('Błąd zapisu pozycji:', pozInsertErr)
           addToast(`Błąd zapisu pozycji "${poz.nazwa}": ${pozInsertErr.message}`, 'error')
@@ -1017,10 +1025,30 @@ export default function Faktury() {
                             return (
                             <tr key={p.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                               <td className="px-5 py-3" style={{ color: 'var(--text)' }}>
-                                {p.towary?.nazwa || <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>(brak towaru)</span>}
+                                {(() => {
+                                  // Guard: treat product names shorter than 2 chars (e.g. "a") as unassigned
+                                  const productName = (p.towary?.nazwa?.length >= 2) ? p.towary.nazwa : null
+                                  const displayNazwa = productName || p.raw_name || p.rawName || p.nazwa || null
+                                  if (!displayNazwa) {
+                                    return <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>(brak towaru)</span>
+                                  }
+                                  return (
+                                    <div>
+                                      <div style={{ fontWeight: 500, fontSize: 13 }}>{displayNazwa}</div>
+                                      {productName && (p.raw_name || p.rawName) && productName !== (p.raw_name || p.rawName) && (
+                                        <div style={{ fontSize: 10, color: 'var(--text-2)' }}>PDF: {p.raw_name || p.rawName}</div>
+                                      )}
+                                      {(p.indeks || p.sku) && (
+                                        <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-2)', marginTop: 1 }}>{p.indeks || p.sku}</div>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
                               </td>
                               <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{p.ilosc}</td>
-                              <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.towary?.jednostka || '—'}</td>
+                              <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
+                                {(p.towary?.nazwa?.length >= 2 ? p.towary?.jednostka : null) || '—'}
+                              </td>
                               <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{Number(p.cena_netto).toFixed(2)} zł</td>
                               <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.vat_procent ?? 23}%</td>
                               <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{(Number(p.ilosc) * Number(p.cena_netto)).toFixed(2)} zł</td>
