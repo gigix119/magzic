@@ -327,10 +327,6 @@ export default function Faktury() {
       return
     }
 
-    if (editPozForm.towar_id && editPozTarget.towary?.nazwa) {
-      rememberProductAlias(editPozTarget.towary.nazwa, editPozForm.towar_id)
-    }
-
     addToast('Pozycja zaktualizowana', 'success')
     setShowEditPozModal(false)
     setEditPozTarget(null)
@@ -354,6 +350,7 @@ export default function Faktury() {
       setEditPozNewTowarSaving(false)
       return
     }
+    rememberProductAlias(editPozNewTowarForm.nazwa, created.id)
     setTowary(prev => [...prev, created])
     setEditPozForm(f => ({ ...f, towar_id: created.id, is_service: false }))
     setEditPozShowCreate(false)

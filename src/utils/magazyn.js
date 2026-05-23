@@ -223,9 +223,12 @@ export async function zatwierdźFakturę(fakturaId) {
     return { success: false, error: 'Faktura już zatwierdzona' }
   }
 
-  // Tylko pozycje towarowe (mają towar_id i magazyn)
+  // Tylko pozycje towarowe (mają towar_id, magazyn, cenę > 0 i ilość > 0)
   const pozycjeTowary = pozycje.filter(p =>
-    p.towar_id && (p.magazyn_id || faktura.magazyn_id)
+    p.towar_id &&
+    (p.magazyn_id || faktura.magazyn_id) &&
+    Number(p.cena_netto) > 0 &&
+    Number(p.ilosc) > 0
   )
   const pozycjePoziome = pozycje.filter(p => !p.towar_id || (!p.magazyn_id && !faktura.magazyn_id))
 
