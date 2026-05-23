@@ -21,10 +21,10 @@ import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { rankProductCandidates } from '../utils/invoiceScoringEngine'
-import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft } from '../utils/invoicePositionValidator'
+import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
-  Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
+  Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp, AlertTriangle,
 } from 'lucide-react'
 
 const IS = (err) => ({
@@ -125,6 +125,17 @@ export default function Faktury() {
   const [showZatwierdzModal, setShowZatwierdzModal] = useState(false)
   const [zatwierdzFak, setZatwierdzFak] = useState(null)
   const [nDraftZeroPriceConfirmed, setNDraftZeroPriceConfirmed] = useState(false)
+
+  // ── Edit position modal (existing invoice) ────────────────────
+  const [showEditPozModal, setShowEditPozModal] = useState(false)
+  const [editPozTarget, setEditPozTarget] = useState(null)
+  const [editPozFak, setEditPozFak] = useState(null)
+  const [editPozForm, setEditPozForm] = useState({})
+  const [editPozSaving, setEditPozSaving] = useState(false)
+  const [editPozErrors, setEditPozErrors] = useState({})
+  const [editPozShowCreate, setEditPozShowCreate] = useState(false)
+  const [editPozNewTowarForm, setEditPozNewTowarForm] = useState({ nazwa: '', typ: '', jednostka: 'szt', kategoria_id: '' })
+  const [editPozNewTowarSaving, setEditPozNewTowarSaving] = useState(false)
 
   // ─────────────────────────────────────────────────────────────
 
@@ -264,6 +275,90 @@ export default function Faktury() {
     const { error } = await supabase.from('pozycje_faktury').delete().eq('id', poz.id)
     if (error) { console.error(error); addToast(error.message, 'error') }
     else { addToast('Pozycja usunięta', 'success'); fetchData() }
+  }
+
+  function getPosBadge(poz, fak) {
+    if (!poz.towar_id) return { label: 'Robocza', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
+    const status = recalculateInvoiceLineStatus(poz, { towary, fakturaDefaultMagazynId: fak?.magazyn_id || null })
+    if (status.inventoryImpactStatus === 'ready') return { label: 'Gotowa', bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' }
+    if (status.inventoryImpactStatus === 'blocked') return { label: 'Niekompletna', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
+    if (status.inventoryImpactStatus === 'none') return { label: 'Koszt', bg: '#f0f9ff', color: '#0369a1', border: '#bae6fd' }
+    return { label: 'Robocza', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
+  }
+
+  function openEditPoz(poz, fak) {
+    setEditPozTarget(poz)
+    setEditPozFak(fak)
+    setEditPozForm({
+      towar_id: poz.towar_id || '',
+      magazyn_id: poz.magazyn_id || fak.magazyn_id || '',
+      ilosc: poz.ilosc ?? '',
+      cena_netto: poz.cena_netto ?? '',
+      vat_procent: poz.vat_procent ?? 23,
+      is_service: !poz.towar_id && Number(poz.cena_netto) > 0,
+    })
+    setEditPozErrors({})
+    setEditPozShowCreate(false)
+    setEditPozNewTowarForm({ nazwa: poz.towary?.nazwa || '', typ: '', jednostka: 'szt', kategoria_id: '' })
+    setShowEditPozModal(true)
+  }
+
+  async function handleSaveEditPoz() {
+    const errors = {}
+    const isService = editPozForm.is_service || (!editPozForm.towar_id && Number(editPozForm.ilosc) > 0)
+    if (!isService && !editPozForm.towar_id) errors.towar_id = 'Wybierz towar lub oznacz jako usługę'
+    if (!editPozForm.ilosc || Number(editPozForm.ilosc) < 0.001) errors.ilosc = 'Ilość wymagana'
+    if (editPozForm.cena_netto === '' || editPozForm.cena_netto === null) errors.cena_netto = 'Cena wymagana'
+    setEditPozErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
+    setEditPozSaving(true)
+    const { error } = await supabase.from('pozycje_faktury').update({
+      towar_id: editPozForm.towar_id || null,
+      magazyn_id: editPozForm.magazyn_id || null,
+      ilosc: Number(editPozForm.ilosc),
+      cena_netto: Number(editPozForm.cena_netto),
+      vat_procent: Number(editPozForm.vat_procent) || 23,
+    }).eq('id', editPozTarget.id)
+
+    if (error) {
+      addToast(`Błąd zapisu: ${error.message}`, 'error')
+      setEditPozSaving(false)
+      return
+    }
+
+    if (editPozForm.towar_id && editPozTarget.towary?.nazwa) {
+      rememberProductAlias(editPozTarget.towary.nazwa, editPozForm.towar_id)
+    }
+
+    addToast('Pozycja zaktualizowana', 'success')
+    setShowEditPozModal(false)
+    setEditPozTarget(null)
+    setEditPozFak(null)
+    setEditPozSaving(false)
+    fetchData()
+  }
+
+  async function handleCreateTowarInEditModal() {
+    const { nazwa, typ, jednostka } = editPozNewTowarForm
+    if (!nazwa || nazwa.trim().length < 2) { addToast('Podaj nazwę towaru (min. 2 znaki)', 'error'); return }
+    setEditPozNewTowarSaving(true)
+    const { data: created, error } = await supabase.from('towary').insert([{
+      nazwa: nazwa.trim(),
+      typ: typ.trim() || nazwa.trim(),
+      jednostka: jednostka || 'szt',
+      aktywny: true,
+    }]).select('id, nazwa, typ, jednostka').single()
+    if (error) {
+      addToast(`Błąd tworzenia towaru: ${error.message}`, 'error')
+      setEditPozNewTowarSaving(false)
+      return
+    }
+    setTowary(prev => [...prev, created])
+    setEditPozForm(f => ({ ...f, towar_id: created.id, is_service: false }))
+    setEditPozShowCreate(false)
+    setEditPozNewTowarSaving(false)
+    addToast(`Towar "${created.nazwa}" utworzony i przypisany`, 'success')
   }
 
   function handleZatwierdz(fak) {
@@ -906,29 +1001,43 @@ export default function Faktury() {
                             <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena netto</th>
                             <th className="text-right px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>VAT%</th>
                             <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Suma netto</th>
+                            <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
                             <th className="px-3 py-2.5" />
                           </tr>
                         </thead>
                         <tbody>
-                          {poz.map(p => (
+                          {poz.map(p => {
+                            const badge = getPosBadge(p, fak)
+                            return (
                             <tr key={p.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                              <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{p.towary?.nazwa || '—'}</td>
+                              <td className="px-5 py-3" style={{ color: 'var(--text)' }}>
+                                {p.towary?.nazwa || <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>(brak towaru)</span>}
+                              </td>
                               <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{p.ilosc}</td>
                               <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.towary?.jednostka || '—'}</td>
                               <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{Number(p.cena_netto).toFixed(2)} zł</td>
                               <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.vat_procent ?? 23}%</td>
                               <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{(Number(p.ilosc) * Number(p.cena_netto)).toFixed(2)} zł</td>
+                              <td className="px-4 py-3 hidden sm:table-cell">
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
+                                  {badge.label}
+                                </span>
+                              </td>
                               <td className="px-3 py-3 text-right">
                                 {fak.status === 'robocza' && (
-                                  <button onClick={() => handleDeletePoz(p)} className="p-1 rounded" style={{ color: '#dc2626' }} title="Usuń pozycję"><Trash2 size={12} /></button>
+                                  <div className="flex gap-1 justify-end">
+                                    <button onClick={() => openEditPoz(p, fak)} className="p-1 rounded" style={{ color: 'var(--text-2)' }} title="Edytuj pozycję"><Pencil size={12} /></button>
+                                    <button onClick={() => handleDeletePoz(p)} className="p-1 rounded" style={{ color: '#dc2626' }} title="Usuń pozycję"><Trash2 size={12} /></button>
+                                  </div>
                                 )}
                               </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                         <tfoot>
                           <tr style={{ borderTop: '1px solid var(--border)' }}>
-                            <td colSpan={5} className="px-5 py-3 text-right text-sm font-medium" style={{ color: 'var(--text-2)' }}>Razem netto:</td>
+                            <td colSpan={6} className="px-5 py-3 text-right text-sm font-medium" style={{ color: 'var(--text-2)' }}>Razem netto:</td>
                             <td className="px-5 py-3 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{total.toFixed(2)} zł</td>
                             <td />
                           </tr>
@@ -1942,12 +2051,227 @@ export default function Faktury() {
       })()}
 
       {/* ════════════════════════════════════════════════════════════
+          EDIT POSITION MODAL
+          ════════════════════════════════════════════════════════════ */}
+      {showEditPozModal && editPozTarget && (() => {
+        const _t = towary.find(t => t.id === editPozForm.towar_id)
+        const _net = Number(editPozForm.ilosc || 0) * Number(editPozForm.cena_netto || 0)
+        const _vat = _net * Number(editPozForm.vat_procent || 0) / 100
+        const _brutto = _net + _vat
+        const lineStatus = recalculateInvoiceLineStatus(
+          { ...editPozTarget, towar_id: editPozForm.towar_id || null, magazyn_id: editPozForm.magazyn_id || null, cena_netto: editPozForm.cena_netto, ilosc: editPozForm.ilosc },
+          { towary, fakturaDefaultMagazynId: editPozFak?.magazyn_id || null }
+        )
+        return (
+          <Modal
+            title="Edytuj pozycję"
+            onClose={() => { setShowEditPozModal(false); setEditPozTarget(null); setEditPozFak(null) }}
+            maxWidth={520}
+          >
+            <div className="space-y-4">
+              {/* Status preview */}
+              {lineStatus.inventoryImpactStatus === 'ready' && (
+                <div className="rounded-lg px-3 py-2 flex items-center gap-2 text-xs" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' }}>
+                  <CheckCircle2 size={13} /> Pozycja gotowa do magazynu
+                </div>
+              )}
+              {lineStatus.inventoryImpactStatus === 'blocked' && lineStatus.errors.length > 0 && (
+                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e' }}>
+                  <div className="flex items-center gap-2 font-semibold mb-1"><AlertTriangle size={13} /> Niekompletna — brakuje:</div>
+                  {lineStatus.errors.map((e, i) => <div key={i}>· {e}</div>)}
+                </div>
+              )}
+              {lineStatus.inventoryImpactStatus === 'none' && (
+                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: '#f0f9ff', border: '1px solid #bae6fd', color: '#0369a1' }}>
+                  Pozycja bez wpływu na magazyn (usługa/koszt lub brak towaru)
+                </div>
+              )}
+
+              {/* Towar */}
+              <div>
+                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>
+                  Towar {!editPozForm.is_service && <span style={{ color: '#dc2626' }}>*</span>}
+                </label>
+                <select
+                  style={IS(editPozErrors.towar_id)}
+                  value={editPozForm.towar_id}
+                  onChange={e => {
+                    const t = towary.find(x => x.id === e.target.value)
+                    setEditPozForm(f => ({ ...f, towar_id: e.target.value, is_service: !e.target.value }))
+                    if (t) setEditPozNewTowarForm(v => ({ ...v, nazwa: t.nazwa }))
+                  }}
+                >
+                  <option value="">— brak towaru (usługa / koszt) —</option>
+                  {towary.map(t => <option key={t.id} value={t.id}>{t.nazwa} ({t.jednostka || 'szt'})</option>)}
+                </select>
+                {editPozErrors.towar_id && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{editPozErrors.towar_id}</p>}
+                {!editPozForm.towar_id && (
+                  <button
+                    type="button"
+                    onClick={() => setEditPozShowCreate(v => !v)}
+                    className="text-xs mt-1.5 underline"
+                    style={{ color: '#3b82f6' }}
+                  >
+                    {editPozShowCreate ? '▲ Ukryj formularz' : '+ Utwórz towar z tej pozycji'}
+                  </button>
+                )}
+              </div>
+
+              {/* Create towar inline */}
+              {editPozShowCreate && !editPozForm.towar_id && (
+                <div className="rounded-lg p-3 space-y-3" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Nowy towar</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs mb-1" style={{ color: 'var(--text-2)' }}>Nazwa *</label>
+                      <input
+                        style={IS()}
+                        value={editPozNewTowarForm.nazwa}
+                        onChange={e => setEditPozNewTowarForm(f => ({ ...f, nazwa: e.target.value }))}
+                        placeholder="Nazwa towaru"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs mb-1" style={{ color: 'var(--text-2)' }}>Typ / SKU</label>
+                      <input
+                        style={IS()}
+                        value={editPozNewTowarForm.typ}
+                        onChange={e => setEditPozNewTowarForm(f => ({ ...f, typ: e.target.value }))}
+                        placeholder="Typ (opcjonalnie)"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-2)' }}>Jednostka</label>
+                    <select style={IS()} value={editPozNewTowarForm.jednostka} onChange={e => setEditPozNewTowarForm(f => ({ ...f, jednostka: e.target.value }))}>
+                      <option value="szt">szt</option>
+                      <option value="kg">kg</option>
+                      <option value="l">l</option>
+                      <option value="m">m</option>
+                      <option value="m2">m²</option>
+                      <option value="opak">opak</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={editPozNewTowarSaving}
+                    onClick={handleCreateTowarInEditModal}
+                    className="w-full rounded-lg py-2 text-xs font-medium text-white"
+                    style={{ background: '#3b82f6', opacity: editPozNewTowarSaving ? 0.7 : 1 }}
+                  >
+                    {editPozNewTowarSaving ? 'Tworzenie...' : 'Utwórz i przypisz towar'}
+                  </button>
+                </div>
+              )}
+
+              {/* Qty, unit, VAT */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Ilość *</label>
+                  <input
+                    type="number" min="0.001" step="0.001"
+                    style={IS(editPozErrors.ilosc)}
+                    value={editPozForm.ilosc}
+                    onChange={e => setEditPozForm(f => ({ ...f, ilosc: e.target.value }))}
+                    placeholder="0"
+                  />
+                  {editPozErrors.ilosc && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{editPozErrors.ilosc}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Jednostka</label>
+                  <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)', color: _t ? 'var(--text)' : 'var(--muted)', minHeight: 37 }}>
+                    {_t?.jednostka || '—'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>VAT %</label>
+                  <select style={IS()} value={editPozForm.vat_procent} onChange={e => setEditPozForm(f => ({ ...f, vat_procent: e.target.value }))}>
+                    <option value={23}>23%</option>
+                    <option value={8}>8%</option>
+                    <option value={5}>5%</option>
+                    <option value={0}>0%</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Price */}
+              <div>
+                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Cena netto za jednostkę (zł) *</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  style={IS(editPozErrors.cena_netto)}
+                  value={editPozForm.cena_netto}
+                  onChange={e => setEditPozForm(f => ({ ...f, cena_netto: e.target.value }))}
+                  placeholder="0.00"
+                />
+                {editPozErrors.cena_netto && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{editPozErrors.cena_netto}</p>}
+              </div>
+
+              {/* Warehouse */}
+              <div>
+                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Magazyn docelowy</label>
+                <select
+                  style={IS()}
+                  value={editPozForm.magazyn_id}
+                  onChange={e => setEditPozForm(f => ({ ...f, magazyn_id: e.target.value }))}
+                >
+                  <option value="">— brak (usługa / koszt) —</option>
+                  {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
+                </select>
+              </div>
+
+              {/* Summary */}
+              {(Number(editPozForm.ilosc) > 0 || Number(editPozForm.cena_netto) > 0) && (
+                <div className="rounded-lg px-4 py-3 space-y-1" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
+                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
+                    <span>Suma netto</span>
+                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{_net.toFixed(2)} zł</span>
+                  </div>
+                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
+                    <span>VAT ({editPozForm.vat_procent}%)</span>
+                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{_vat.toFixed(2)} zł</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold" style={{ color: 'var(--text)', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
+                    <span>Suma brutto</span>
+                    <span style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{_brutto.toFixed(2)} zł</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditPozModal(false); setEditPozTarget(null); setEditPozFak(null) }}
+                  className="flex-1 rounded-lg py-2 text-sm font-medium"
+                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="button"
+                  disabled={editPozSaving}
+                  onClick={handleSaveEditPoz}
+                  className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                  style={{ background: '#3b82f6', opacity: editPozSaving ? 0.7 : 1 }}
+                >
+                  {editPozSaving ? 'Zapisywanie...' : 'Zapisz zmiany'}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
+
+      {/* ════════════════════════════════════════════════════════════
           ZATWIERDZENIE — MODAL POTWIERDZENIA
           ════════════════════════════════════════════════════════════ */}
       {showZatwierdzModal && zatwierdzFak && (() => {
         const poz = pozycje[zatwierdzFak.id] || []
-        const towarowe = poz.filter(p => p.towar_id)
+        const ctx = { towary, fakturaDefaultMagazynId: zatwierdzFak.magazyn_id || null }
+        const withTowar = poz.filter(p => p.towar_id)
         const bezTowaru = poz.filter(p => !p.towar_id)
+        const readyTowar = withTowar.filter(p => recalculateInvoiceLineStatus(p, ctx).inventoryImpactStatus === 'ready')
+        const blockedTowar = withTowar.filter(p => recalculateInvoiceLineStatus(p, ctx).inventoryImpactStatus === 'blocked')
         const mag = magazyny.find(m => m.id === zatwierdzFak.magazyn_id)
         return (
           <Modal
@@ -1957,15 +2281,15 @@ export default function Faktury() {
           >
             <div className="space-y-4">
               <p className="text-sm" style={{ color: 'var(--text-2)' }}>
-                Zatwierdzenie zaktualizuje stany magazynowe dla pozycji towarowych.
+                Zatwierdzenie zaktualizuje stany magazynowe dla pozycji towarowych z kompletymi danymi.
               </p>
 
-              {towarowe.length > 0 && (
+              {readyTowar.length > 0 && (
                 <div className="rounded-lg p-3 space-y-1.5" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                   <p className="text-xs font-semibold" style={{ color: '#166534' }}>
-                    ✅ Do przyjęcia na magazyn ({towarowe.length} poz.):
+                    ✅ Do przyjęcia na magazyn ({readyTowar.length} poz.):
                   </p>
-                  {towarowe.map(p => {
+                  {readyTowar.map(p => {
                     const m = magazyny.find(x => x.id === (p.magazyn_id || zatwierdzFak.magazyn_id))
                     return (
                       <div key={p.id} className="text-xs" style={{ color: '#166534' }}>
@@ -1976,10 +2300,26 @@ export default function Faktury() {
                 </div>
               )}
 
+              {blockedTowar.length > 0 && (
+                <div className="rounded-lg p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#92400e' }}>
+                    ⚠ {blockedTowar.length} poz. z towarem ale niekompletne — nie trafią do magazynu:
+                  </p>
+                  {blockedTowar.map(p => {
+                    const s = recalculateInvoiceLineStatus(p, ctx)
+                    return (
+                      <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
+                        · {p.towary?.nazwa || '—'} — {s.errors.join(', ')}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
               {bezTowaru.length > 0 && (
                 <div className="rounded-lg p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
                   <p className="text-xs font-semibold" style={{ color: '#92400e' }}>
-                    ⚠ {bezTowaru.length} poz. bez przypisanego towaru — nie trafią do magazynu
+                    ⚠ {bezTowaru.length} poz. robocze (bez towaru) — nie trafią do magazynu
                   </p>
                   {bezTowaru.map(p => (
                     <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
@@ -1989,10 +2329,10 @@ export default function Faktury() {
                 </div>
               )}
 
-              {towarowe.length === 0 && (
+              {readyTowar.length === 0 && (
                 <div className="rounded-lg p-3" style={{ background: '#fef2f2', border: '1px solid #fca5a5' }}>
                   <p className="text-xs" style={{ color: '#991b1b' }}>
-                    ❌ Brak pozycji towarowych — żadna pozycja nie trafi do magazynu. Faktura zostanie oznaczona jako zatwierdzona.
+                    ❌ Brak gotowych pozycji towarowych — żadna pozycja nie trafi do magazynu. Faktura zostanie oznaczona jako zatwierdzona.
                   </p>
                 </div>
               )}

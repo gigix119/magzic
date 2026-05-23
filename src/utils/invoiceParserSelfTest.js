@@ -27,6 +27,7 @@ import {
   validatePositionForInventoryImpact,
   preparePositionsForInvoiceDraft,
   preparePositionsForInventoryImpact,
+  recalculateInvoiceLineStatus,
 } from './invoicePositionValidator.js'
 import { mapActionablePositionToInvoiceLine } from './invoiceLineMapper.js'
 import {
@@ -758,6 +759,93 @@ export async function runInvoiceParserSelfTest() {
     lineService.shouldAffectInventory === false)
   check('mapper: service_item → name zachowane',
     lineService.name === 'Usługi telekomunikacyjne Play')
+
+  // ══════════════════════════════════════════════════════════════
+  // Tests 70-84 — recalculateInvoiceLineStatus (Task 5b)
+  // ══════════════════════════════════════════════════════════════
+
+  const rcTowary = [
+    { id: 'tid-pralka', nazwa: 'Pralka BOSCH WGG244ZEPL', typ: 'pralka', jednostka: 'szt' },
+    { id: 'tid-syfon', nazwa: 'Syfon kuchenny', typ: 'syfon', jednostka: 'szt' },
+  ]
+
+  // Test 70: no towarId → review_required, none
+  const rc70 = recalculateInvoiceLineStatus({ cena_netto: 2999, ilosc: 1, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 70: brak towaru → review_required', rc70.invoiceLineStatus === 'review_required')
+  check('recalc 70: brak towaru → inventoryImpactStatus none', rc70.inventoryImpactStatus === 'none')
+  check('recalc 70: brak towaru → shouldAffectInventory false', rc70.shouldAffectInventory === false)
+
+  // Test 71: service_item → accepted, none
+  const rc71 = recalculateInvoiceLineStatus({ itemType: 'service_item', cena_netto: 52.85, ilosc: 1 }, { towary: rcTowary })
+  check('recalc 71: service_item → accepted', rc71.invoiceLineStatus === 'accepted')
+  check('recalc 71: service_item → inventoryImpactStatus none', rc71.inventoryImpactStatus === 'none')
+
+  // Test 72: cost_item → accepted, none
+  const rc72 = recalculateInvoiceLineStatus({ itemType: 'cost_item', cena_netto: 100, ilosc: 2 }, { towary: rcTowary })
+  check('recalc 72: cost_item → accepted', rc72.invoiceLineStatus === 'accepted')
+  check('recalc 72: cost_item → inventoryImpactStatus none', rc72.inventoryImpactStatus === 'none')
+
+  // Test 73: shouldAffectInventory=false → accepted, none
+  const rc73 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', shouldAffectInventory: false, cena_netto: 2999, ilosc: 1, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 73: shouldAffectInventory=false → accepted', rc73.invoiceLineStatus === 'accepted')
+  check('recalc 73: shouldAffectInventory=false → inventoryImpactStatus none', rc73.inventoryImpactStatus === 'none')
+
+  // Test 74: has towarId + magazynId + price + qty → accepted, ready
+  const rc74 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', cena_netto: 2999, ilosc: 1, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 74: kompletna → accepted', rc74.invoiceLineStatus === 'accepted')
+  check('recalc 74: kompletna → inventoryImpactStatus ready', rc74.inventoryImpactStatus === 'ready')
+  check('recalc 74: kompletna → shouldAffectInventory true', rc74.shouldAffectInventory === true)
+  check('recalc 74: kompletna → brak błędów', rc74.errors.length === 0)
+
+  // Test 75: has towarId, price=0 → blocked
+  const rc75 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', cena_netto: 0, ilosc: 1, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 75: cena=0 → review_required', rc75.invoiceLineStatus === 'review_required')
+  check('recalc 75: cena=0 → inventoryImpactStatus blocked', rc75.inventoryImpactStatus === 'blocked')
+  check('recalc 75: cena=0 → błąd ceny', rc75.errors.some(e => e.includes('Cena')))
+
+  // Test 76: has towarId, no magazyn, no default → blocked
+  const rc76 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', cena_netto: 2999, ilosc: 1, magazyn_id: null }, { towary: rcTowary, fakturaDefaultMagazynId: null })
+  check('recalc 76: brak magazynu → blocked', rc76.inventoryImpactStatus === 'blocked')
+  check('recalc 76: brak magazynu → błąd', rc76.errors.some(e => e.includes('magazyn')))
+
+  // Test 77: has towarId, no magazyn on line but fakturaDefault provided → ready
+  const rc77 = recalculateInvoiceLineStatus({ towar_id: 'tid-syfon', cena_netto: 19.99, ilosc: 1, magazyn_id: null }, { towary: rcTowary, fakturaDefaultMagazynId: 'mag-1' })
+  check('recalc 77: fakturaDefaultMagazynId ratuje → ready', rc77.inventoryImpactStatus === 'ready')
+  check('recalc 77: fakturaDefaultMagazynId ratuje → accepted', rc77.invoiceLineStatus === 'accepted')
+
+  // Test 78: has towarId not in towary list → blocked
+  const rc78 = recalculateInvoiceLineStatus({ towar_id: 'tid-nieistniejacy', cena_netto: 100, ilosc: 1, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 78: towar nie w bazie → blocked', rc78.inventoryImpactStatus === 'blocked')
+  check('recalc 78: towar nie w bazie → błąd', rc78.errors.some(e => e.includes('nie istnieje')))
+
+  // Test 79: qty=0 → blocked
+  const rc79 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', cena_netto: 2999, ilosc: 0, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 79: ilosc=0 → blocked', rc79.inventoryImpactStatus === 'blocked')
+  check('recalc 79: ilosc=0 → błąd ilości', rc79.errors.some(e => e.includes('Ilość')))
+
+  // Test 80: _towarId alias recognized (from matchedProductId)
+  const rc80 = recalculateInvoiceLineStatus({ matchedProductId: 'tid-syfon', cena_netto: 19.99, ilosc: 2, magazyn_id: 'mag-1' }, { towary: rcTowary })
+  check('recalc 80: matchedProductId → ready', rc80.inventoryImpactStatus === 'ready')
+
+  // Test 81: PRALKA scenario — draft (no towarId) → review_required with warning
+  const rc81 = recalculateInvoiceLineStatus({ cena_netto: 2999, ilosc: 1 }, { towary: rcTowary })
+  check('recalc 81: PRALKA brak towaru → warnings niepusty', rc81.warnings.length > 0)
+  check('recalc 81: PRALKA brak towaru → errors pusty', rc81.errors.length === 0)
+
+  // Test 82: multiple errors — price=0 AND no magazyn
+  const rc82 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', cena_netto: 0, ilosc: 0, magazyn_id: null }, { towary: rcTowary, fakturaDefaultMagazynId: null })
+  check('recalc 82: wiele błędów → blocked', rc82.inventoryImpactStatus === 'blocked')
+  check('recalc 82: wiele błędów → ≥3 errors', rc82.errors.length >= 3)
+
+  // Test 83: shouldAffectInventory=false overrides everything even with towarId
+  const rc83 = recalculateInvoiceLineStatus({ towar_id: 'tid-pralka', cena_netto: 0, ilosc: 0, magazyn_id: null, shouldAffectInventory: false }, { towary: rcTowary })
+  check('recalc 83: shouldAffectInventory=false ignoruje cenę/qty → accepted', rc83.invoiceLineStatus === 'accepted')
+  check('recalc 83: shouldAffectInventory=false → inventoryImpactStatus none', rc83.inventoryImpactStatus === 'none')
+
+  // Test 84: empty context → graceful (no crash), no towarId → review_required
+  const rc84 = recalculateInvoiceLineStatus({ cena_netto: 99, ilosc: 1, magazyn_id: 'mag-x' })
+  check('recalc 84: puste context → review_required (brak towaru)', rc84.invoiceLineStatus === 'review_required')
+  check('recalc 84: puste context → inventoryImpactStatus none', rc84.inventoryImpactStatus === 'none')
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length

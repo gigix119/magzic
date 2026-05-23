@@ -240,6 +240,53 @@ export function preparePositionsForInvoiceDraft(positions) {
 }
 
 /**
+ * Recalculates the display/inventory status of a single saved invoice line (DB row).
+ * Derives status from existing DB fields — no front-end-only flags needed.
+ *
+ * @param {object} line - pozycje_faktury row (may include joined towary/magazyny)
+ * @param {object} [context]
+ * @param {object[]} [context.towary] - full towary list for validation
+ * @param {string|null} [context.fakturaDefaultMagazynId] - faktura.magazyn_id fallback
+ * @returns {{ invoiceLineStatus: string, inventoryImpactStatus: string, shouldAffectInventory: boolean, errors: string[], warnings: string[] }}
+ */
+export function recalculateInvoiceLineStatus(line, context = {}) {
+  const { towary = [], fakturaDefaultMagazynId = null } = context
+  const price = Number(line.cena_netto ?? line.unitPriceNet ?? 0)
+  const qty = Number(line.ilosc ?? line.quantity ?? 0)
+  const towarId = line.towar_id || line._towarId || line.matchedProductId || null
+  const magazynId = line.magazyn_id || fakturaDefaultMagazynId || null
+  const isService = line.itemType === 'service_item' || line.itemType === 'cost_item' || line.shouldAffectInventory === false
+
+  if (isService) {
+    return { invoiceLineStatus: 'accepted', inventoryImpactStatus: 'none', shouldAffectInventory: false, errors: [], warnings: [] }
+  }
+
+  if (!towarId) {
+    return {
+      invoiceLineStatus: 'review_required',
+      inventoryImpactStatus: 'none',
+      shouldAffectInventory: false,
+      errors: [],
+      warnings: ['Brak przypisanego towaru — pozycja robocza, nie wpłynie na magazyn'],
+    }
+  }
+
+  const errors = []
+  if (price <= 0) errors.push('Cena netto = 0')
+  if (qty <= 0) errors.push('Ilość = 0')
+  if (!magazynId) errors.push('Brak magazynu docelowego')
+  const product = towary.find(t => t.id === towarId)
+  if (!product) errors.push('Towar nie istnieje w bazie')
+  else if (!product.nazwa || product.nazwa.length < 2) errors.push('Towar ma zbyt krótką nazwę')
+
+  if (errors.length > 0) {
+    return { invoiceLineStatus: 'review_required', inventoryImpactStatus: 'blocked', shouldAffectInventory: true, errors, warnings: [] }
+  }
+
+  return { invoiceLineStatus: 'accepted', inventoryImpactStatus: 'ready', shouldAffectInventory: true, errors: [], warnings: [] }
+}
+
+/**
  * Filters positions that are ready for inventory impact (stock movement).
  * @returns {{ readyForStock: object[], blocked: Array<{position: object, errors: string[]}>, warnings: string[] }}
  */
