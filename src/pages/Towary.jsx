@@ -19,7 +19,7 @@ const IS = (err) => ({
   padding: '8px 12px', fontSize: 14, width: '100%', outline: 'none',
 })
 
-const empty = { nazwa: '', typ: '', jednostka: '', kategoria_id: '', stan_minimalny: '', aktywny: true, cena_domyslna: '', poczatkowy_stan: '', poczatkowy_magazyn: '' }
+const empty = { nazwa: '', typ: '', jednostka: '', kategoria_id: '', stan_minimalny: '', aktywny: true, cena_domyslna: '', poczatkowy_stan: '', poczatkowy_magazyn: '', sku: '' }
 
 const RUCH_LABELS = { purchase: 'Zakup', issue: 'Wydanie', transfer: 'Transfer', correction_plus: 'Korekta +', correction_minus: 'Korekta −' }
 const RUCH_COLORS = { purchase: '#16a34a', issue: '#dc2626', transfer: '#3b82f6', correction_plus: '#16a34a', correction_minus: '#f59e0b' }
@@ -166,6 +166,7 @@ export default function Towary() {
       nazwa: item.nazwa || '', typ: item.typ || '', jednostka: item.jednostka || '',
       kategoria_id: item.kategoria_id || '', stan_minimalny: item.stan_minimalny ?? '',
       aktywny: item.aktywny, cena_domyslna: '', poczatkowy_stan: '', poczatkowy_magazyn: '',
+      sku: item.sku || '',
     })
     setErrors({}); setShowModal(true)
   }
@@ -189,6 +190,7 @@ export default function Towary() {
       kategoria_id: form.kategoria_id || null,
       stan_minimalny: form.stan_minimalny !== '' ? Number(form.stan_minimalny) : null,
       aktywny: form.aktywny,
+      sku: form.sku.trim() || null,
     }
 
     let error, newId
@@ -353,7 +355,12 @@ export default function Towary() {
                           {isExpanded
                             ? <ChevronUp size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />
                             : <ChevronDown size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
-                          <span className="font-medium" style={{ color: item.archived_at ? 'var(--muted)' : 'var(--text)' }}>{item.nazwa}</span>
+                          <div>
+                            <span className="font-medium" style={{ color: item.archived_at ? 'var(--muted)' : 'var(--text)' }}>{item.nazwa}</span>
+                            {item.sku && (
+                              <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'DM Mono, monospace', marginTop: 1 }}>{item.sku}</div>
+                            )}
+                          </div>
                           {item.archived_at && (
                             <span style={{ fontSize: 10, padding: '1px 6px', background: '#f1f5f9', color: '#64748b', borderRadius: 4 }}>
                               Zarchiwizowany
@@ -725,6 +732,11 @@ export default function Towary() {
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Jednostka</label>
                 <input style={IS()} value={form.jednostka} onChange={e => setForm(f => ({ ...f, jednostka: e.target.value }))} placeholder="np. litr, szt" />
               </div>
+            </div>
+            <div>
+              <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>SKU / Kod produktu</label>
+              <input style={IS()} value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} placeholder="np. BOX-1234, EAN-5901234567890" />
+              <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Opcjonalnie — używany do automatycznego dopasowania pozycji z faktury</p>
             </div>
             <div className="grid grid-cols-2 gap-3 modal-2col">
               <div>

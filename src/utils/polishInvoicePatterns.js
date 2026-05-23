@@ -129,3 +129,20 @@ export function extractWithPatterns(text) {
 
   return result
 }
+
+export function normalizeVatRate(input) {
+  if (input === null || input === undefined || input === '') return null
+  const s = String(input).trim()
+
+  // "zw" / "zwolnione" / "np" (nie podlega)
+  if (/^(zw|zwoln|np)/i.test(s)) return 0
+
+  // Extract leading number: "23%", "23 %", "23", "8%"
+  const numMatch = s.match(/^(\d+)/)
+  if (numMatch) {
+    const num = parseInt(numMatch[1], 10)
+    if ([0, 5, 8, 23].includes(num)) return num
+  }
+
+  return null
+}

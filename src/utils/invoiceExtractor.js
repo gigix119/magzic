@@ -3,7 +3,7 @@ import { normalizePolishNumber, extractWithPatterns } from './polishInvoicePatte
 import { detectInvoiceStructure } from './invoiceStructureDetector.js'
 import { findTableCandidates, chooseBestTableCandidate } from './invoiceTableDetector.js'
 import { parseInvoiceLineData } from './invoiceLineParser.js'
-import { getTemplateForSupplier, saveTemplateFromExtraction } from './invoiceSupplierTemplates.js'
+import { getTemplateForSupplier, saveTemplateFromExtraction, findSupplierTemplate, applyItemRulesFromTemplate } from './invoiceSupplierTemplates.js'
 import { validateInvoiceExtraction, calculateConfidence } from './invoiceValidation.js'
 import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
@@ -156,16 +156,38 @@ export async function extractFromFile(file) {
     result.fields.suma_netto = patterns.sumaNetto || null
     result.fields.suma_brutto = patterns.sumaBrutto || null
 
-    // 4. Check supplier template for known column map
+    // 4. Check supplier template (built-in catalog + localStorage learning)
     let supplierColumnMap = null
+    let activeSupplierMatch = { template: null, matchedBy: null, confidence: 0 }
     try {
-      const template = getTemplateForSupplier(
+      // Built-in catalog first
+      const catalogMatch = findSupplierTemplate(
+        result.fields.kontrahent_nip,
+        result.fields.kontrahent_nazwa,
+        layout.fullText
+      )
+      if (catalogMatch.template) {
+        activeSupplierMatch = catalogMatch
+        result.documentType = catalogMatch.template.documentType
+        result.supplierTemplate = {
+          name: catalogMatch.template.name,
+          matchedBy: catalogMatch.matchedBy,
+          confidence: catalogMatch.confidence,
+        }
+        if (import.meta.env.DEV) {
+          console.log('[invoiceExtractor] Wykryto dostawcę:', catalogMatch.template.name,
+            '(match:', catalogMatch.matchedBy, ', confidence:', catalogMatch.confidence, ')')
+        }
+      }
+
+      // localStorage learning template (column map override)
+      const learnedTemplate = getTemplateForSupplier(
         result.fields.kontrahent_nip,
         result.fields.kontrahent_nazwa
       )
-      if (template?.columnMap && Object.keys(template.columnMap).length > 0) {
-        supplierColumnMap = template.columnMap
-        result.debug.usedTemplate = template.supplierNip || template.supplierName
+      if (learnedTemplate?.columnMap && Object.keys(learnedTemplate.columnMap).length > 0) {
+        supplierColumnMap = learnedTemplate.columnMap
+        result.debug.usedTemplate = learnedTemplate.supplierNip || learnedTemplate.supplierName
       }
     } catch (e) {
       result.debug.templateError = String(e)
@@ -221,15 +243,20 @@ export async function extractFromFile(file) {
       result.documentType = 'unknown'
     }
 
-    // 9. Filter forbidden lines and classify each item
+    // 9. Filter forbidden lines, classify each item, apply supplier template rules
     const filteredPozycje = []
-    for (const poz of pozycje) {
+    for (let poz of pozycje) {
       const ctx = { hasPrice: poz.cenaNetto > 0, hasUnit: !!(poz.jednostka) }
       if (isForbiddenAsInvoiceItem(poz.rawName || '', ctx)) continue
 
       const { itemType, shouldAffectInventory } = classifyItem(poz, result.documentType)
       poz.itemType = itemType
       poz.shouldAffectInventory = shouldAffectInventory
+
+      // Apply built-in supplier template item rules (overrides classifyItem for known prefixes)
+      if (activeSupplierMatch.template) {
+        poz = applyItemRulesFromTemplate(poz, activeSupplierMatch.template)
+      }
 
       if (itemType === 'service_item') {
         if (!poz.jednostka || poz.jednostka === 'szt') { poz.jednostka = 'usł.'; poz.unit = 'usł.' }
@@ -249,6 +276,9 @@ export async function extractFromFile(file) {
     if (result.fields.data_zakupu) conf += 25
     if (result.fields.kontrahent_nip) conf += 20
     if (pozycje.length > 0) conf += 30
+    // Bonus za trafiony template (pewność identyfikacji dostawcy)
+    if (activeSupplierMatch.confidence >= 100) conf += 5
+    else if (activeSupplierMatch.confidence >= 75) conf += 3
     result.confidence = Math.min(conf, 95)
     result.source = 'pdf_text'
 

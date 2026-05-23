@@ -27,6 +27,8 @@ export function calculateInvoiceQualityMetrics(result) {
     mathValid: result.validation?.errors?.length === 0,
     totalsValid: !result.validation?.warnings?.some(w => w.includes('Suma')),
     usedAi: result.source === 'ai' || result.source?.includes('ai'),
+    supplierTemplate: result.supplierTemplate || null,
+    hasSupplierTemplate: !!result.supplierTemplate,
     createdAt: new Date().toISOString(),
   }
 }

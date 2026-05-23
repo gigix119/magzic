@@ -966,6 +966,13 @@ export default function Faktury() {
                       ❌ {qualityMetrics.errorsCount} błędów — wymagane ręczne uzupełnienie
                     </div>
                   )}
+                  {qualityMetrics.supplierTemplate && (
+                    <div style={{ marginTop: 8, padding: '6px 10px', background: '#f0fdf4', borderRadius: 4, color: '#166534', fontSize: 11 }}>
+                      Wykryto dostawcę: <strong>{qualityMetrics.supplierTemplate.name}</strong>
+                      {' '}(match: {qualityMetrics.supplierTemplate.matchedBy})
+                      — zastosowano reguły specyficzne dla tego dostawcy
+                    </div>
+                  )}
                   <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
                     System przygotował propozycję. Sprawdź dane przed zatwierdzeniem.
                   </div>

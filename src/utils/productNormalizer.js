@@ -4,6 +4,12 @@ function normDiacritics(text) {
     .replace(/[ąćęłńóśźż]/g, c => ({ ą:'a',ć:'c',ę:'e',ł:'l',ń:'n',ó:'o',ś:'s',ź:'z',ż:'z' })[c] || c)
 }
 
+const POLISH_STOPWORDS = new Set([
+  'do', 'dla', 'na', 'w', 'z', 'i', 'oraz', 'lub',
+  'szt', 'sztuk', 'sztuka', 'kg', 'g', 'ml', 'l',
+  'mm', 'cm', 'm', 'cal', 'cali',
+])
+
 const TECH_PARAM_PATTERNS = [
   /\b(\d+(?:[.,]\d+)?)\s*w\b/i,
   /\b(\d+(?:[.,]\d+)?)\s*ml\b/i,
@@ -28,10 +34,16 @@ function extractTechParams(name) {
 }
 
 export function normalizeProductName(name) {
-  return normDiacritics(name)
-    .replace(/[.,;:!?]/g, '')
+  if (!name) return ''
+  const normalized = normDiacritics(name)
+    .replace(/[.,;:!?()\[\]{}"']/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+  const words = normalized.split(' ').filter(w =>
+    w.length > 1 && !POLISH_STOPWORDS.has(w.toLowerCase())
+  )
+  return words.join(' ').trim()
 }
 
 export function similarityScore(a, b) {
@@ -64,6 +76,15 @@ export function advancedSimilarity(rawName, product, aliasLookup = null) {
     }
   }
 
+  // SKU exact match (highest priority after alias)
+  if (product.sku) {
+    const rawUpper = rawName.toUpperCase()
+    const skuUpper = product.sku.toUpperCase().trim()
+    if (rawUpper === skuUpper || rawUpper.includes(skuUpper)) {
+      return { score: 1.0, confidenceLabel: 'strong', reasons: ['sku match'], warnings: [] }
+    }
+  }
+
   const na = normalizeProductName(rawName)
   const nb = normalizeProductName(product.nazwa || '')
   const nt = normalizeProductName(product.typ || '')
@@ -83,6 +104,11 @@ export function advancedSimilarity(rawName, product, aliasLookup = null) {
     const intersection = [...tokensA].filter(t => tokensB.has(t))
     const union = new Set([...tokensA, ...tokensB])
     baseScore = union.size > 0 ? intersection.length / union.size : 0
+
+    // Bonus za długie wspólne słowa (np. model produktu)
+    const longCommon = intersection.filter(w => w.length > 5).length
+    baseScore = Math.min(0.95, baseScore + Math.min(0.15, longCommon * 0.05))
+
     if (baseScore > 0) reasons.push(`token ${Math.round(baseScore * 100)}%`)
 
     if (nt) {
@@ -132,4 +158,54 @@ export function findBestMatch(name, products, threshold = 0.5) {
   }
 
   return best
+}
+
+// SKU-first matching — call from extractor per pozycja
+export async function matchProductBySkuFirst(item, supabase) {
+  // 1. Exact SKU match
+  const sku = (item.indeks || item.sku || '').trim()
+  if (sku) {
+    const { data } = await supabase
+      .from('towary')
+      .select('id, nazwa, sku, jednostka')
+      .or(`sku.eq.${sku},sku.eq.${sku.toUpperCase()},sku.eq.${sku.toLowerCase()}`)
+      .limit(1)
+
+    if (data?.[0]) {
+      return {
+        towarId: data[0].id,
+        towarNazwa: data[0].nazwa,
+        matchScore: 1.0,
+        matchedBy: 'sku_exact',
+      }
+    }
+  }
+
+  // 2. Learned alias match (localStorage)
+  const rawName = item.rawName || item.nazwa || ''
+  if (rawName) {
+    try {
+      const aliases = JSON.parse(localStorage.getItem('magzic_product_aliases') || '{}')
+      const entry = aliases[rawName.toLowerCase().trim()]
+      const aliasId = entry?.productId || entry
+      if (aliasId) {
+        const { data } = await supabase
+          .from('towary')
+          .select('id, nazwa, jednostka')
+          .eq('id', aliasId)
+          .maybeSingle()
+
+        if (data) {
+          return {
+            towarId: data.id,
+            towarNazwa: data.nazwa,
+            matchScore: 0.95,
+            matchedBy: 'learned_alias',
+          }
+        }
+      }
+    } catch { /* localStorage not available */ }
+  }
+
+  return { towarId: null, matchScore: 0, matchedBy: null }
 }

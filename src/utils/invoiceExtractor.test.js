@@ -1,12 +1,14 @@
 // Unit tests — run in browser console: import('/src/utils/invoiceExtractor.test.js')
 // or: node --input-type=module < src/utils/invoiceExtractor.test.js (requires Node ESM support)
 
-import { normalizePolishNumber, normalizeDate, extractWithPatterns } from './polishInvoicePatterns.js'
+import { normalizePolishNumber, normalizeDate, extractWithPatterns, normalizeVatRate } from './polishInvoicePatterns.js'
 import { parseInvoiceItems } from './invoiceExtractor.js'
 import { detectColumnMap } from './invoiceLineParser.js'
 import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 import { calculateConfidence } from './invoiceValidation.js'
+import { findSupplierTemplate, applyItemRulesFromTemplate } from './invoiceSupplierTemplates.js'
+import { advancedSimilarity } from './productNormalizer.js'
 import {
   sanitizeAiInvoiceResult, validateAiInvoiceSchema,
   capConfidenceIfNeeded, guardAgainstServiceToInventoryMatch,
@@ -396,6 +398,103 @@ assert(getInvoiceTrainingExamples().length > 0, 'Learning: po imporcie training 
 // E9: import z nieprawidłowym JSON → nie crashuje
 const badImport = importInvoiceLearningData('nie-to-json!!!{')
 assert(badImport.success === false, 'Learning: import złego JSON zwraca success=false')
+
+// ═══════════════════════════════════════════════════════════════
+// F. Supplier templates + normalizeVatRate + advancedSimilarity
+// ═══════════════════════════════════════════════════════════════
+
+// F1: findSupplierTemplate — NIP lookups
+const euronetMatch = findSupplierTemplate('5270005984', null, null)
+assert(euronetMatch.template !== null, 'F1a: NIP 5270005984 → EURO-NET znaleziony')
+assert(euronetMatch.template?.name?.includes('EURO-NET'), 'F1b: NIP 5270005984 → name zawiera EURO-NET')
+assert(euronetMatch.matchedBy === 'nip', 'F1c: matchedBy === nip')
+assert(euronetMatch.confidence === 100, 'F1d: confidence NIP = 100')
+
+const p4Match = findSupplierTemplate('9512074656', null, null)
+assert(p4Match.template?.documentType === 'telecom_invoice', 'F2: NIP 9512074656 → telecom_invoice')
+
+const castoMatch = findSupplierTemplate('5260208211', null, null)
+assert(castoMatch.template?.documentType === 'inventory_purchase_invoice', 'F3: NIP 5260208211 Castorama → inventory_purchase_invoice')
+
+const tauronMatch = findSupplierTemplate('6762460451', null, null)
+assert(tauronMatch.template?.documentType === 'utility_invoice', 'F4: NIP 6762460451 Tauron → utility_invoice')
+
+const unknownMatch = findSupplierTemplate('9999999999', null, null)
+assert(unknownMatch.template === null, 'F5: nieznany NIP → template null')
+assert(unknownMatch.confidence === 0, 'F5b: nieznany NIP → confidence 0')
+
+// F6: findSupplierTemplate — name alias lookup
+const playByName = findSupplierTemplate(null, 'Play sp. z o.o.', null)
+assert(playByName.template?.documentType === 'telecom_invoice', 'F6: alias "Play" → telecom_invoice')
+assert(playByName.matchedBy === 'name', 'F6b: matchedBy === name')
+assert(playByName.confidence === 85, 'F6c: confidence name = 85')
+
+// F7: findSupplierTemplate — text pattern lookup
+const euronetByPattern = findSupplierTemplate(null, null, 'FAKTURA VAT\nEURO-NET sp. z o.o.\nul. Szyszkowa 20')
+assert(euronetByPattern.template !== null, 'F7: EURO-NET wykryty po wzorcu w tekście')
+assert(euronetByPattern.matchedBy === 'pattern', 'F7b: matchedBy === pattern')
+assert(euronetByPattern.confidence === 75, 'F7c: confidence pattern = 75')
+
+// F8: applyItemRulesFromTemplate — EURO-NET service prefix
+const euronetTemplate = findSupplierTemplate('5270005984', null, null).template
+const puspakItem = { rawName: 'Wniesienie i montaż', indeks: 'PUSPAK7', cenaNetto: 49 }
+const puspakResult = applyItemRulesFromTemplate(puspakItem, euronetTemplate)
+assert(puspakResult.itemType === 'service_item', 'F8a: PUSPAK7 prefix → service_item')
+assert(puspakResult.shouldAffectInventory === false, 'F8b: PUSPAK7 → nie wpływa na magazyn')
+assert(puspakResult.classifiedBy === 'template_index_prefix', 'F8c: classifiedBy = template_index_prefix')
+
+const ptransItem = { rawName: 'Transport', indeks: 'PTRANS01', cenaNetto: 30 }
+const ptransResult = applyItemRulesFromTemplate(ptransItem, euronetTemplate)
+assert(ptransResult.itemType === 'service_item', 'F9: PTRANS01 prefix → service_item')
+
+// F10: applyItemRulesFromTemplate — regular product stays unchanged
+const pralkaItem = { rawName: 'Pralka Bosch WAN28281', indeks: 'BOS-WAN', cenaNetto: 1299 }
+const pralkaResult = applyItemRulesFromTemplate(pralkaItem, euronetTemplate)
+assert(pralkaResult.itemType === undefined, 'F10a: produkt bez prefiksu serwisowego nie dostaje itemType')
+assert(pralkaResult.templateApplied?.includes('EURO-NET'), 'F10b: templateApplied ustawione')
+
+// F11: applyItemRulesFromTemplate — keyword match
+const transportItem = { rawName: 'Opłata za transport i wniesienie', indeks: '', cenaNetto: 29 }
+const transportResult = applyItemRulesFromTemplate(transportItem, euronetTemplate)
+assert(transportResult.itemType === 'service_item', 'F11a: słowo kluczowe "transport" → service_item')
+assert(transportResult.classifiedBy === 'template_keyword', 'F11b: classifiedBy = template_keyword')
+
+// F12: applyItemRulesFromTemplate — null template → passthrough
+const unchanged = applyItemRulesFromTemplate({ rawName: 'Test', cenaNetto: 10 }, null)
+assert(unchanged.rawName === 'Test', 'F12: null template → item nie zmieniony')
+
+// F13–F22: normalizeVatRate
+assert(normalizeVatRate('23%') === 23,        'F13: normalizeVatRate("23%") === 23')
+assert(normalizeVatRate('23 %') === 23,       'F14: normalizeVatRate("23 %") === 23')
+assert(normalizeVatRate('8') === 8,           'F15: normalizeVatRate("8") === 8')
+assert(normalizeVatRate('5%') === 5,          'F16: normalizeVatRate("5%") === 5')
+assert(normalizeVatRate('0') === 0,           'F17: normalizeVatRate("0") === 0')
+assert(normalizeVatRate('zw') === 0,          'F18: normalizeVatRate("zw") === 0')
+assert(normalizeVatRate('zwolnione') === 0,   'F19: normalizeVatRate("zwolnione") === 0')
+assert(normalizeVatRate('np') === 0,          'F20: normalizeVatRate("np") === 0')
+assert(normalizeVatRate('') === null,         'F21: normalizeVatRate("") === null')
+assert(normalizeVatRate('99') === null,       'F22: normalizeVatRate("99") → null (nieznana stawka)')
+
+// F23–F27: isForbiddenAsInvoiceItem — nowe przypadki
+assert(isForbiddenAsInvoiceItem('Termin zapłaty: 14 dni'),          'F23: Termin zapłaty → forbidden')
+assert(isForbiddenAsInvoiceItem('IBAN PL 12 3456 7890 1234 5678'),  'F24: IBAN → forbidden')
+assert(isForbiddenAsInvoiceItem('Strona 1 z 3'),                    'F25: Strona 1 z 3 → forbidden')
+assert(isForbiddenAsInvoiceItem('VAT 23%'),                         'F26: VAT 23% → forbidden')
+assert(!isForbiddenAsInvoiceItem('Farba lateksowa biała 10L', { hasPrice: true }), 'F27: farba → allowed')
+
+// F28–F32: advancedSimilarity
+const exact = advancedSimilarity('Farba lateksowa biała 10L', { nazwa: 'Farba lateksowa biała 10L' })
+assert(exact.score === 1.0, 'F28: identyczne nazwy → score 1.0')
+
+const similar = advancedSimilarity('Kabel HDMI złocony 2m', { nazwa: 'Kabel HDMI 2.0 złocony 2m' })
+assert(similar.score >= 0.5, `F29: podobne nazwy → score >= 0.5 (got ${similar.score})`)
+
+const skuExact = advancedSimilarity('BOX-1234', { nazwa: 'Wiertarka udarowa', sku: 'BOX-1234' })
+assert(skuExact.score === 1.0, 'F30: SKU match → score 1.0')
+assert(skuExact.confidenceLabel === 'strong', 'F31: SKU match → confidenceLabel strong')
+
+const unrelated = advancedSimilarity('Wkręt do drewna 4x40mm', { nazwa: 'Żarówka LED E27 9W' })
+assert(unrelated.score < 0.5, `F32: niezwiązane produkty → score < 0.5 (got ${unrelated.score})`)
 
 console.log('All tests complete.')
 

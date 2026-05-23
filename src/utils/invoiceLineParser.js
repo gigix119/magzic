@@ -1,4 +1,4 @@
-import { normalizePolishNumber } from './polishInvoicePatterns.js'
+import { normalizePolishNumber, normalizeVatRate } from './polishInvoicePatterns.js'
 
 const UNIT_PATTERN = /^(szt\.?|opak\.?|rolka|rolki|rolek|para|pary|par|kpl\.?|litr|litry|l|kg|gram|g|ml|mb|m2|m²|godz\.?|h|op\.?|karton|kartony|puszka|puszki)$/i
 
@@ -10,6 +10,7 @@ export function isUnit(str) {
 export function detectColumnMap(headerItems) {
   const COLUMN_KEYWORDS = {
     lp:            ['lp', 'l.p.', 'lp.', 'poz', 'poz.', 'no', 'nr'],
+    indeks:        ['indeks', 'index', 'sku', 'kod produktu', 'kod towaru', 'kod', 'symbol', 'nr kat', 'nr katalogowy', 'ean'],
     nazwa:         ['nazwa', 'towary', 'towar', 'produkt', 'produkty', 'opis', 'usługa', 'usługi', 'artykuł', 'asortyment'],
     ilosc:         ['ilość', 'ilosc', 'il.', 'il', 'qty', 'liczba', 'zamówiona'],
     jednostka:     ['jm', 'j.m.', 'jm.', 'jednostka', 'j.', 'jedn.'],
@@ -80,16 +81,20 @@ export function parseInvoiceLineData(items, colMap) {
     ? normalizePolishNumber(wartoscNettoRaw)
     : (isNaN(ilosc) ? 0 : ilosc) * (isNaN(cenaNetto) ? 0 : cenaNetto)
 
-  const vatRaw = (assigned.vat || '23').replace('%', '').trim()
-  const vat = parseInt(vatRaw) || 23
+  const vatRaw = (assigned.vat || '').replace('%', '').trim()
+  const vat = normalizeVatRate(vatRaw) ?? 23
 
   const safeIlosc = isNaN(ilosc) ? 1 : ilosc
   const safeCena = isNaN(cenaNetto) ? 0 : cenaNetto
 
   if (safeCena <= 0 && isNaN(normalizePolishNumber(assigned.wartoscNetto))) return null
 
+  const indeks = (assigned.indeks || '').trim() || null
+
   return {
     lp: parseInt(assigned.lp) || null,
+    indeks,
+    sku: indeks,
     nazwa,
     ilosc: safeIlosc,
     jednostka: jednostka || 'szt',
