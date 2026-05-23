@@ -600,7 +600,7 @@ export async function runInvoiceParserSelfTest() {
     skipped: false,
   }
   check('ksef pipeline: KSeF item without price → needs_price',
-    getAssignmentStatus(ksefItemNoCena, fakeTowarList) === 'needs_product')
+    getAssignmentStatus(ksefItemNoCena, fakeTowarList) === 'needs_price')
 
   // Test 49: KSeF item with recovered price → still needs review (matchScore = 0)
   const ksefItemWithPrice = {
