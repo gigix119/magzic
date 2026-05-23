@@ -56,7 +56,17 @@ export function normalizeDate(dateStr) {
   return null
 }
 
+// KSeF structured invoice identifier: NIP-YYYYMMDD-HEXCODE-CHECKSUM (never a human invoice number)
+export const KSEF_ID_PATTERN = /^\d{10}-\d{8}-[A-Z0-9]+-[A-Z0-9]+$/
+
+export function isKsefInvoiceId(str) {
+  if (!str) return false
+  return KSEF_ID_PATTERN.test(str.trim())
+}
+
 const NUMER_PATTERNS = [
+  // KSeF-style S1/FAV/YYYY/NNNNNNN (EURO-NET and other KSeF issuers)
+  /\b((?:S\d+|[A-Z]{1,4})\/[A-Z]{2,6}\/\d{4}\/\d{4,12})\b/i,
   // Common Polish invoice prefixes: FV, FVS, FA, FP, FS, FZ, VAT, RK, WZ, PZ, FVAT
   /\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ|MM|ZW|RW)[\s/\-]?\d{1,6}[\w/\-./]*)/i,
   // After keyword "faktura", "nr faktury" etc.
@@ -81,7 +91,10 @@ export function extractWithPatterns(text) {
   for (const pat of NUMER_PATTERNS) {
     const m = text.match(pat)
     if (m) {
-      result.numer = m[1].trim()
+      const candidate = m[1].trim()
+      // Skip KSeF structured identifiers — they are not human-readable invoice numbers
+      if (isKsefInvoiceId(candidate)) continue
+      result.numer = candidate
       result.numerConfidence = 0.8
       break
     }

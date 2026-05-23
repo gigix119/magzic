@@ -70,6 +70,12 @@ const FORBIDDEN_PATTERNS = [
   /opłata\s+za\s+pobór/i,
   /pobór\s+nie\s+przy\s+odbiorze/i,
 
+  // EURO-NET KSeF PLU / product-code metadata lines
+  /^PLU\s+\d+$/i,
+  /^PLU\s*:/i,
+  /^PKWiU\s*:/i,
+  /^GTU\s*\d*\s*$/i,
+
   // Slash-separated bilingual metadata (≥3 slashes + metadata keyword)
   /(\w+\s*\/\s*){3,}.*(wiersz|line|klucz|key|uwagi|remarks|wartość|value|opis|description)/i,
 ]

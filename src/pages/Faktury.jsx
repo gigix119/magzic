@@ -22,6 +22,7 @@ import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { rankProductCandidates } from '../utils/invoiceScoringEngine'
 import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
+import { mapParsedPozycjaToFormPozycja } from '../utils/invoiceLineMapper'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp, AlertTriangle,
@@ -463,19 +464,11 @@ export default function Faktury() {
     const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
     const active = nExtractedItems.filter(item => !item.skipped)
 
-    // Build candidate positions for validation
-    const candidatePositions = active.map(item => mkPos({
-      nazwa: item.rawName,
-      typ: '',
-      ilosc: item.quantity,
-      jednostka: item.unit,
-      cena_netto: item.unitPriceNet,
-      magazyn_id: defaultMag,
-      _towarId: item.matchedProductId || null,
-      itemType: item.itemType,
-      shouldAffectInventory: item.shouldAffectInventory,
-      matchScore: item.matchScore ?? 0,
-    }))
+    // Build candidate positions for validation — use mapper to enforce score threshold
+    const candidatePositions = active.map(item => {
+      const mapped = mapParsedPozycjaToFormPozycja(item, defaultMag)
+      return mkPos({ ...mapped, typ: '' })
+    })
 
     const { readyToSave, blocked } = preparePositionsForInvoiceSave(candidatePositions, towary)
 
@@ -490,11 +483,12 @@ export default function Faktury() {
       return
     }
 
-    // Learning — remember confirmed product mappings for ready positions
+    // Learning — remember confirmed product mappings for ready positions (score >= 0.85 only)
     const supplierNip = nExtractionResult?.fields?.kontrahent_nip
     const supplierId = nForm.kontrahent_id
     for (const item of active) {
       if (!item.matchedProductId || !item.rawName) continue
+      if ((item.matchScore ?? 0) < 0.85) continue
       const price = item.unitPriceNet ?? item.cenaNetto ?? 0
       rememberProductAlias(item.rawName, item.matchedProductId)
       if (supplierNip) rememberSupplierItemName(supplierNip, item.rawName, item.matchedProductId)
@@ -542,20 +536,11 @@ export default function Faktury() {
       return
     }
 
-    const candidatePositions = draftCandidates.map(item => mkPos({
-      nazwa: item.rawName || item.nazwa || '',
-      typ: '',
-      ilosc: item.quantity ?? 1,
-      jednostka: item.unit || 'szt',
-      cena_netto: item.unitPriceNet ?? 0,
-      magazyn_id: defaultMag,
-      _towarId: item.matchedProductId || null,
-      itemType: item.itemType,
-      shouldAffectInventory: false,
-      matchScore: item.matchScore ?? 0,
-      _isDraft: true,
-      invoiceLineStatus: 'review_required',
-    }))
+    // Use mapper to normalize fields — _towarId only set when score >= 0.85, preventing "towar a" bug
+    const candidatePositions = draftCandidates.map(item => {
+      const mapped = mapParsedPozycjaToFormPozycja(item, defaultMag)
+      return mkPos({ ...mapped, typ: '', shouldAffectInventory: false, _isDraft: true, invoiceLineStatus: 'review_required' })
+    })
 
     const { draftLines, blocked } = preparePositionsForInvoiceDraft(candidatePositions)
 
@@ -838,7 +823,7 @@ export default function Faktury() {
           magazyn_id: poz.magazyn_id || null,
           ilosc: Number(poz.ilosc) || 0,
           cena_netto: Number(poz.cena_netto) || 0,
-          vat_procent: 23,
+          vat_procent: Number(poz.vat_procent) || 23,
         }])
         if (pozInsertErr) {
           console.error('Błąd zapisu pozycji:', pozInsertErr)
@@ -874,6 +859,18 @@ export default function Faktury() {
     setNSaving(false)
   }
 
+  // DEV-only: delete the last N test invoices (numer starts with TEST or DEV)
+  async function handleDevDeleteTestInvoices() {
+    if (!import.meta.env.DEV) return
+    const testFaktury = faktury.filter(f => /^(TEST|DEV)/i.test(f.numer || ''))
+    if (testFaktury.length === 0) { addToast('Brak faktur testowych (numer zaczyna się od TEST lub DEV)', 'info'); return }
+    const ids = testFaktury.map(f => f.id)
+    const { error } = await supabase.from('faktury').delete().in('id', ids)
+    if (error) { addToast(`Błąd usuwania: ${error.message}`, 'error'); return }
+    addToast(`Usunięto ${ids.length} faktur testowych`, 'success')
+    fetchData()
+  }
+
   if (loading) return <Spinner />
 
   const canSaveNew = nForm.numer.trim() && nForm.data_zakupu && nForm.kontrahent_id && nForm.magazyn_id
@@ -885,13 +882,25 @@ export default function Faktury() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Faktury</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{faktury.length} faktur</p>
         </div>
-        <button
-          onClick={openNewModal}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn"
-          style={{ background: '#3b82f6' }}
-        >
-          <Plus size={16} /> Nowa faktura
-        </button>
+        <div className="flex items-center gap-2">
+          {import.meta.env.DEV && (
+            <button
+              onClick={handleDevDeleteTestInvoices}
+              className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium"
+              style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fca5a5' }}
+              title="Usuwa faktury których numer zaczyna się od TEST lub DEV"
+            >
+              <Trash2 size={13} /> DEV: usuń testowe
+            </button>
+          )}
+          <button
+            onClick={openNewModal}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn"
+            style={{ background: '#3b82f6' }}
+          >
+            <Plus size={16} /> Nowa faktura
+          </button>
+        </div>
       </div>
 
       {/* Faktury list */}

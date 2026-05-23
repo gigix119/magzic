@@ -1,5 +1,5 @@
 import * as pdfjs from 'pdfjs-dist'
-import { normalizePolishNumber, extractWithPatterns } from './polishInvoicePatterns.js'
+import { normalizePolishNumber, extractWithPatterns, isKsefInvoiceId } from './polishInvoicePatterns.js'
 import { detectInvoiceStructure } from './invoiceStructureDetector.js'
 import { findTableCandidates, chooseBestTableCandidate } from './invoiceTableDetector.js'
 import { parseInvoiceLineData } from './invoiceLineParser.js'
@@ -151,7 +151,11 @@ export async function extractFromFile(file) {
 
     // 3. Regex patterns for header fields
     const patterns = extractWithPatterns(layout.fullText)
-    result.fields.numer = structure.header?.numer || patterns.numer || null
+    // Prefer structure detector numer, but reject KSeF structured identifiers (NIP-DATE-HEX-CHECK)
+    const structureNumer = structure.header?.numer
+    result.fields.numer = (structureNumer && !isKsefInvoiceId(structureNumer))
+      ? structureNumer
+      : (patterns.numer || null)
     result.fields.data_zakupu = structure.header?.dataWystawienia || patterns.data || null
     result.fields.data_wystawienia = result.fields.data_zakupu
     result.fields.kontrahent_nip = structure.sprzedawca?.nip || patterns.nipSprzedawcy || null

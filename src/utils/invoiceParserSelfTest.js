@@ -29,7 +29,8 @@ import {
   preparePositionsForInventoryImpact,
   recalculateInvoiceLineStatus,
 } from './invoicePositionValidator.js'
-import { mapActionablePositionToInvoiceLine } from './invoiceLineMapper.js'
+import { mapActionablePositionToInvoiceLine, mapParsedPozycjaToFormPozycja } from './invoiceLineMapper.js'
+import { isKsefInvoiceId, extractWithPatterns } from './polishInvoicePatterns.js'
 import {
   isLikelyInventoryProductName,
   estimateProductNameConfidence,
@@ -846,6 +847,115 @@ export async function runInvoiceParserSelfTest() {
   const rc84 = recalculateInvoiceLineStatus({ cena_netto: 99, ilosc: 1, magazyn_id: 'mag-x' })
   check('recalc 84: puste context → review_required (brak towaru)', rc84.invoiceLineStatus === 'review_required')
   check('recalc 84: puste context → inventoryImpactStatus none', rc84.inventoryImpactStatus === 'none')
+
+  // ══════════════════════════════════════════════════════════════
+  // Tests 85-99 — Task 6: PDF mapping, KSeF number, PLU guard
+  // ══════════════════════════════════════════════════════════════
+
+  // Test 85: isKsefInvoiceId — rejects structured KSeF identifiers
+  check('ksef-id 85: KSeF NIP-DATE-HEX-CHECK → true',
+    isKsefInvoiceId('5270005984-20260320-6039B0400002-8A'))
+  check('ksef-id 85b: another KSeF id → true',
+    isKsefInvoiceId('9999999999-20261231-ABCDEF1234-ZZ'))
+
+  // Test 86: isKsefInvoiceId — passes real invoice numbers through
+  check('ksef-id 86: S1/FAV/2026/0888336 → false (real invoice number)',
+    !isKsefInvoiceId('S1/FAV/2026/0888336'))
+  check('ksef-id 86b: FV/2026/001 → false',
+    !isKsefInvoiceId('FV/2026/001'))
+  check('ksef-id 86c: null → false',
+    !isKsefInvoiceId(null))
+
+  // Test 87: extractWithPatterns skips KSeF id, finds real invoice number
+  const ksefText87 = 'Numer KSeF 5270005984-20260320-6039B0400002-8A\nNumer faktury S1/FAV/2026/0888336\nNIP: 5270005984'
+  const pat87 = extractWithPatterns(ksefText87)
+  check('ksef-id 87: extractWithPatterns — S1/FAV/... wybrany jako numer (nie KSeF id)',
+    pat87.numer === 'S1/FAV/2026/0888336')
+
+  // Test 88: extractWithPatterns — only KSeF id in text → no numer (rather than polluted id)
+  const onlyKsefText88 = 'Dokument 5270005984-20260320-6039B0400002-8A'
+  const pat88 = extractWithPatterns(onlyKsefText88)
+  check('ksef-id 88: tylko KSeF id w tekście → numer=undefined (nie KSeF id)',
+    !pat88.numer || !isKsefInvoiceId(pat88.numer))
+
+  // Test 89: PLU pattern is now forbidden
+  check('plu guard 89: "PLU 12345" → forbidden',
+    isForbiddenAsInvoiceItem('PLU 12345'))
+  check('plu guard 89b: "PLU:" → forbidden',
+    isForbiddenAsInvoiceItem('PLU:'))
+  check('plu guard 89c: "PKWiU:" → forbidden',
+    isForbiddenAsInvoiceItem('PKWiU:'))
+  check('plu guard 89d: "GTU" → forbidden',
+    isForbiddenAsInvoiceItem('GTU'))
+
+  // Test 90: PLU guard does NOT block real product names containing PLU-like text
+  check('plu guard 90: "Plugs 4x40mm" → not forbidden (product name)',
+    !isForbiddenAsInvoiceItem('Plugs 4x40mm', { hasPrice: true, hasUnit: true }))
+
+  // Test 91: mapParsedPozycjaToFormPozycja — basic normalization
+  const poz91 = { rawName: 'SYFON UMYWALKOWY 32MM', quantity: 2, jednostka: 'szt', unitPriceNet: 19.99, vat: 23, itemType: 'inventory_item', shouldAffectInventory: true, matchedProductId: null }
+  const mapped91 = mapParsedPozycjaToFormPozycja(poz91, 'mag-default')
+  check('mapper 91: nazwa zachowana z rawName', mapped91.nazwa === 'SYFON UMYWALKOWY 32MM')
+  check('mapper 91: jednostka szt (nie litr fallback)', mapped91.jednostka === 'szt')
+  check('mapper 91: ilosc=2', mapped91.ilosc === 2)
+  check('mapper 91: cena_netto=19.99', Math.abs(mapped91.cena_netto - 19.99) < 0.001)
+  check('mapper 91: vat_procent=23', mapped91.vat_procent === 23)
+  check('mapper 91: towar_id=null (brak matchedProductId)', mapped91.towar_id === null)
+  check('mapper 91: magazyn_id=mag-default', mapped91.magazyn_id === 'mag-default')
+
+  // Test 92: mapParsedPozycjaToFormPozycja — high-score match carries towarId
+  const poz92 = { rawName: 'PRALKA BOSCH WGG244', unitPriceNet: 2999, quantity: 1, jednostka: 'szt', matchedProductId: 'tid-pralka', matchScore: 0.92, itemType: 'inventory_item' }
+  const mapped92 = mapParsedPozycjaToFormPozycja(poz92, 'mag-1')
+  check('mapper 92: matchScore=0.92 → towar_id set', mapped92.towar_id === 'tid-pralka')
+  check('mapper 92: _towarId set', mapped92._towarId === 'tid-pralka')
+
+  // Test 93: mapParsedPozycjaToFormPozycja — low-score match does NOT carry towarId (bug fix)
+  const poz93 = { rawName: 'Bateria AAA 4szt', unitPriceNet: 5.99, quantity: 3, jednostka: 'szt', matchedProductId: 'tid-a', matchScore: 0.6, itemType: 'inventory_item' }
+  const mapped93 = mapParsedPozycjaToFormPozycja(poz93, 'mag-1')
+  check('mapper 93: matchScore=0.6 (<0.85) → towar_id=null (guard aktywny)', mapped93.towar_id === null)
+  check('mapper 93: matchScore=0.6 → _towarId=null', mapped93._towarId === null)
+
+  // Test 94: mapParsedPozycjaToFormPozycja — service item has no magazyn_id
+  const poz94 = { rawName: 'Wniesienie PUSPAK7', unitPriceNet: 49, quantity: 1, jednostka: 'usł.', itemType: 'service_item', shouldAffectInventory: false }
+  const mapped94 = mapParsedPozycjaToFormPozycja(poz94, 'mag-default')
+  check('mapper 94: service_item → magazyn_id=null', mapped94.magazyn_id === null)
+  check('mapper 94: service_item → itemType=service_item', mapped94.itemType === 'service_item')
+  check('mapper 94: service_item → shouldAffectInventory=false', mapped94.shouldAffectInventory === false)
+
+  // Test 95: mapParsedPozycjaToFormPozycja — EURO-NET items: preserves all relevant fields
+  const poz95a = { rawName: 'PRALKA BOSCH WAJ28022PL', cenaNetto: 1299, ilosc: 1, jednostka: 'szt', matchedProductId: null }
+  const m95a = mapParsedPozycjaToFormPozycja(poz95a, null)
+  check('mapper 95a: cenaNetto alias → cena_netto', Math.abs(m95a.cena_netto - 1299) < 0.001)
+  check('mapper 95a: ilosc alias → ilosc', m95a.ilosc === 1)
+
+  const poz95b = { nazwa: 'Żarówka E27 9W LED', cena_netto: 4.99, ilosc: 10, jednostka: 'szt' }
+  const m95b = mapParsedPozycjaToFormPozycja(poz95b, 'mag-X')
+  check('mapper 95b: nazwa alias → nazwa', m95b.nazwa === 'Żarówka E27 9W LED')
+
+  // Test 96: vat_procent comes from source, defaults to 23
+  const poz96a = { rawName: 'Item A', unitPriceNet: 10, quantity: 1, vat: 8 }
+  const m96a = mapParsedPozycjaToFormPozycja(poz96a, null)
+  check('mapper 96a: vat=8 → vat_procent=8', m96a.vat_procent === 8)
+
+  const poz96b = { rawName: 'Item B', unitPriceNet: 10, quantity: 1 }
+  const m96b = mapParsedPozycjaToFormPozycja(poz96b, null)
+  check('mapper 96b: brak vat → vat_procent=23 (default)', m96b.vat_procent === 23)
+
+  // Test 97: getAssignmentStatus — product with short name still needs_review (integration)
+  const fakeTowaryShort = [{ id: 'tid-short', nazwa: 'a', jednostka: 'szt' }]
+  const itemWithShortProd = { rawName: 'coś', itemType: 'inventory_item', unitPriceNet: 19.99, matchedProductId: 'tid-short', matchScore: 1.0, skipped: false }
+  check('regression 97: produkt z nazwą "a" → needs_review (nie ready)',
+    getAssignmentStatus(itemWithShortProd, fakeTowaryShort) === 'needs_review')
+
+  // Test 98: mapParsedPozycjaToFormPozycja — matchScore exactly 0.85 → towarId SET (threshold inclusive)
+  const poz98 = { rawName: 'Syfon 32mm', unitPriceNet: 19.99, quantity: 1, matchedProductId: 'tid-syfon', matchScore: 0.85 }
+  const m98 = mapParsedPozycjaToFormPozycja(poz98, null)
+  check('mapper 98: matchScore=0.85 (boundary) → towar_id set', m98.towar_id === 'tid-syfon')
+
+  // Test 99: mapParsedPozycjaToFormPozycja — matchScore 0.849 → towarId NOT set
+  const poz99 = { rawName: 'Syfon 32mm', unitPriceNet: 19.99, quantity: 1, matchedProductId: 'tid-syfon', matchScore: 0.849 }
+  const m99 = mapParsedPozycjaToFormPozycja(poz99, null)
+  check('mapper 99: matchScore=0.849 (<0.85) → towar_id=null', m99.towar_id === null)
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length
