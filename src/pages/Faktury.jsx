@@ -21,6 +21,7 @@ import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { rankProductCandidates } from '../utils/invoiceScoringEngine'
+import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave } from '../utils/invoicePositionValidator'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
@@ -368,18 +369,8 @@ export default function Faktury() {
     const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
     const active = nExtractedItems.filter(item => !item.skipped)
 
-    // Learning — remember confirmed product mappings
-    const supplierNip = nExtractionResult?.fields?.kontrahent_nip
-    const supplierId = nForm.kontrahent_id
-    for (const item of active) {
-      if (!item.matchedProductId || !item.rawName) continue
-      rememberProductAlias(item.rawName, item.matchedProductId)
-      if (supplierNip) rememberSupplierItemName(supplierNip, item.rawName, item.matchedProductId)
-      const price = item.unitPriceNet ?? item.cenaNetto ?? 0
-      if (price > 0 && supplierId) rememberTypicalPrice(item.matchedProductId, supplierId, price)
-    }
-
-    const newPositions = active.map(item => mkPos({
+    // Build candidate positions for validation
+    const candidatePositions = active.map(item => mkPos({
       nazwa: item.rawName,
       typ: '',
       ilosc: item.quantity,
@@ -387,22 +378,49 @@ export default function Faktury() {
       cena_netto: item.unitPriceNet,
       magazyn_id: defaultMag,
       _towarId: item.matchedProductId || null,
+      itemType: item.itemType,
+      shouldAffectInventory: item.shouldAffectInventory,
+      matchScore: item.matchScore ?? 0,
     }))
-    setNPositions(newPositions)
+
+    const { readyToSave, blocked } = preparePositionsForInvoiceSave(candidatePositions, towary)
+
+    if (blocked.length > 0) {
+      blocked.forEach(({ position, errors }) => {
+        addToast(`Pominięto "${(position.nazwa || '').slice(0, 40)}": ${errors[0]}`, 'info')
+      })
+    }
+
+    if (readyToSave.length === 0) {
+      addToast('Brak gotowych pozycji do zapisania. Uzupełnij ceny i dopasowania.', 'error')
+      return
+    }
+
+    // Learning — remember confirmed product mappings for ready positions
+    const supplierNip = nExtractionResult?.fields?.kontrahent_nip
+    const supplierId = nForm.kontrahent_id
+    for (const item of active) {
+      if (!item.matchedProductId || !item.rawName) continue
+      const price = item.unitPriceNet ?? item.cenaNetto ?? 0
+      rememberProductAlias(item.rawName, item.matchedProductId)
+      if (supplierNip) rememberSupplierItemName(supplierNip, item.rawName, item.matchedProductId)
+      if (price > 0 && supplierId) rememberTypicalPrice(item.matchedProductId, supplierId, price)
+    }
+
+    setNPositions(readyToSave)
     setNShowExtracted(false)
     setNShowForm(true)
 
     // Auto-analyze prices for matched positions
     const initData = {}
-    newPositions.forEach((pos, i) => {
-      if (active[i]?.matchedProductId) initData[pos._key] = { loading: true }
+    readyToSave.forEach(pos => {
+      if (pos._towarId) initData[pos._key] = { loading: true }
     })
     if (Object.keys(initData).length > 0) {
       setNPriceData(initData)
-      newPositions.forEach((pos, i) => {
-        const item = active[i]
-        if (item?.matchedProductId) {
-          analyzePositionPriceById(pos._key, item.matchedProductId, Number(item.unitPriceNet))
+      readyToSave.forEach(pos => {
+        if (pos._towarId) {
+          analyzePositionPriceById(pos._key, pos._towarId, Number(pos.cena_netto))
         }
       })
     }
@@ -503,7 +521,9 @@ export default function Faktury() {
             const knownId = aliasId || supplierAliasId
             if (knownId) {
               const knownProduct = towary.find(t => t.id === knownId)
-              return { ...item, matchedProductId: knownId, matchedProductNazwa: knownProduct?.nazwa ?? null, matchScore: 1.0, skipped: false }
+              if (knownProduct && knownProduct.nazwa && knownProduct.nazwa.length >= 2) {
+                return { ...item, matchedProductId: knownId, matchedProductNazwa: knownProduct.nazwa, matchScore: 1.0, skipped: false }
+              }
             }
             // Advanced similarity with diacritics + tech params
             let bestScore = 0
@@ -512,11 +532,16 @@ export default function Faktury() {
               const { score } = advancedSimilarity(item.rawName, towar)
               if (score > bestScore) { bestScore = score; bestProduct = towar }
             }
+            // Threshold 0.85 for auto-match; 0.65–0.84 = suggestion only; <0.65 = no match
+            const autoMatch = bestScore >= 0.85
+            const hasSuggestion = !autoMatch && bestScore >= 0.65
             return {
               ...item,
-              matchedProductId: bestScore >= 0.5 ? (bestProduct?.id ?? null) : null,
-              matchedProductNazwa: bestScore >= 0.5 ? (bestProduct?.nazwa ?? null) : null,
+              matchedProductId: autoMatch ? (bestProduct?.id ?? null) : null,
+              matchedProductNazwa: autoMatch ? (bestProduct?.nazwa ?? null) : null,
               matchScore: bestScore,
+              _suggestedProductId: hasSuggestion ? (bestProduct?.id ?? null) : null,
+              _suggestedProductNazwa: hasSuggestion ? (bestProduct?.nazwa ?? null) : null,
               skipped: false,
             }
           })
@@ -1049,9 +1074,20 @@ export default function Faktury() {
                   </div>
                 )
               })()}
-              <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
-                Znaleziono <strong>{nExtractedItems.filter(i => !i.skipped).length}</strong> pozycji w dokumencie — sprawdź dopasowania i zatwierdź
-              </p>
+              {(() => {
+                const statuses = nExtractedItems.map(i => getAssignmentStatus(i, towary))
+                const readyCount = statuses.filter(s => isReadyToSave(s)).length
+                const reviewCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
+                const ignoredCount = statuses.filter(s => s === 'ignored').length
+                return (
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>
+                    Znaleziono <strong>{nExtractedItems.length}</strong> pozycji —{' '}
+                    <span style={{ color: '#16a34a' }}>{readyCount} gotowych</span>
+                    {reviewCount > 0 && <span style={{ color: '#d97706' }}>, {reviewCount} do weryfikacji</span>}
+                    {ignoredCount > 0 && <span style={{ color: 'var(--muted)' }}>, {ignoredCount} pominiętych</span>}
+                  </p>
+                )
+              })()}
               <div className="table-scroll-x" style={{ maxHeight: 360, overflowY: 'auto' }}>
                 <table className="w-full text-sm" style={{ minWidth: 580 }}>
                   <thead>
@@ -1066,7 +1102,19 @@ export default function Faktury() {
                   </thead>
                   <tbody>
                     {nExtractedItems.map((item, idx) => {
-                      const borderColor = item.matchScore >= 0.8 ? '#16a34a' : item.matchScore >= 0.5 ? '#d97706' : '#ef4444'
+                      const assignStatus = getAssignmentStatus(item, towary)
+                      const borderColor = assignStatus === 'ready' || assignStatus === 'service_cost' ? '#16a34a'
+                        : assignStatus === 'needs_review' ? '#d97706'
+                        : assignStatus === 'needs_price' || assignStatus === 'needs_product' ? '#ef4444'
+                        : '#94a3b8'
+                      const statusLabel = {
+                        ready: { text: '✓ gotowa', bg: '#dcfce7', color: '#166534' },
+                        service_cost: { text: '✓ usługa', bg: '#f0fdf4', color: '#166534' },
+                        needs_review: { text: '⚠ sprawdź', bg: '#fef9c3', color: '#854d0e' },
+                        needs_price: { text: '✗ brak ceny', bg: '#fee2e2', color: '#991b1b' },
+                        needs_product: { text: '✗ brak towaru', bg: '#fee2e2', color: '#991b1b' },
+                        ignored: { text: '– pominięta', bg: '#f3f4f6', color: '#6b7280' },
+                      }[assignStatus] || { text: assignStatus, bg: '#f3f4f6', color: '#6b7280' }
                       return (
                         <tr
                           key={idx}
@@ -1117,12 +1165,23 @@ export default function Faktury() {
                                   ⚡ niezgodność
                                 </span>
                               )}
+                              {!item.skipped && (
+                                <span style={{ background: statusLabel.bg, color: statusLabel.color, borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>
+                                  {statusLabel.text}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-3 py-2">
                             <select
                               value={item.matchedProductId || ''}
-                              onChange={e => updateExtractedItem(idx, 'matchedProductId', e.target.value || null)}
+                              onChange={e => {
+                                const val = e.target.value || null
+                                setNExtractedItems(items => items.map((it, i) => i === idx
+                                  ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0 }
+                                  : it
+                                ))
+                              }}
                               style={{ ...IS(), fontSize: 11, padding: '4px 8px' }}
                             >
                               <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
@@ -1130,6 +1189,20 @@ export default function Faktury() {
                                 <option key={t.id} value={t.id}>{t.nazwa}</option>
                               ))}
                             </select>
+                            {!item.matchedProductId && item._suggestedProductId && (
+                              <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>
+                                Sugestia: <button
+                                  type="button"
+                                  onClick={() => setNExtractedItems(items => items.map((it, i) => i === idx
+                                    ? { ...it, matchedProductId: item._suggestedProductId, matchedProductNazwa: item._suggestedProductNazwa, matchScore: 1.0 }
+                                    : it
+                                  ))}
+                                  style={{ color: '#d97706', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, padding: 0 }}
+                                >
+                                  {item._suggestedProductNazwa}
+                                </button>
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <input
@@ -1179,14 +1252,22 @@ export default function Faktury() {
                 >
                   Pomiń pozycje — tylko dane faktury
                 </button>
-                <button
-                  type="button"
-                  onClick={commitExtractedItems}
-                  className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                  style={{ background: '#3b82f6' }}
-                >
-                  Dodaj {nExtractedItems.filter(i => !i.skipped).length} pozycji do faktury →
-                </button>
+                {(() => {
+                  const readyCount = nExtractedItems.filter(i => isReadyToSave(getAssignmentStatus(i, towary))).length
+                  return (
+                    <button
+                      type="button"
+                      onClick={commitExtractedItems}
+                      disabled={readyCount === 0}
+                      className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                      style={{ background: readyCount > 0 ? '#3b82f6' : '#94a3b8', cursor: readyCount > 0 ? 'pointer' : 'not-allowed' }}
+                    >
+                      {readyCount > 0
+                        ? `Dodaj ${readyCount} pozycji do faktury →`
+                        : 'Brak gotowych pozycji — uzupełnij ceny i dopasowania'}
+                    </button>
+                  )
+                })()}
               </div>
               {import.meta.env.DEV && nExtractedItems.length > 0 && nExtractionResult && (
                 <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>

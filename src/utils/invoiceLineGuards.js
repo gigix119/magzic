@@ -10,6 +10,11 @@ const BLOCKED = [
   'słownie', 'slownie', 'wartość faktury', 'wartosc faktury',
   'razem do zapłaty', 'razem do zaplaty',
   'w tym vat', 'w tym podatek',
+  // KSeF / Comarch / e-invoice metadata
+  'remarks', 'nr wiersza', 'line number', 'value line number',
+  'powered by comarch', 'ksef', 'numer ksef', 'faktura ustrukturyzowana',
+  'opłata za pobór', 'oplata za pobor', 'pobór nie przy odbiorze',
+  'pobor nie przy odbiorze', 'klucz', 'key',
 ]
 
 const FORBIDDEN_PATTERNS = [
@@ -54,7 +59,19 @@ const FORBIDDEN_PATTERNS = [
 
   // Inne administracyjne
   /^miejsce\s+wystawienia\b/i,
-  /^uwagi\s*:/i,
+  /^uwagi\b/i,
+
+  // KSeF / Comarch / e-faktura metadata
+  /^(remarks|uwagi\s*\/\s*remarks)\b/i,
+  /\b(nr wiersza|line number|value line number)\b/i,
+  /powered\s+by\s+comarch/i,
+  /\bksef\b/i,
+  /faktura\s+ustrukturyzowana/i,
+  /opłata\s+za\s+pobór/i,
+  /pobór\s+nie\s+przy\s+odbiorze/i,
+
+  // Slash-separated bilingual metadata (≥3 slashes + metadata keyword)
+  /(\w+\s*\/\s*){3,}.*(wiersz|line|klucz|key|uwagi|remarks|wartość|value|opis|description)/i,
 ]
 
 export function isForbiddenAsInvoiceItem(lineText, context = {}) {
@@ -74,6 +91,13 @@ export function isForbiddenAsInvoiceItem(lineText, context = {}) {
 
   // Same numbers/symbols only (no letters)
   if (!/[a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]/.test(lineText)) return true
+
+  // Long lines with metadata keywords → KSeF/Comarch header noise
+  if (lineText.length > 160) {
+    const metaKeywords = ['wiersz', 'klucz', 'key', 'uwagi', 'remarks', 'value', 'opis', 'description', 'ksef']
+    if (metaKeywords.some(k => lower.includes(k))) return true
+    if (!context.hasPrice && !context.hasUnit) return true
+  }
 
   // Very long lines with no price/unit context are likely prose
   if (lineText.length > 120 && !context.hasPrice && !context.hasUnit) return true

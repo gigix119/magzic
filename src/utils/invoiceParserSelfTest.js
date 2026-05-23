@@ -18,6 +18,12 @@ import {
   buildSyntheticGoldenSample,
   extractEvaluationDatasetFromGoldenSamples,
 } from './invoiceDatasetBuilder.js'
+import {
+  getAssignmentStatus,
+  isReadyToSave,
+  validatePositionBeforeInvoiceSave,
+  preparePositionsForInvoiceSave,
+} from './invoicePositionValidator.js'
 
 function makeRunner() {
   const results = []
@@ -347,6 +353,93 @@ export async function runInvoiceParserSelfTest() {
   const metricsExact = evaluateModelConfig(DEFAULT_INVOICE_MODEL_CONFIG, typedExact, fakeProductList)
   check('dataset: evaluateModelConfig — exact match → Top1Accuracy = 1.0', metricsExact.productMatchTop1Accuracy === 1.0)
   check('dataset: evaluateModelConfig — exact match → Top3Accuracy = 1.0', metricsExact.productMatchTop3Accuracy === 1.0)
+
+  // ── invoiceLineGuards — KSeF/Comarch/Remarks (tests 23–27) ──────
+
+  // Test 23: KSeF/Comarch-specific phrases are forbidden
+  check('guards: "Uwagi / Remarks / Nr wiersza / Klucz" → forbidden',
+    isForbiddenAsInvoiceItem('Uwagi / Remarks / Nr wiersza / Klucz / Key / Wartość / Value Line number'))
+  check('guards: "Powered by Comarch" → forbidden',
+    isForbiddenAsInvoiceItem('Powered by Comarch ERP'))
+  check('guards: "faktura ustrukturyzowana" → forbidden',
+    isForbiddenAsInvoiceItem('Faktura ustrukturyzowana KSeF'))
+  check('guards: "nr wiersza" standalone → forbidden',
+    isForbiddenAsInvoiceItem('Nr wiersza'))
+
+  // Test 24: Long line with metadata keyword → forbidden
+  const longMetaLine = 'Klucz/Key: 0001 | Wartość/Value: 100.00 | Opis/Description: service charge note podany przez system ewidencji kosztów Comarch ERP'
+  check('guards: długa linia z metadata keyword → forbidden',
+    isForbiddenAsInvoiceItem(longMetaLine))
+
+  // Test 25: Real product names still pass through
+  check('guards: real product — SYFON UMYWALKOWY BIAŁY 32MM → not forbidden',
+    !isForbiddenAsInvoiceItem('SYFON UMYWALKOWY BIAŁY 32MM'))
+  check('guards: real product — Bateria wannowa chrom EVO → not forbidden',
+    !isForbiddenAsInvoiceItem('Bateria wannowa chrom EVO'))
+
+  // ── invoicePositionValidator — getAssignmentStatus (tests 28–30) ─
+
+  const fakeTowarList = [
+    { id: 'tid-syfon', nazwa: 'Syfon umywalkowy', jednostka: 'szt' },
+    { id: 'tid-a', nazwa: 'a', jednostka: 'szt' },
+  ]
+
+  // Test 26 (was 28): inventory item with price=0 → needs_price
+  const itemNoCena = { rawName: 'Syfon', itemType: 'inventory_item', unitPriceNet: 0, matchedProductId: 'tid-syfon', matchScore: 1.0, skipped: false }
+  check('validator: inventory price=0 → needs_price',
+    getAssignmentStatus(itemNoCena, fakeTowarList) === 'needs_price')
+  check('validator: needs_price → isReadyToSave=false',
+    !isReadyToSave(getAssignmentStatus(itemNoCena, fakeTowarList)))
+
+  // Test 27 (was 29): service item with price>0 → service_cost (ready)
+  const serviceItem = { rawName: 'Abonament', itemType: 'service_item', shouldAffectInventory: false, unitPriceNet: 52.85, matchedProductId: null, skipped: false }
+  check('validator: service_item price>0 → service_cost',
+    getAssignmentStatus(serviceItem, fakeTowarList) === 'service_cost')
+  check('validator: service_cost → isReadyToSave=true',
+    isReadyToSave(getAssignmentStatus(serviceItem, fakeTowarList)))
+
+  // Test 28 (was 30): inventory item, product "a" → needs_review
+  const itemProductA = { rawName: 'coś', itemType: 'inventory_item', unitPriceNet: 19.99, matchedProductId: 'tid-a', matchScore: 1.0, skipped: false }
+  check('validator: product name "a" (length<2) → needs_review',
+    getAssignmentStatus(itemProductA, fakeTowarList) === 'needs_review')
+
+  // ── validatePositionBeforeInvoiceSave (tests 29–32) ─────────────
+
+  // Test 29: cena_netto=0 → error
+  const posZeroCena = { nazwa: 'Syfon', cena_netto: 0, ilosc: 2, _towarId: 'tid-syfon', matchScore: 1.0 }
+  const valZero = validatePositionBeforeInvoiceSave(posZeroCena, fakeTowarList)
+  check('validator: validatePosition — cena_netto=0 → ok=false', !valZero.ok)
+  check('validator: validatePosition — cena_netto=0 → error o cenie', valZero.errors.some(e => e.toLowerCase().includes('cen')))
+
+  // Test 30: brak _towarId dla inventory → error
+  const posNoProduct = { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, _towarId: null, matchScore: 0 }
+  const valNoProduct = validatePositionBeforeInvoiceSave(posNoProduct, fakeTowarList)
+  check('validator: validatePosition — brak _towarId → ok=false', !valNoProduct.ok)
+
+  // Test 31: nieistniejący _towarId → error
+  const posWrongId = { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, _towarId: 'nonexistent-uuid', matchScore: 1.0 }
+  const valWrongId = validatePositionBeforeInvoiceSave(posWrongId, fakeTowarList)
+  check('validator: validatePosition — towar nie istnieje → ok=false', !valWrongId.ok)
+
+  // Test 32: produkt "a" (nazwa.length<2) → error
+  const posProductA = { nazwa: 'coś', cena_netto: 19.99, ilosc: 1, _towarId: 'tid-a', matchScore: 1.0 }
+  const valProductA = validatePositionBeforeInvoiceSave(posProductA, fakeTowarList)
+  check('validator: validatePosition — produkt "a" (za krótka nazwa) → ok=false', !valProductA.ok)
+
+  // Test 33: prawidłowa pozycja inventory → ok=true
+  const posOk = { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 2, _towarId: 'tid-syfon', matchScore: 1.0 }
+  const valOk = validatePositionBeforeInvoiceSave(posOk, fakeTowarList)
+  check('validator: validatePosition — prawidłowa inventory → ok=true', valOk.ok)
+
+  // Test 34: preparePositionsForInvoiceSave — splits blocked/ready correctly
+  const mixedPositions = [
+    { nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, _towarId: 'tid-syfon', matchScore: 1.0 },
+    { nazwa: 'Coś', cena_netto: 0, ilosc: 1, _towarId: 'tid-syfon', matchScore: 1.0 },
+    { nazwa: 'Abonament', cena_netto: 52.85, ilosc: 1, itemType: 'service_item', shouldAffectInventory: false, _towarId: null, matchScore: 0 },
+  ]
+  const prepared = preparePositionsForInvoiceSave(mixedPositions, fakeTowarList)
+  check('validator: preparePositions — 2 ready (inventory OK + service)', prepared.readyToSave.length === 2)
+  check('validator: preparePositions — 1 blocked (cena=0)', prepared.blocked.length === 1)
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length
