@@ -11,6 +11,13 @@ import { DEFAULT_INVOICE_MODEL_CONFIG } from './invoiceModelConfig.js'
 import { extractItemFeatures, extractProductMatchFeatures } from './invoiceFeatureExtractor.js'
 import { scoreItemType, scoreShouldAffectInventory, scoreProductCandidate, rankProductCandidates } from './invoiceScoringEngine.js'
 import { buildTrainingDataset, evaluateModelConfig } from './invoiceModelTrainer.js'
+import {
+  anonymizeInvoiceText,
+  buildExpectedProductMatch,
+  buildGoldenSampleFromApprovedInvoice,
+  buildSyntheticGoldenSample,
+  extractEvaluationDatasetFromGoldenSamples,
+} from './invoiceDatasetBuilder.js'
 
 function makeRunner() {
   const results = []
@@ -240,6 +247,106 @@ export async function runInvoiceParserSelfTest() {
   const cfg = getInvoiceModelConfig()
   check('model: getInvoiceModelConfig zwraca obiekt z mode', typeof cfg.mode === 'string')
   check('model: getInvoiceModelConfig zwraca valid mode', ['off', 'shadow', 'active'].includes(cfg.mode))
+
+  // ── Dataset builder self-tests (10 checks) ──────────────────────
+
+  // Test 13: anonymizeInvoiceText maskuje NIP
+  const textWithNip = 'Sprzedawca: Firma ABC NIP: 123-456-78-90 ul. Testowa 1'
+  const anonymized = anonymizeInvoiceText(textWithNip)
+  check('dataset: anonymizeInvoiceText maskuje NIP', !anonymized.includes('123-456-78-90') && anonymized.includes('XXX'))
+
+  // Test 14: anonymizeInvoiceText maskuje IBAN
+  const textWithIban = 'Przelew na konto: PL61109010140000071219812874'
+  const anonymizedIban = anonymizeInvoiceText(textWithIban)
+  check('dataset: anonymizeInvoiceText maskuje IBAN', !anonymizedIban.includes('PL61109010140000071219812874'))
+
+  // Test 15: buildSyntheticGoldenSample — Brico ma inventory items
+  const bricoSample = buildSyntheticGoldenSample('brico')
+  check('dataset: brico sample ma documentType inventory', bricoSample?.documentType === 'inventory_purchase_invoice')
+  check('dataset: brico sample ma pozycje inventory_item', (bricoSample?.expectedOutput?.pozycje || []).every(p => p.expectedItemType === 'inventory_item'))
+  check('dataset: brico sample rawName present', (bricoSample?.expectedOutput?.pozycje || []).every(p => !!p.rawName))
+
+  // Test 16: buildSyntheticGoldenSample — Play ma service items i shouldAffectInventory=false
+  const playSample = buildSyntheticGoldenSample('play')
+  check('dataset: play sample ma documentType telecom', playSample?.documentType === 'telecom_invoice')
+  check('dataset: play sample — wszystkie pozycje shouldAffectInventory=false',
+    (playSample?.expectedOutput?.pozycje || []).every(p => p.expectedShouldAffectInventory === false))
+
+  // Test 17: buildGoldenSampleFromApprovedInvoice — basic roundtrip
+  const fakeExtractionResult = {
+    documentType: 'inventory_purchase_invoice',
+    confidence: 80,
+    source: 'pdf_text',
+    rawText: 'Numer: FV/2026/001 NIP: 987-654-32-10',
+    fields: {
+      numer: 'FV/2026/001',
+      kontrahent_nip: '9876543210',
+      kontrahent_nazwa: 'Firma Testowa',
+      suma_netto: 150,
+    },
+  }
+  const fakeItems = [
+    { rawName: 'SYFON UMYWALKOWY', ilosc: 2, jednostka: 'szt', cenaNetto: 19.99, itemType: 'inventory_item', shouldAffectInventory: true, matchedProductId: null },
+  ]
+  const builtSample = buildGoldenSampleFromApprovedInvoice(fakeExtractionResult, fakeItems, { name: 'Test roundtrip' })
+  check('dataset: buildGoldenSampleFromApprovedInvoice — ma name', builtSample?.name === 'Test roundtrip')
+  check('dataset: buildGoldenSampleFromApprovedInvoice — ma supplierNip', builtSample?.supplierNip === '9876543210')
+  check('dataset: buildGoldenSampleFromApprovedInvoice — pozycja ma rawName', builtSample?.expectedOutput?.pozycje?.[0]?.rawName === 'SYFON UMYWALKOWY')
+  check('dataset: buildGoldenSampleFromApprovedInvoice — pozycja ma expectedItemType', builtSample?.expectedOutput?.pozycje?.[0]?.expectedItemType === 'inventory_item')
+
+  // Test 18: buildGoldenSampleFromApprovedInvoice — anonymize maskuje NIP
+  const builtAnon = buildGoldenSampleFromApprovedInvoice(fakeExtractionResult, fakeItems, { anonymize: true })
+  check('dataset: anonymize=true — rawText bez NIP', !builtAnon?.inputSample?.rawText?.includes('987-654-32-10'))
+
+  // Test 19: extractEvaluationDatasetFromGoldenSamples — tworzy typed items
+  const miniSamples = [
+    {
+      id: 'mini1',
+      name: 'Mini sample',
+      documentType: 'inventory_purchase_invoice',
+      supplierNip: null,
+      expectedOutput: {
+        documentType: 'inventory_purchase_invoice',
+        pozycje: [
+          { rawName: 'Syfon', expectedItemType: 'inventory_item', expectedShouldAffectInventory: true, expectedProductId: null },
+        ],
+      },
+    },
+  ]
+  const typedDataset = extractEvaluationDatasetFromGoldenSamples(miniSamples, [])
+  check('dataset: extractEvaluationDataset — zawiera document_type item', typedDataset.some(i => i.task === 'document_type'))
+  check('dataset: extractEvaluationDataset — zawiera item_type item', typedDataset.some(i => i.task === 'item_type'))
+  check('dataset: extractEvaluationDataset — brak product_match (no products)', !typedDataset.some(i => i.task === 'product_match'))
+
+  // Test 20: buildExpectedProductMatch — brak produktów → productId=null
+  const matchResult = buildExpectedProductMatch('Syfon umywalkowy', [], {})
+  check('dataset: buildExpectedProductMatch brak produktów → productId=null', matchResult.productId === null)
+
+  // Test 21: evaluateModelConfig handles typed product_match items without products (no crash)
+  const typedWithProduct = [
+    {
+      id: 'pm1', task: 'product_match',
+      input: { rawName: 'Syfon', jednostka: 'szt', supplierNip: null, cenaNetto: 20, itemType: 'inventory_item' },
+      expected: { productId: 'fake-uuid' },
+      source: 'golden',
+    },
+  ]
+  const metricsTyped = evaluateModelConfig(DEFAULT_INVOICE_MODEL_CONFIG, typedWithProduct, [])
+  check('dataset: evaluateModelConfig — typed product_match bez produktów → Top1=0, nie crashuje', metricsTyped.productMatchTop1Accuracy === 0)
+
+  // Test 22: evaluateModelConfig z produktem — Top1 poprawny gdy exact match
+  const fakeProductList = [{ id: 'prod-syfon', nazwa: 'Syfon umywalkowy 32mm', jednostka: 'szt' }]
+  const typedExact = [
+    {
+      id: 'pm2', task: 'product_match',
+      input: { rawName: 'Syfon umywalkowy 32mm', jednostka: 'szt', supplierNip: null, cenaNetto: 20, itemType: 'inventory_item' },
+      expected: { productId: 'prod-syfon' },
+      source: 'golden',
+    },
+  ]
+  const metricsExact = evaluateModelConfig(DEFAULT_INVOICE_MODEL_CONFIG, typedExact, fakeProductList)
+  check('dataset: evaluateModelConfig — exact match → Top1Accuracy = 1.0', metricsExact.productMatchTop1Accuracy === 1.0)
+  check('dataset: evaluateModelConfig — exact match → Top3Accuracy = 1.0', metricsExact.productMatchTop3Accuracy === 1.0)
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length

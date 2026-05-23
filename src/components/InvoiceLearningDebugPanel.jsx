@@ -4,7 +4,7 @@ import {
   getInvoiceTrainingExamples, exportAllInvoiceLearningData,
   importAllInvoiceLearningData, clearAllInvoiceLearningData,
 } from '../utils/invoiceLearning'
-import { exportGoldenSamples, importGoldenSamples, getGoldenSamples, clearGoldenSamples } from '../utils/invoiceGoldenSamples'
+import { exportGoldenSamples, importGoldenSamples, getGoldenSamples, clearGoldenSamples, saveGoldenSample } from '../utils/invoiceGoldenSamples'
 import { exportCorrectionEvents, getCorrectionStats } from '../utils/invoiceCorrectionTracker'
 import {
   getInvoiceModelConfig, setInvoiceModelMode,
@@ -16,6 +16,7 @@ export default function InvoiceLearningDebugPanel() {
   const [testResult, setTestResult] = useState(null)
   const [expanded, setExpanded] = useState(false)
   const [modelSection, setModelSection] = useState(false)
+  const [datasetSection, setDatasetSection] = useState(false)
   const [evalResult, setEvalResult] = useState(null)
   const [evalRunning, setEvalRunning] = useState(false)
   const [trainRunning, setTrainRunning] = useState(false)
@@ -36,11 +37,48 @@ export default function InvoiceLearningDebugPanel() {
   })()
 
   const corrStats = getCorrectionStats()
-  const goldenCount = getGoldenSamples().length
+  const goldenSamplesAll = getGoldenSamples()
+  const goldenCount = goldenSamplesAll.length
   const trainingCount = getInvoiceTrainingExamples().length
+
+  const datasetStats = (() => {
+    let inventoryCount = 0
+    let serviceCount = 0
+    let mixedCount = 0
+    let withExpectedProductId = 0
+    let totalPositions = 0
+    for (const s of goldenSamplesAll) {
+      const cat = s.evaluationHints?.supplierType || s.category || 'unknown'
+      if (cat === 'inventory') inventoryCount++
+      else if (cat === 'service') serviceCount++
+      else if (cat === 'mixed') mixedCount++
+      for (const poz of (s.expectedOutput?.pozycje || [])) {
+        totalPositions++
+        if (poz.expectedProductId) withExpectedProductId++
+      }
+    }
+    return {
+      inventoryCount, serviceCount, mixedCount,
+      withExpectedProductId, totalPositions,
+      productMatchEvaluationAvailable: withExpectedProductId > 0,
+    }
+  })()
 
   function refreshModelConfig() {
     setModelConfig(getInvoiceModelConfig())
+  }
+
+  const handleAddSyntheticSample = async (type) => {
+    try {
+      const { buildSyntheticGoldenSample } = await import('../utils/invoiceDatasetBuilder.js')
+      const sample = buildSyntheticGoldenSample(type)
+      if (!sample) { alert('Nieznany typ próbki'); return }
+      const result = saveGoldenSample(sample)
+      if (result.success) alert(`Golden sample "${sample.name}" zapisany.`)
+      else alert('Błąd: ' + result.error)
+    } catch (e) {
+      alert('Błąd: ' + String(e))
+    }
   }
 
   function download(data, filename) {
@@ -291,6 +329,76 @@ export default function InvoiceLearningDebugPanel() {
               ))}
             </div>
           )}
+
+          {/* ── Golden samples / dataset ────────────────────────────── */}
+          <div style={{ marginTop: 16, borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>
+            <button
+              onClick={() => setDatasetSection(s => !s)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, color: '#065f46', padding: 0,
+              }}
+            >
+              📦 Golden samples / dataset {datasetSection ? '▲' : '▼'}
+            </button>
+
+            {datasetSection && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  <div style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{datasetStats.inventoryCount}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Inwentarz</div>
+                  </div>
+                  <div style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#d97706' }}>{datasetStats.serviceCount}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Usługowe</div>
+                  </div>
+                  <div style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#7c3aed' }}>{datasetStats.mixedCount}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Mieszane</div>
+                  </div>
+                  <div style={{ background: '#f8fafc', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{datasetStats.totalPositions}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Pozycji łącznie</div>
+                  </div>
+                  <div style={{ background: datasetStats.withExpectedProductId > 0 ? '#f0fdf4' : '#f8fafc', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: datasetStats.withExpectedProductId > 0 ? '#16a34a' : '#94a3b8' }}>
+                      {datasetStats.withExpectedProductId}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Z expectedProductId</div>
+                  </div>
+                  <div style={{ background: datasetStats.productMatchEvaluationAvailable ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: datasetStats.productMatchEvaluationAvailable ? '#16a34a' : '#dc2626' }}>
+                      {datasetStats.productMatchEvaluationAvailable ? '✅ Tak' : '❌ Nie'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Top1/3 eval</div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+                  Dodaj syntetyczne golden samples do testowania modelu (nie potrzebujesz PDF-a):
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <button onClick={() => handleAddSyntheticSample('brico')} style={btnStyle('#16a34a')}>
+                    + Brico (inwentarz)
+                  </button>
+                  <button onClick={() => handleAddSyntheticSample('play')} style={btnStyle('#d97706')}>
+                    + Play (usługowa)
+                  </button>
+                  <button onClick={() => handleAddSyntheticSample('mixed')} style={btnStyle('#7c3aed')}>
+                    + Mixed (mieszana)
+                  </button>
+                </div>
+
+                {!datasetStats.productMatchEvaluationAvailable && goldenCount > 0 && (
+                  <div style={{ marginTop: 8, padding: 8, background: '#fffbeb', borderRadius: 6, fontSize: 11, color: '#92400e' }}>
+                    Brak golden samples z <code>expectedProductId</code> — Top-1/Top-3 ocena produktów będzie niedostępna.
+                    Aby ją aktywować: zatwierdź fakturę z odczytanymi i dopasowanymi pozycjami i zapisz jako golden sample.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* ── Model lokalny / ranking ─────────────────────────────── */}
           <div style={{ marginTop: 16, borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>

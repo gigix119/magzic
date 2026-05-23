@@ -5,6 +5,8 @@ import {
   getInvoiceModelConfig,
   saveInvoiceModelConfig,
 } from './invoiceModelConfig.js'
+import { rankProductCandidates } from './invoiceScoringEngine.js'
+import { extractEvaluationDatasetFromGoldenSamples } from './invoiceDatasetBuilder.js'
 
 const MIN_SAMPLES = 5
 const MAX_SAMPLES = 500
@@ -29,9 +31,9 @@ export function buildTrainingDataset(goldenSamples, correctionEvents, learningDa
       },
       expected: {
         documentType: sample.expectedOutput.documentType,
-        itemTypes: (sample.expectedOutput.pozycje || []).map(p => p.itemType || null),
-        shouldAffectInventory: (sample.expectedOutput.pozycje || []).map(p => p.shouldAffectInventory ?? null),
-        productMatches: (sample.expectedOutput.pozycje || []).map(p => p.matchedProductId || null),
+        itemTypes: (sample.expectedOutput.pozycje || []).map(p => p.expectedItemType || p.itemType || null),
+        shouldAffectInventory: (sample.expectedOutput.pozycje || []).map(p => p.expectedShouldAffectInventory ?? p.shouldAffectInventory ?? null),
+        productMatches: (sample.expectedOutput.pozycje || []).map(p => p.expectedProductId || p.matchedProductId || null),
       },
       source: 'golden',
     })
@@ -75,7 +77,7 @@ export function buildTrainingDataset(goldenSamples, correctionEvents, learningDa
 
 // ── Model evaluation ──────────────────────────────────────────────────────────
 
-export function evaluateModelConfig(config, dataset) {
+export function evaluateModelConfig(config, dataset, products = []) {
   const empty = {
     documentTypeAccuracy: 0,
     itemTypeAccuracy: 0,
@@ -91,6 +93,8 @@ export function evaluateModelConfig(config, dataset) {
 
   if (!dataset || dataset.length === 0) return empty
 
+  const productsList = Array.isArray(products) ? products : []
+
   let docTypeCorrect = 0
   let docTypeTotal = 0
   let itemTypeCorrect = 0
@@ -99,8 +103,35 @@ export function evaluateModelConfig(config, dataset) {
   let inventoryTotal = 0
   let serviceToInventoryErrors = 0
   let falseInventoryEffectErrors = 0
+  let productTop1Correct = 0
+  let productTop3Correct = 0
+  let productMatchTotal = 0
 
   for (const sample of dataset) {
+    // Typed items from extractEvaluationDatasetFromGoldenSamples
+    if (sample.task === 'product_match') {
+      if (!sample.input?.rawName || !sample.expected?.productId || productsList.length === 0) continue
+      try {
+        const ranking = rankProductCandidates(
+          sample.input.rawName,
+          productsList,
+          {
+            itemType: sample.input.itemType,
+            unit: sample.input.jednostka,
+            supplierNip: sample.input.supplierNip,
+            cenaNetto: sample.input.cenaNetto,
+          },
+          config
+        )
+        productMatchTotal++
+        const topIds = ranking.candidates.map(c => c.product?.id)
+        if (topIds[0] === sample.expected.productId) productTop1Correct++
+        if (topIds.slice(0, 3).includes(sample.expected.productId)) productTop3Correct++
+      } catch { /* ignore */ }
+      continue
+    }
+
+    // Legacy flat dataset items (from buildTrainingDataset)
     const expectedDocType = sample.expected?.documentType
     const inputDocType = sample.input?.documentType
 
@@ -121,7 +152,6 @@ export function evaluateModelConfig(config, dataset) {
       if (!expectedItemType) continue
       itemTypeTotal++
 
-      // Use document-level heuristic to predict itemType
       const isServiceDoc = SERVICE_DOC_TYPES.has(expectedDocType)
       const predictedItemType = isServiceDoc ? 'service_item' :
         (expectedItemType === 'inventory_item' ? 'inventory_item' : 'cost_item')
@@ -143,8 +173,8 @@ export function evaluateModelConfig(config, dataset) {
     documentTypeAccuracy: docTypeTotal > 0 ? docTypeCorrect / docTypeTotal : 0,
     itemTypeAccuracy: itemTypeTotal > 0 ? itemTypeCorrect / itemTypeTotal : 0,
     inventoryEffectAccuracy: inventoryTotal > 0 ? inventoryCorrect / inventoryTotal : 0,
-    productMatchTop1Accuracy: 0,
-    productMatchTop3Accuracy: 0,
+    productMatchTop1Accuracy: productMatchTotal > 0 ? productTop1Correct / productMatchTotal : 0,
+    productMatchTop3Accuracy: productMatchTotal > 0 ? productTop3Correct / productMatchTotal : 0,
     falsePositiveRate: itemTypeTotal > 0 ? falseInventoryEffectErrors / Math.max(1, itemTypeTotal) : 0,
     falseInventoryEffectRate: inventoryTotal > 0 ? falseInventoryEffectErrors / inventoryTotal : 0,
     serviceToInventoryErrorRate: docTypeTotal > 0 ? serviceToInventoryErrors / docTypeTotal : 0,
@@ -155,24 +185,35 @@ export function evaluateModelConfig(config, dataset) {
 
 // ── Model training (grid search calibration) ─────────────────────────────────
 
-export async function trainInvoiceModel() {
+export async function trainInvoiceModel(products = []) {
   const goldenSamples = getGoldenSamples()
   const correctionEvents = getCorrectionEvents()
   const learningData = getInvoiceTrainingExamples()
+  const productsList = Array.isArray(products) ? products : []
 
   const dataset = buildTrainingDataset(goldenSamples, correctionEvents, learningData)
 
-  if (dataset.length < MIN_SAMPLES) {
+  // Add typed product_match items if we have products and golden samples with expectedProductId
+  const typedItems = extractEvaluationDatasetFromGoldenSamples(goldenSamples, productsList)
+  const productMatchItems = typedItems.filter(i => i.task === 'product_match')
+  const fullDataset = [...dataset, ...productMatchItems].slice(0, MAX_SAMPLES)
+
+  const hasProductMatchItems = productMatchItems.length > 0
+  const productMatchWarning = hasProductMatchItems && productsList.length === 0
+    ? `Uwaga: dataset ma ${productMatchItems.length} pozycji product_match, ale nie podano listy produktów — Top1/Top3 będzie 0.`
+    : null
+
+  if (fullDataset.length < MIN_SAMPLES) {
     return {
       success: false,
-      warning: `Za mało danych. Dodaj minimum ${MIN_SAMPLES} golden samples/corrections. Masz ${dataset.length}.`,
-      dataset,
-      datasetSize: dataset.length,
+      warning: `Za mało danych. Dodaj minimum ${MIN_SAMPLES} golden samples/corrections. Masz ${fullDataset.length}.`,
+      dataset: fullDataset,
+      datasetSize: fullDataset.length,
     }
   }
 
   const currentConfig = getInvoiceModelConfig()
-  const baseMetrics = evaluateModelConfig(currentConfig, dataset)
+  const baseMetrics = evaluateModelConfig(currentConfig, fullDataset, productsList)
 
   // Grid search — limited to avoid browser hang
   const grid = {
@@ -200,7 +241,7 @@ export async function trainInvoiceModel() {
               inventoryEffectConfidence: invConf,
             },
           }
-          const metrics = evaluateModelConfig(candidateConfig, dataset)
+          const metrics = evaluateModelConfig(candidateConfig, fullDataset, productsList)
           const score = _calcScore(metrics)
           if (score > bestScore) {
             bestScore = score
@@ -211,7 +252,7 @@ export async function trainInvoiceModel() {
     }
   }
 
-  const trainedMetrics = evaluateModelConfig(bestConfig, dataset)
+  const trainedMetrics = evaluateModelConfig(bestConfig, fullDataset, productsList)
   const trainedConfig = {
     ...bestConfig,
     trainedAt: new Date().toISOString(),
@@ -227,8 +268,9 @@ export async function trainInvoiceModel() {
     trainedConfig,
     baseMetrics,
     trainedMetrics,
-    dataset,
-    datasetSize: dataset.length,
+    dataset: fullDataset,
+    datasetSize: fullDataset.length,
+    productMatchWarning,
   }
 }
 

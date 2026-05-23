@@ -1188,6 +1188,37 @@ export default function Faktury() {
                   Dodaj {nExtractedItems.filter(i => !i.skipped).length} pozycji do faktury →
                 </button>
               </div>
+              {import.meta.env.DEV && nExtractedItems.length > 0 && nExtractionResult && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { buildGoldenSampleFromApprovedInvoice } = await import('../utils/invoiceDatasetBuilder')
+                        const { saveGoldenSample } = await import('../utils/invoiceGoldenSamples')
+                        const sampleName = window.prompt('Nazwa golden sample:', `${nExtractionResult.fields?.kontrahent_nazwa || 'Faktura'} ${new Date().toLocaleDateString('pl-PL')}`)
+                        if (sampleName === null) return
+                        const sample = buildGoldenSampleFromApprovedInvoice(
+                          nExtractionResult,
+                          nExtractedItems.filter(i => !i.skipped),
+                          { name: sampleName }
+                        )
+                        const result = saveGoldenSample(sample)
+                        if (result.success) alert(`Golden sample "${sampleName}" zapisany (DEV).`)
+                        else alert('Błąd: ' + result.error)
+                      } catch (e) {
+                        alert('Błąd: ' + String(e))
+                      }
+                    }}
+                    style={{
+                      padding: '5px 12px', background: '#059669', color: '#fff',
+                      border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                    }}
+                  >
+                    [DEV] Zapisz jako golden sample
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             /* Phase 2: Form + positions */
