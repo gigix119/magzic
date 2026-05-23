@@ -476,6 +476,7 @@ export default function Faktury() {
       setNExtractStatus('Odczytuję tekst z dokumentu…')
 
       const result = await extractFromFile(nFile)
+      result._fileName = nFile.name
 
       if (result.source === 'pdf_text') {
         setNExtractStatus('Znaleziono tekst w PDF — sprawdź dane')
@@ -972,6 +973,14 @@ export default function Faktury() {
                   <strong>Faktura mieszana</strong> — tylko pozycje oznaczone jako <strong>Towar</strong> wpłyną na magazyn.
                 </div>
               )}
+              {nExtractionResult?.debug?.ksefComarchDetected && (
+                <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#78350f' }}>
+                  <strong>Wykryto dokument KSeF/Comarch</strong> — pominięto metadane systemowe (Uwagi/Remarks, Nr wiersza itp.), które nie są pozycjami faktury.
+                  {nExtractionResult.debug.ksefMetadataBlocked > 0 && (
+                    <span> Zablokowano {nExtractionResult.debug.ksefMetadataBlocked} linie metadanych.</span>
+                  )}
+                </div>
+              )}
               {/* Quality metrics panel */}
               {qualityMetrics && (
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 12 }}>
@@ -1221,8 +1230,14 @@ export default function Faktury() {
                               step="0.01"
                               value={item.unitPriceNet}
                               onChange={e => updateExtractedItem(idx, 'unitPriceNet', parseFloat(e.target.value) || 0)}
-                              style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
+                              style={{ ...IS(assignStatus === 'needs_price'), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
                             />
+                            {assignStatus === 'needs_price' && (
+                              <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>Uzupełnij cenę</div>
+                            )}
+                            {item.recoveredAmount && (
+                              <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>Cena odzyskana heurystycznie</div>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
                             {item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
@@ -1270,7 +1285,7 @@ export default function Faktury() {
                 })()}
               </div>
               {import.meta.env.DEV && nExtractedItems.length > 0 && nExtractionResult && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={async () => {
@@ -1297,6 +1312,24 @@ export default function Faktury() {
                     }}
                   >
                     [DEV] Zapisz jako golden sample
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { buildInvoiceDebugExport, downloadInvoiceDebugJson } = await import('../utils/invoiceDebugExport')
+                        const debugData = buildInvoiceDebugExport(nExtractionResult)
+                        downloadInvoiceDebugJson(debugData, nExtractionResult._fileName || 'faktura')
+                      } catch (e) {
+                        alert('Błąd eksportu: ' + String(e))
+                      }
+                    }}
+                    style={{
+                      padding: '5px 12px', background: '#2563eb', color: '#fff',
+                      border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                    }}
+                  >
+                    [DEV] Eksportuj debug odczytu
                   </button>
                 </div>
               )}

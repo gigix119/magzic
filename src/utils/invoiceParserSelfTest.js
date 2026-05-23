@@ -24,6 +24,20 @@ import {
   validatePositionBeforeInvoiceSave,
   preparePositionsForInvoiceSave,
 } from './invoicePositionValidator.js'
+import {
+  isLikelyInventoryProductName,
+  estimateProductNameConfidence,
+} from './invoiceProductLineHeuristics.js'
+import {
+  extractMonetaryCandidates,
+  chooseBestAmountCandidate,
+  recoverAmountsForItem,
+} from './invoiceAmountRecovery.js'
+import {
+  detectKsefComarchDocument,
+  isKsefMetadataLine,
+  parseKsefComarchItems,
+} from './invoiceKsefComarchParser.js'
 
 function makeRunner() {
   const results = []
@@ -440,6 +454,181 @@ export async function runInvoiceParserSelfTest() {
   const prepared = preparePositionsForInvoiceSave(mixedPositions, fakeTowarList)
   check('validator: preparePositions — 2 ready (inventory OK + service)', prepared.readyToSave.length === 2)
   check('validator: preparePositions — 1 blocked (cena=0)', prepared.blocked.length === 1)
+
+  // ── KSeF/Comarch metadata detection (tests 35–39) ───────────────
+
+  // Test 35: isKsefMetadataLine recognises metadata phrases
+  check('ksef: "Uwagi / Remarks / Nr wiersza" → metadata',
+    isKsefMetadataLine('Uwagi / Remarks / Nr wiersza / Klucz / Key / Wartość / Value Line number'))
+  check('ksef: "Powered by Comarch" → metadata',
+    isKsefMetadataLine('Powered by Comarch ERP'))
+  check('ksef: "faktura ustrukturyzowana" → metadata',
+    isKsefMetadataLine('faktura ustrukturyzowana'))
+  check('ksef: "nr wiersza" → metadata',
+    isKsefMetadataLine('Nr wiersza'))
+  check('ksef: "klucz / key / wartość / value" slash-separated → metadata',
+    isKsefMetadataLine('klucz / key / wartość / value / opis / description'))
+
+  // Test 36: detectKsefComarchDocument requires ≥2 signals
+  const mockLayoutKsef = { pages: [] }
+  check('ksef: detectKsefComarchDocument — 0 signals → false',
+    !detectKsefComarchDocument(mockLayoutKsef, 'zwykła faktura bez metadata'))
+  check('ksef: detectKsefComarchDocument — "comarch" + "ksef" → true',
+    detectKsefComarchDocument(mockLayoutKsef, 'Powered by Comarch ksef'))
+  check('ksef: detectKsefComarchDocument — "nr wiersza" + "klucz" → true',
+    detectKsefComarchDocument(mockLayoutKsef, 'dokument nr wiersza klucz'))
+
+  // ── Product-like heuristics (tests 37–41) ───────────────────────
+
+  // Test 37: isLikelyInventoryProductName
+  check('heuristics: "PRALKA WGG244ZEPL BOSCH" → product-like',
+    isLikelyInventoryProductName('PRALKA WGG244ZEPL BOSCH'))
+  check('heuristics: "SYFON UMYWALKOWY BIAŁY 32MM" → product-like',
+    isLikelyInventoryProductName('SYFON UMYWALKOWY BIAŁY 32MM'))
+  check('heuristics: "BATERIA AAA 4SZT" → product-like',
+    isLikelyInventoryProductName('BATERIA AAA 4SZT'))
+  check('heuristics: "Żarówka E27 9W LED" → product-like',
+    isLikelyInventoryProductName('Żarówka E27 9W LED'))
+  check('heuristics: "Value Line number Opis ZAI opis pola" → NOT product-like',
+    !isLikelyInventoryProductName('Value Line number Opis ZAI opis pola description'))
+
+  // Test 38: metadata lines not product-like
+  check('heuristics: "Nr wiersza / Line number / Klucz / Key" → NOT product-like',
+    !isLikelyInventoryProductName('Nr wiersza / Line number / Klucz / Key / Wartość / Value'))
+  check('heuristics: "Powered by Comarch" → NOT product-like',
+    !isLikelyInventoryProductName('Powered by Comarch ERP'))
+
+  // Test 39: estimateProductNameConfidence
+  check('heuristics: PRALKA BOSCH → confidence > 0.5',
+    estimateProductNameConfidence('PRALKA WGG244ZEPL BOSCH') > 0.5)
+  check('heuristics: trash metadata → confidence = 0',
+    estimateProductNameConfidence('Nr wiersza / Line number') === 0)
+
+  // ── Amount recovery (tests 40–46) ───────────────────────────────
+
+  // Test 40: extractMonetaryCandidates finds prices
+  const cands40 = extractMonetaryCandidates('cena 2 999,00 zł VAT 23%')
+  check('recovery: extractMonetaryCandidates — "2 999,00" → found',
+    cands40.some(c => Math.abs(c.value - 2999) < 0.01))
+
+  const cands40b = extractMonetaryCandidates('1234,56')
+  check('recovery: extractMonetaryCandidates — "1234,56" → found',
+    cands40b.some(c => Math.abs(c.value - 1234.56) < 0.01))
+
+  // Test 41: NIP not treated as price
+  const cands41 = extractMonetaryCandidates('NIP: 5270005984')
+  check('recovery: NIP 5270005984 → not extracted as price candidate',
+    cands41.every(c => c.value !== 5270005984))
+
+  // Test 42: date not treated as price
+  const cands42 = extractMonetaryCandidates('data: 2026-05-23')
+  const hasYear = cands42.some(c => c.value === 2026)
+  check('recovery: year "2026" from date → filtered in chooseBestAmountCandidate',
+    chooseBestAmountCandidate(
+      cands42.filter(c => c.value === 2026).map(c => ({ ...c, distFromItem: 0 }))
+    ) === null)
+
+  // Test 43: IBAN-like number not extracted
+  const cands43 = extractMonetaryCandidates('IBAN PL61 1090 1014 0000 0712 1981 2874')
+  check('recovery: IBAN → no single candidate with value > 1e10',
+    cands43.every(c => c.value < 1e10))
+
+  // Test 44: chooseBestAmountCandidate prefers decimal values
+  const candsMixed = [
+    { value: 1, distFromItem: 0, lineText: '' },
+    { value: 2999.00, distFromItem: 1, lineText: '' },
+    { value: 23, distFromItem: 0, lineText: '' },
+  ]
+  const best44 = chooseBestAmountCandidate(candsMixed)
+  check('recovery: chooseBest — prefers 2999.00 over integer 1 or 23',
+    best44?.value === 2999)
+
+  // Test 45: recoverAmountsForItem — finds price in nearby line
+  const mockLayout = [
+    { text: 'PRALKA WGG244ZEPL BOSCH', y: 500 },
+    { text: '1 szt', y: 490 },
+    { text: '2 999,00 zł', y: 480 },
+  ]
+  const itemToRecover = { rawName: 'PRALKA WGG244ZEPL BOSCH', ilosc: 1, cenaNetto: 0 }
+  const recovered45 = recoverAmountsForItem(itemToRecover, mockLayout)
+  check('recovery: recoverAmountsForItem — finds 2999.00 from nearby line',
+    recovered45 !== null && Math.abs(recovered45.recoveredValue - 2999) < 0.01)
+  check('recovery: recoverAmountsForItem — includes warning text',
+    recovered45?.warning?.includes('heurystycznie'))
+
+  // Test 46: item with cena=0 but wartoscNetto=2999 → getAssignmentStatus needs_price
+  const itemZeroPrice = {
+    rawName: 'PRALKA WGG244ZEPL BOSCH',
+    itemType: 'inventory_item',
+    unitPriceNet: 0,
+    cenaNetto: 0,
+    matchedProductId: 'tid-syfon',
+    matchScore: 1.0,
+    skipped: false,
+  }
+  check('recovery: item cenaNetto=0 → needs_price (not ready)',
+    getAssignmentStatus(itemZeroPrice, fakeTowarList) === 'needs_price')
+
+  // ── KSeF pipeline (tests 47–50) ──────────────────────────────────
+
+  // Test 47: parseKsefComarchItems — metadata lines skipped
+  const ksefLayoutWithMetadata = {
+    pages: [{
+      pageNum: 1,
+      lines: [
+        { text: 'FAKTURA VAT', items: [] },
+        { text: 'Uwagi / Remarks / Nr wiersza / Klucz / Key', items: [] },
+        { text: 'PRALKA WGG244ZEPL BOSCH', items: [] },
+        { text: '2 999,00', items: [] },
+        { text: 'Powered by Comarch', items: [] },
+      ],
+    }],
+  }
+  const ksefItems47 = parseKsefComarchItems(ksefLayoutWithMetadata, {})
+  check('ksef pipeline: metadata lines NOT in parsed items',
+    !ksefItems47.some(i => isKsefMetadataLine(i.rawName || '')))
+  check('ksef pipeline: PRALKA found as item',
+    ksefItems47.some(i => (i.rawName || '').toUpperCase().includes('PRALKA')))
+
+  // Test 48: KSeF item without price → needs_price (not ready)
+  const ksefItemNoCena = {
+    rawName: 'PRALKA WGG244ZEPL BOSCH',
+    itemType: 'inventory_item',
+    unitPriceNet: 0,
+    cenaNetto: 0,
+    matchedProductId: null,
+    skipped: false,
+  }
+  check('ksef pipeline: KSeF item without price → needs_price',
+    getAssignmentStatus(ksefItemNoCena, fakeTowarList) === 'needs_product')
+
+  // Test 49: KSeF item with recovered price → still needs review (matchScore = 0)
+  const ksefItemWithPrice = {
+    rawName: 'PRALKA WGG244ZEPL BOSCH',
+    itemType: 'inventory_item',
+    unitPriceNet: 2999,
+    cenaNetto: 2999,
+    matchedProductId: 'tid-syfon',
+    matchScore: 0,
+    recoveredAmount: true,
+    skipped: false,
+  }
+  const status49 = getAssignmentStatus(ksefItemWithPrice, fakeTowarList)
+  check('ksef pipeline: KSeF item with price + matchScore=0 → not ready',
+    status49 !== 'ready')
+
+  // ── Save guard regression (tests 50–54, same as original 29–34) ──
+
+  check('save guard regression: validatePosition cena=0 → not ok',
+    !validatePositionBeforeInvoiceSave({ nazwa: 'Syfon', cena_netto: 0, ilosc: 1, _towarId: 'tid-syfon', matchScore: 1.0 }, fakeTowarList).ok)
+  check('save guard regression: validatePosition brak towar → not ok',
+    !validatePositionBeforeInvoiceSave({ nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, _towarId: null, matchScore: 0 }, fakeTowarList).ok)
+  check('save guard regression: validatePosition produkt "a" → not ok',
+    !validatePositionBeforeInvoiceSave({ nazwa: 'coś', cena_netto: 19.99, ilosc: 1, _towarId: 'tid-a', matchScore: 1.0 }, fakeTowarList).ok)
+  check('save guard regression: prawidłowa pozycja → ok',
+    validatePositionBeforeInvoiceSave({ nazwa: 'Syfon', cena_netto: 19.99, ilosc: 1, _towarId: 'tid-syfon', matchScore: 1.0 }, fakeTowarList).ok)
+  check('save guard regression: service_item + cena > 0 → ok (service_cost is ready)',
+    isReadyToSave(getAssignmentStatus({ rawName: 'Abonament', itemType: 'service_item', shouldAffectInventory: false, unitPriceNet: 52.85, skipped: false }, fakeTowarList)))
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length

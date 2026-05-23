@@ -7,6 +7,8 @@ import { getTemplateForSupplier, saveTemplateFromExtraction, findSupplierTemplat
 import { validateInvoiceExtraction, calculateConfidence } from './invoiceValidation.js'
 import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
+import { detectKsefComarchDocument, parseKsefComarchItems, isKsefMetadataLine } from './invoiceKsefComarchParser.js'
+import { recoverAmountsForItem } from './invoiceAmountRecovery.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
@@ -136,6 +138,9 @@ export async function extractFromFile(file) {
       return result
     }
 
+    // Store layout reference for DEV debug export
+    result._debugLayout = layout
+
     // 2. Structural analysis
     let structure = { pozycje: [], warnings: [] }
     try {
@@ -235,6 +240,63 @@ export async function extractFromFile(file) {
       pozycje = parseInvoiceItems(layout.fullText)
     }
 
+    // 7.5. KSeF/Comarch fallback — add missing product lines
+    try {
+      const ksefDetected = detectKsefComarchDocument(layout, layout.fullText)
+      result.debug.ksefComarchDetected = ksefDetected
+      if (ksefDetected) {
+        const ksefItems = parseKsefComarchItems(layout)
+        result.debug.ksefItemsFound = ksefItems.length
+        // Merge: add KSeF items not already found by standard parser
+        const existingNames = new Set(
+          pozycje.map(p => (p.rawName || '').toLowerCase().trim().slice(0, 30))
+        )
+        for (const ki of ksefItems) {
+          const kName = (ki.rawName || '').toLowerCase().trim().slice(0, 30)
+          if (!existingNames.has(kName)) {
+            pozycje.push(makeItem(ki))
+          }
+        }
+      }
+    } catch (e) {
+      result.debug.ksefParserError = String(e)
+    }
+
+    // 7.6. Amount recovery for items with cenaNetto=0
+    try {
+      const allLayoutLines = layout.pages.flatMap(p => p.lines || [])
+      let recoveryAttempts = 0
+      for (const item of pozycje) {
+        if ((item.cenaNetto || 0) > 0) continue
+
+        // Simple case: wartoscNetto > 0 — derive unit price
+        const wn = item.wartoscNetto || item.totalNet || 0
+        const qty = item.ilosc || item.quantity || 1
+        if (wn > 0 && qty > 0) {
+          item.cenaNetto = wn / qty
+          item.unitPriceNet = item.cenaNetto
+          item.recoveredAmount = true
+          item.warnings = [...(item.warnings || []), 'Cena wyliczona z wartości — sprawdź przed zatwierdzeniem.']
+          continue
+        }
+
+        // Complex case: search nearby layout lines
+        recoveryAttempts++
+        const recovery = recoverAmountsForItem(item, allLayoutLines)
+        if (recovery) {
+          item.cenaNetto = recovery.recoveredValue
+          item.unitPriceNet = recovery.recoveredValue
+          item.wartoscNetto = recovery.recoveredValue * qty
+          item.totalNet = item.wartoscNetto
+          item.recoveredAmount = true
+          item.warnings = [...(item.warnings || []), recovery.warning]
+        }
+      }
+      result.debug.amountRecoveryAttempts = recoveryAttempts
+    } catch (e) {
+      result.debug.amountRecoveryError = String(e)
+    }
+
     // 8. Document classification
     try {
       result.documentType = classifyDocument(layout.fullText, tableCandidates)
@@ -245,9 +307,18 @@ export async function extractFromFile(file) {
 
     // 9. Filter forbidden lines, classify each item, apply supplier template rules
     const filteredPozycje = []
+    const ignoredLines = []
     for (let poz of pozycje) {
       const ctx = { hasPrice: poz.cenaNetto > 0, hasUnit: !!(poz.jednostka) }
-      if (isForbiddenAsInvoiceItem(poz.rawName || '', ctx)) continue
+      const rawName = poz.rawName || ''
+      if (isForbiddenAsInvoiceItem(rawName, ctx)) {
+        ignoredLines.push({ text: rawName, reason: 'forbidden' })
+        continue
+      }
+      if (isKsefMetadataLine(rawName)) {
+        ignoredLines.push({ text: rawName, reason: 'ksef_metadata' })
+        continue
+      }
 
       const { itemType, shouldAffectInventory } = classifyItem(poz, result.documentType)
       poz.itemType = itemType
@@ -269,6 +340,8 @@ export async function extractFromFile(file) {
     }
     pozycje = filteredPozycje
     result.fields.pozycje = pozycje
+    result.debug.ignoredLines = ignoredLines
+    result.debug.ksefMetadataBlocked = ignoredLines.filter(l => l.reason === 'ksef_metadata').length
 
     // 10. Preliminary confidence (needed for validateInvoiceExtraction thresholds)
     let conf = 0
