@@ -7,6 +7,10 @@ import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { calculateConfidence } from './invoiceValidation.js'
 import { findSupplierTemplate, applyItemRulesFromTemplate } from './invoiceSupplierTemplates.js'
 import { advancedSimilarity } from './productNormalizer.js'
+import { DEFAULT_INVOICE_MODEL_CONFIG } from './invoiceModelConfig.js'
+import { extractItemFeatures, extractProductMatchFeatures } from './invoiceFeatureExtractor.js'
+import { scoreItemType, scoreShouldAffectInventory, scoreProductCandidate, rankProductCandidates } from './invoiceScoringEngine.js'
+import { buildTrainingDataset, evaluateModelConfig } from './invoiceModelTrainer.js'
 
 function makeRunner() {
   const results = []
@@ -139,6 +143,103 @@ export async function runInvoiceParserSelfTest() {
 
   const unrelated = advancedSimilarity('Wkręt do drewna 4x40mm', { nazwa: 'Żarówka LED E27 9W' })
   check('advancedSimilarity: unrelated → < 0.5', unrelated.score < 0.5)
+
+  // ── Model self-tests (12 checks) ─────────────────────────────────
+
+  // Test 1: trainInvoiceModel warning przy <5 samples
+  const emptyDataset = buildTrainingDataset([], [], [])
+  const metricsEmpty = evaluateModelConfig(DEFAULT_INVOICE_MODEL_CONFIG, emptyDataset)
+  check('model: empty dataset → totalSamples=0', metricsEmpty.totalSamples === 0)
+
+  // Test 2: evaluateModelConfig liczy metryki
+  const sampleDataset = buildTrainingDataset([
+    {
+      id: 'gs1', name: 'Test sample',
+      documentType: 'inventory_purchase_invoice',
+      expectedOutput: {
+        documentType: 'inventory_purchase_invoice',
+        pozycje: [{ itemType: 'inventory_item', shouldAffectInventory: true }],
+      },
+    },
+  ], [], [])
+  const metrics1 = evaluateModelConfig(DEFAULT_INVOICE_MODEL_CONFIG, sampleDataset)
+  check('model: evaluateModelConfig liczy totalSamples', metrics1.totalSamples === sampleDataset.length)
+
+  // Test 3: service invoice nie może dostać shouldAffectInventory=true
+  const serviceItemFeatures = extractItemFeatures(
+    { rawName: 'Usługi telekomunikacyjne', ilosc: 1, cenaNetto: 52.85, jednostka: 'usł.' }
+  )
+  const invResult = scoreShouldAffectInventory(serviceItemFeatures, 'telecom_invoice', DEFAULT_INVOICE_MODEL_CONFIG)
+  check('model: telecom invoice → shouldAffectInventory=false', invResult.shouldAffectInventory === false)
+
+  // Test 4: Play/telecom nie może matchować do towaru
+  const playRanking = rankProductCandidates(
+    'Usługi telekomunikacyjne abonament',
+    [{ id: 'p1', nazwa: 'Syfon umywalkowy' }],
+    { itemType: 'service_item' },
+    DEFAULT_INVOICE_MODEL_CONFIG
+  )
+  check('model: service_item → brak rankingu produktów', playRanking.candidates.length === 0)
+
+  // Test 5: Brico-style inventory pasuje do syfon/bateria/listwa
+  const bricoFeatures = extractItemFeatures(
+    { rawName: 'SYFON UMYWALKOWY 32MM', ilosc: 2, cenaNetto: 19.99, jednostka: 'szt' }
+  )
+  check('model: brico-style item → isInventoryKeyword=true', bricoFeatures.isInventoryKeyword === true)
+  const bricoScoring = scoreItemType(bricoFeatures, DEFAULT_INVOICE_MODEL_CONFIG)
+  check('model: brico-style → itemType inventory_item lub cost_item', ['inventory_item', 'cost_item'].includes(bricoScoring.itemType))
+
+  // Test 6: G9 nie może być strong match do E27
+  const g9Features = extractProductMatchFeatures('Żarówka G9 3W', { nazwa: 'Żarówka E27 9W' })
+  check('model: G9 vs E27 → techParamConflict=true', g9Features.techParamConflict === true)
+  const g9Score = scoreProductCandidate(g9Features, DEFAULT_INVOICE_MODEL_CONFIG)
+  check('model: G9 vs E27 → score < strong threshold', g9Score.score < DEFAULT_INVOICE_MODEL_CONFIG.thresholds.productStrongMatch)
+
+  // Test 7: 750ml i 0.75L — oba mają tech param ml/l (similar domain)
+  const f750 = extractProductMatchFeatures('Płyn 750ml', { nazwa: 'Płyn do naczyń 750ml' })
+  check('model: 750ml vs 750ml → techParamMatch=true', f750.techParamMatch === true)
+
+  // Test 8: serviceToInventoryErrorRate wykrywa błędy
+  const badDataset = buildTrainingDataset([
+    {
+      id: 'bad1', name: 'Bad telecom',
+      documentType: 'telecom_invoice',
+      expectedOutput: {
+        documentType: 'inventory_purchase_invoice',
+        pozycje: [{ itemType: 'inventory_item', shouldAffectInventory: true }],
+      },
+    },
+  ], [], [])
+  const badMetrics = evaluateModelConfig(DEFAULT_INVOICE_MODEL_CONFIG, badDataset)
+  check('model: serviceToInventoryErrorRate > 0 dla błędnego sampla', badMetrics.serviceToInventoryErrorRate > 0)
+
+  // Test 9: shadow mode — scoreItemType NIE zmienia itemType w oryginalnym obiekcie
+  const originalItem = { rawName: 'Syfon', ilosc: 2, cenaNetto: 19.99, jednostka: 'szt' }
+  const origItemType = originalItem.itemType
+  const featsCopy = extractItemFeatures(originalItem)
+  scoreItemType(featsCopy, DEFAULT_INVOICE_MODEL_CONFIG)
+  check('model: shadow mode nie mutuje oryginalnego itemu', originalItem.itemType === origItemType)
+
+  // Test 10: active mode nadal przechodzi przez scoreShouldAffectInventory guard
+  const activeConfig = { ...DEFAULT_INVOICE_MODEL_CONFIG, mode: 'active' }
+  const serviceGuardResult = scoreShouldAffectInventory(
+    extractItemFeatures({ rawName: 'Abonament internetowy', ilosc: 1, cenaNetto: 100, jednostka: 'usł.' }),
+    'utility_invoice',
+    activeConfig
+  )
+  check('model: active mode — utility_invoice nadal blokuje inventory', serviceGuardResult.shouldAffectInventory === false)
+
+  // Test 11: import/export model config działa (roundtrip)
+  const { exportInvoiceModelConfig, importInvoiceModelConfig, getInvoiceModelConfig } = await import('./invoiceModelConfig.js')
+  const exported = exportInvoiceModelConfig()
+  check('model: export config → valid JSON string', typeof exported === 'string' && exported.includes('"version"'))
+  const badImport = importInvoiceModelConfig('{ INVALID JSON !!!')
+  check('model: import nieprawidłowego JSON → success=false bez wyjątku', badImport.success === false)
+
+  // Test 12: uszkodzony config → fallback do DEFAULT
+  const cfg = getInvoiceModelConfig()
+  check('model: getInvoiceModelConfig zwraca obiekt z mode', typeof cfg.mode === 'string')
+  check('model: getInvoiceModelConfig zwraca valid mode', ['off', 'shadow', 'active'].includes(cfg.mode))
 
   // ── Build summary ────────────────────────────────────────────────
   const passed = results.filter(r => r.passed).length

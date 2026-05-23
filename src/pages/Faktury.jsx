@@ -19,6 +19,8 @@ import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
 import { calculateInvoiceQualityMetrics, getQualityBadge, shouldRequireManualReview, getQualityWarnings } from '../utils/invoiceQualityMetrics'
 import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
+import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
+import { rankProductCandidates } from '../utils/invoiceScoringEngine'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp,
@@ -518,7 +520,40 @@ export default function Faktury() {
               skipped: false,
             }
           })
-          setNExtractedItems(matched)
+          // Shadow model: enrich items with model suggestions (does NOT change matched data)
+          const modelCfg = getInvoiceModelConfig()
+          const enriched = modelCfg.mode !== 'off' ? matched.map(item => {
+            try {
+              const ranking = rankProductCandidates(
+                item.rawName || '',
+                towary,
+                {
+                  itemType: item.itemType,
+                  unit: item.unit || item.jednostka,
+                  supplierNip: result.fields?.kontrahent_nip,
+                  cenaNetto: item.unitPriceNet ?? item.cenaNetto,
+                },
+                modelCfg
+              )
+              const modelBest = ranking.best
+              const modelScore = modelBest?.score ?? 0
+              const legacyMatchId = item.matchedProductId
+              const modelBestId = modelBest?.product?.id ?? null
+              const matchDisagreement =
+                item.shouldAffectInventory !== false &&
+                legacyMatchId && modelBestId &&
+                legacyMatchId !== modelBestId &&
+                modelScore >= modelCfg.thresholds.productReviewMatch
+              return {
+                ...item,
+                _modelScore: modelScore,
+                _modelLabel: modelBest?.confidenceLabel ?? null,
+                _modelCandidatesCount: ranking.candidates.filter(c => c.score >= modelCfg.thresholds.productReviewMatch).length,
+                _matchDisagreement: matchDisagreement,
+              }
+            } catch { return item }
+          }) : matched
+          setNExtractedItems(enriched)
           setNShowExtracted(true)
           result.warnings.forEach(w => addToast(w, 'info'))
           if (result.confidence >= 40) {
@@ -1061,6 +1096,26 @@ export default function Faktury() {
                               )}
                               {item.warnings?.length > 0 && (
                                 <span title={item.warnings.join('; ')} style={{ background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}>⚠ {item.warnings.length}</span>
+                              )}
+                              {item._modelLabel && item.shouldAffectInventory !== false && (
+                                <span
+                                  title={`Model lokalny: ${item._modelLabel}${item._modelCandidatesCount > 0 ? `, ${item._modelCandidatesCount} kandydatów` : ''}`}
+                                  style={{
+                                    background: item._modelLabel === 'strong' ? '#dcfce7' : item._modelLabel === 'review' ? '#fef9c3' : '#f3f4f6',
+                                    color: item._modelLabel === 'strong' ? '#166534' : item._modelLabel === 'review' ? '#854d0e' : '#6b7280',
+                                    borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help',
+                                  }}
+                                >
+                                  M:{item._modelLabel}
+                                </span>
+                              )}
+                              {item._matchDisagreement && (
+                                <span
+                                  title="Parser i model nie są zgodne — sprawdź dopasowanie ręcznie."
+                                  style={{ background: '#fef2f2', color: '#dc2626', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}
+                                >
+                                  ⚡ niezgodność
+                                </span>
                               )}
                             </div>
                           </td>
