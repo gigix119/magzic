@@ -1,17 +1,22 @@
 import { supabase } from '../supabase'
 
-export async function getTowarStanLaczny(towarId) {
-  const { data } = await supabase
-    .from('stany_magazynowe')
+const NULL_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+
+function wq(tableName, workspaceId) {
+  return supabase.from(tableName).eq('workspace_id', workspaceId ?? NULL_WORKSPACE_ID)
+}
+
+export async function getTowarStanLaczny(towarId, workspaceId) {
+  const { data } = await wq('stany_magazynowe', workspaceId)
     .select('ilosc')
     .eq('towar_id', towarId)
   return (data || []).reduce((s, r) => s + Number(r.ilosc), 0)
 }
 
-export async function getMagazynSummary(magazynId) {
+export async function getMagazynSummary(magazynId, workspaceId) {
   const [{ data: stany }, { data: towary }] = await Promise.all([
-    supabase.from('stany_magazynowe').select('towar_id, ilosc').eq('magazyn_id', magazynId).gt('ilosc', 0),
-    supabase.from('towary').select('id, stan_minimalny').eq('aktywny', true),
+    wq('stany_magazynowe', workspaceId).select('towar_id, ilosc').eq('magazyn_id', magazynId).gt('ilosc', 0),
+    wq('towary', workspaceId).select('id, stan_minimalny').eq('aktywny', true),
   ])
 
   const count = (stany || []).length
@@ -28,10 +33,10 @@ export async function getMagazynSummary(magazynId) {
   return { count, total, belowMin }
 }
 
-export async function getAktywneAlerty() {
+export async function getAktywneAlerty(workspaceId) {
   const [{ data: towary }, { data: stanyRaw }] = await Promise.all([
-    supabase.from('towary').select('id, nazwa, stan_minimalny').eq('aktywny', true),
-    supabase.from('stany_magazynowe').select('towar_id, ilosc'),
+    wq('towary', workspaceId).select('id, nazwa, stan_minimalny').eq('aktywny', true),
+    wq('stany_magazynowe', workspaceId).select('towar_id, ilosc'),
   ])
 
   const stanMap = {}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
@@ -42,6 +43,7 @@ function stanBadge(stan, min) {
 
 export default function Towary() {
   const { addToast } = useToast()
+  const { workspaceId, wsQuery, wsData } = useWorkspace()
   const [items, setItems] = useState([])
   const [kategorie, setKategorie] = useState([])
   const [magazyny, setMagazyny] = useState([])
@@ -75,13 +77,14 @@ export default function Towary() {
   const [rowHistoria, setRowHistoria] = useState({})
 
   async function fetchData() {
-    let tQuery = supabase.from('towary').select('*, kategorie(nazwa)').order('nazwa')
+    if (!workspaceId) { setLoading(false); return }
+    let tQuery = wsQuery('towary').select('*, kategorie(nazwa)').order('nazwa')
     if (!pokazZarchiwizowane) tQuery = tQuery.is('archived_at', null)
     const [{ data: t, error: e1 }, { data: k }, { data: m }, { data: s }] = await Promise.all([
       tQuery,
-      supabase.from('kategorie').select('*').order('nazwa'),
-      supabase.from('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
-      supabase.from('stany_magazynowe').select('towar_id, magazyn_id, ilosc, magazyny(nazwa)'),
+      wsQuery('kategorie').select('*').order('nazwa'),
+      wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
+      wsQuery('stany_magazynowe').select('towar_id, magazyn_id, ilosc, magazyny(nazwa)'),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setItems(t || [])
@@ -95,7 +98,7 @@ export default function Towary() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [pokazZarchiwizowane])
+  useEffect(() => { fetchData() }, [pokazZarchiwizowane, workspaceId])
 
   useEffect(() => {
     window.addEventListener('inventory-updated', fetchData)
@@ -198,7 +201,7 @@ export default function Towary() {
       ({ error } = await supabase.from('towary').update(payload).eq('id', editItem.id))
       newId = editItem.id
     } else {
-      const { data, error: e } = await supabase.from('towary').insert([payload]).select('id').single()
+      const { data, error: e } = await supabase.from('towary').insert([{ ...payload, ...wsData() }]).select('id').single()
       error = e
       newId = data?.id
     }
@@ -232,7 +235,7 @@ export default function Towary() {
 
   async function loadKorektaStan(towarId, magazynId) {
     if (!magazynId) { setActionKorektaStan(null); return }
-    const { data } = await supabase.from('stany_magazynowe')
+    const { data } = await wsQuery('stany_magazynowe')
       .select('ilosc').eq('towar_id', towarId).eq('magazyn_id', magazynId).maybeSingle()
     setActionKorektaStan(data?.ilosc ?? 0)
   }

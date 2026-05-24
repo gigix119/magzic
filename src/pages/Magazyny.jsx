@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
@@ -33,6 +34,7 @@ function StanBadge({ ilosc, min }) {
 
 export default function Magazyny() {
   const { addToast } = useToast()
+  const { workspaceId, wsQuery, wsData } = useWorkspace()
   const [magazyny, setMagazyny] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -51,8 +53,8 @@ export default function Magazyny() {
   const [aSaving, setASaving] = useState(false)
 
   async function loadMagazyny() {
-    const { data: mag, error: magError } = await supabase
-      .from('magazyny')
+    if (!workspaceId) { setLoading(false); return }
+    const { data: mag, error: magError } = await wsQuery('magazyny')
       .select('id, nazwa, lokalizacja, opis, aktywny')
       .eq('aktywny', true)
       .order('nazwa')
@@ -64,8 +66,7 @@ export default function Magazyny() {
       return
     }
 
-    const { data: stany, error: stanyError } = await supabase
-      .from('stany_magazynowe')
+    const { data: stany, error: stanyError } = await wsQuery('stany_magazynowe')
       .select(`
         id,
         towar_id,
@@ -122,7 +123,7 @@ export default function Magazyny() {
     const handler = () => loadMagazyny()
     window.addEventListener('inventory-updated', handler)
     return () => window.removeEventListener('inventory-updated', handler)
-  }, [])
+  }, [workspaceId])
 
   function openCreate() { setEditItem(null); setForm(empty); setErrors({}); setShowModal(true) }
 
@@ -148,7 +149,7 @@ export default function Magazyny() {
     if (editItem) {
       ({ error } = await supabase.from('magazyny').update(payload).eq('id', editItem.id))
     } else {
-      ({ error } = await supabase.from('magazyny').insert([payload]))
+      ({ error } = await supabase.from('magazyny').insert([{ ...payload, ...wsData() }]))
     }
     if (error) { console.error(error); addToast(error.message, 'error') }
     else { addToast(editItem ? 'Magazyn zaktualizowany' : 'Magazyn dodany', 'success'); setShowModal(false); loadMagazyny() }

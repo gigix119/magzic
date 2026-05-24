@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './context/ToastContext'
 import { AuthProvider } from './context/AuthContext'
+import { WorkspaceProvider } from './context/WorkspaceContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import Landing from './pages/Landing'
@@ -20,22 +21,24 @@ export default function App() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/towary" element={<Towary />} />
-                <Route path="/magazyny" element={<Magazyny />} />
-                <Route path="/kontrahenci" element={<Kontrahenci />} />
-                <Route path="/faktury" element={<Faktury />} />
-                <Route path="/pakiety" element={<Pakiety />} />
-                <Route path="/alerty" element={<Alerty />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+          <WorkspaceProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/towary" element={<Towary />} />
+                  <Route path="/magazyny" element={<Magazyny />} />
+                  <Route path="/kontrahenci" element={<Kontrahenci />} />
+                  <Route path="/faktury" element={<Faktury />} />
+                  <Route path="/pakiety" element={<Pakiety />} />
+                  <Route path="/alerty" element={<Alerty />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </WorkspaceProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>

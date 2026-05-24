@@ -2,33 +2,36 @@ import { supabase } from '../supabase'
 import { refreshInventory } from './events'
 
 const DEV = import.meta.env.DEV
+const NULL_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
 
 // ── Stan helpers ───────────────────────────────────────────────
 
-async function getStan(towarId, magazynId) {
-  const { data, error } = await supabase
+async function getStan(towarId, magazynId, workspaceId) {
+  let q = supabase
     .from('stany_magazynowe')
     .select('id, ilosc')
     .eq('towar_id', towarId)
     .eq('magazyn_id', magazynId)
-    .maybeSingle()
+  if (workspaceId) q = q.eq('workspace_id', workspaceId)
+  const { data, error } = await q.maybeSingle()
   if (error) console.error('getStan error:', error)
   return data
 }
 
-async function insertRuch(fields) {
-  const { error } = await supabase.from('ruchy_magazynowe').insert([fields])
+async function insertRuch(fields, workspaceId) {
+  const payload = workspaceId ? { ...fields, workspace_id: workspaceId } : fields
+  const { error } = await supabase.from('ruchy_magazynowe').insert([payload])
   if (error) console.error('ruchy_magazynowe insert:', error)
 }
 
 // ── Eksportowane funkcje ───────────────────────────────────────
 
-export async function dodajStan(towarId, magazynId, ilosc, powod = null, fakturaId = null) {
+export async function dodajStan(towarId, magazynId, ilosc, powod = null, fakturaId = null, workspaceId = null) {
   if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
   if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
 
-  const current = await getStan(towarId, magazynId)
+  const current = await getStan(towarId, magazynId, workspaceId)
   const nowaIlosc = Number(current?.ilosc ?? 0) + Number(ilosc)
 
   if (current) {
@@ -38,9 +41,9 @@ export async function dodajStan(towarId, magazynId, ilosc, powod = null, faktura
       .eq('id', current.id)
     if (error) return { success: false, error: error.message }
   } else {
-    const { error } = await supabase
-      .from('stany_magazynowe')
-      .insert([{ towar_id: towarId, magazyn_id: magazynId, ilosc: Number(ilosc) }])
+    const payload = { towar_id: towarId, magazyn_id: magazynId, ilosc: Number(ilosc) }
+    if (workspaceId) payload.workspace_id = workspaceId
+    const { error } = await supabase.from('stany_magazynowe').insert([payload])
     if (error) return { success: false, error: error.message }
   }
 
@@ -51,19 +54,19 @@ export async function dodajStan(towarId, magazynId, ilosc, powod = null, faktura
     typ: 'purchase',
     powod,
     faktura_id: fakturaId || null,
-  })
+  }, workspaceId)
 
   if (DEV) console.debug('[magazyn] dodajStan', { towarId, magazynId, ilosc, nowaIlosc })
   refreshInventory()
   return { success: true }
 }
 
-export async function wydajStan(towarId, magazynId, ilosc, powod = null) {
+export async function wydajStan(towarId, magazynId, ilosc, powod = null, workspaceId = null) {
   if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
   if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
 
-  const current = await getStan(towarId, magazynId)
+  const current = await getStan(towarId, magazynId, workspaceId)
   if (!current || Number(current.ilosc) < Number(ilosc)) {
     return { success: false, error: `Niewystarczający stan. Dostępne: ${current?.ilosc ?? 0}` }
   }
@@ -81,20 +84,20 @@ export async function wydajStan(towarId, magazynId, ilosc, powod = null) {
     ilosc: Number(ilosc),
     typ: 'issue',
     powod,
-  })
+  }, workspaceId)
 
   if (DEV) console.debug('[magazyn] wydajStan', { towarId, magazynId, ilosc, nowaIlosc })
   refreshInventory()
   return { success: true }
 }
 
-export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, powod = null) {
+export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, powod = null, workspaceId = null) {
   if (!zMagazynuId || !doMagazynuId) return { success: false, error: 'Oba magazyny są wymagane' }
   if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
   if (zMagazynuId === doMagazynuId) return { success: false, error: 'Magazyny muszą być różne' }
 
-  const zrodlo = await getStan(towarId, zMagazynuId)
+  const zrodlo = await getStan(towarId, zMagazynuId, workspaceId)
   if (!zrodlo || Number(zrodlo.ilosc) < Number(ilosc)) {
     return { success: false, error: `Niewystarczający stan w magazynie źródłowym. Dostępne: ${zrodlo?.ilosc ?? 0}` }
   }
@@ -106,7 +109,7 @@ export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, 
     .eq('id', zrodlo.id)
   if (e1) return { success: false, error: e1.message }
 
-  const cel = await getStan(towarId, doMagazynuId)
+  const cel = await getStan(towarId, doMagazynuId, workspaceId)
   const nowaIloscCel = Number(cel?.ilosc ?? 0) + Number(ilosc)
   if (cel) {
     const { error: e2 } = await supabase
@@ -115,9 +118,9 @@ export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, 
       .eq('id', cel.id)
     if (e2) return { success: false, error: e2.message }
   } else {
-    const { error: e2 } = await supabase
-      .from('stany_magazynowe')
-      .insert([{ towar_id: towarId, magazyn_id: doMagazynuId, ilosc: Number(ilosc) }])
+    const payload = { towar_id: towarId, magazyn_id: doMagazynuId, ilosc: Number(ilosc) }
+    if (workspaceId) payload.workspace_id = workspaceId
+    const { error: e2 } = await supabase.from('stany_magazynowe').insert([payload])
     if (e2) return { success: false, error: e2.message }
   }
 
@@ -128,20 +131,20 @@ export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, 
     ilosc: Number(ilosc),
     typ: 'transfer',
     powod,
-  })
+  }, workspaceId)
 
   if (DEV) console.debug('[magazyn] transferujStan', { towarId, zMagazynuId, doMagazynuId, ilosc, nowaIloscZrodlo, nowaIloscCel })
   refreshInventory()
   return { success: true }
 }
 
-export async function korektaStan(towarId, magazynId, nowaIlosc, powod) {
+export async function korektaStan(towarId, magazynId, nowaIlosc, powod, workspaceId = null) {
   if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
   if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(nowaIlosc) < 0) return { success: false, error: 'Ilość nie może być ujemna' }
   if (!powod?.trim()) return { success: false, error: 'Powód korekty jest wymagany' }
 
-  const current = await getStan(towarId, magazynId)
+  const current = await getStan(towarId, magazynId, workspaceId)
   const stary = Number(current?.ilosc ?? 0)
   const roznica = Number(nowaIlosc) - stary
   const typ = roznica >= 0 ? 'correction_plus' : 'correction_minus'
@@ -153,9 +156,9 @@ export async function korektaStan(towarId, magazynId, nowaIlosc, powod) {
       .eq('id', current.id)
     if (error) return { success: false, error: error.message }
   } else {
-    const { error } = await supabase
-      .from('stany_magazynowe')
-      .insert([{ towar_id: towarId, magazyn_id: magazynId, ilosc: Number(nowaIlosc) }])
+    const payload = { towar_id: towarId, magazyn_id: magazynId, ilosc: Number(nowaIlosc) }
+    if (workspaceId) payload.workspace_id = workspaceId
+    const { error } = await supabase.from('stany_magazynowe').insert([payload])
     if (error) return { success: false, error: error.message }
   }
 
@@ -165,45 +168,47 @@ export async function korektaStan(towarId, magazynId, nowaIlosc, powod) {
     ilosc: Math.abs(roznica),
     typ,
     powod,
-  })
+  }, workspaceId)
 
   if (DEV) console.debug('[magazyn] korektaStan', { towarId, magazynId, stary, nowaIlosc, roznica })
   refreshInventory()
   return { success: true }
 }
 
-export async function getStanLaczny(towarId) {
-  const { data } = await supabase
-    .from('stany_magazynowe')
-    .select('ilosc')
-    .eq('towar_id', towarId)
+export async function getStanLaczny(towarId, workspaceId = null) {
+  let q = supabase.from('stany_magazynowe').select('ilosc').eq('towar_id', towarId)
+  if (workspaceId) q = q.eq('workspace_id', workspaceId)
+  const { data } = await q
   return (data || []).reduce((s, r) => s + Number(r.ilosc), 0)
 }
 
-export async function getStanyMagazynu(magazynId) {
-  const { data, error } = await supabase
+export async function getStanyMagazynu(magazynId, workspaceId = null) {
+  let q = supabase
     .from('stany_magazynowe')
     .select('*, towary(id, nazwa, jednostka, stan_minimalny)')
     .eq('magazyn_id', magazynId)
     .gt('ilosc', 0)
     .order('ilosc', { ascending: false })
+  if (workspaceId) q = q.eq('workspace_id', workspaceId)
+  const { data, error } = await q
   if (error) { console.error(error); return [] }
   return data || []
 }
 
-export async function getRuchyTowaru(towarId, limit = 20) {
-  const { data, error } = await supabase
+export async function getRuchyTowaru(towarId, limit = 20, workspaceId = null) {
+  let q = supabase
     .from('ruchy_magazynowe')
     .select('*, mz:magazyn_zrodlowy_id(nazwa), md:magazyn_docelowy_id(nazwa)')
     .eq('towar_id', towarId)
     .order('created_at', { ascending: false })
     .limit(limit)
+  if (workspaceId) q = q.eq('workspace_id', workspaceId)
+  const { data, error } = await q
   if (error) { console.error(error); return [] }
   return data || []
 }
 
 export async function zatwierdźFakturę(fakturaId) {
-  // 1. Pobierz fakturę z pełnymi danymi
   const { data: faktura, error: fakturaError } = await supabase
     .from('faktury')
     .select(`*, pozycje_faktury(id, towar_id, magazyn_id, ilosc, cena_netto, vat_procent, towary(nazwa, jednostka))`)
@@ -214,7 +219,6 @@ export async function zatwierdźFakturę(fakturaId) {
     return { success: false, error: fakturaError?.message || 'Nie znaleziono faktury' }
   }
 
-  // 2. Walidacja
   const pozycje = faktura.pozycje_faktury || []
   if (pozycje.length === 0) {
     return { success: false, error: 'Faktura nie ma pozycji' }
@@ -223,7 +227,8 @@ export async function zatwierdźFakturę(fakturaId) {
     return { success: false, error: 'Faktura już zatwierdzona' }
   }
 
-  // Tylko pozycje towarowe (mają towar_id, magazyn, cenę > 0 i ilość > 0)
+  const workspaceId = faktura.workspace_id || null
+
   const pozycjeTowary = pozycje.filter(p =>
     p.towar_id &&
     (p.magazyn_id || faktura.magazyn_id) &&
@@ -232,7 +237,6 @@ export async function zatwierdźFakturę(fakturaId) {
   )
   const pozycjePoziome = pozycje.filter(p => !p.towar_id || (!p.magazyn_id && !faktura.magazyn_id))
 
-  // 3. Dla każdej pozycji towarowej — upsert stanu magazynowego
   const errors = []
   const zaktualizowane = []
 
@@ -248,32 +252,33 @@ export async function zatwierdźFakturę(fakturaId) {
 
     const nowaIlosc = (aktualny?.ilosc || 0) + Number(poz.ilosc)
 
+    const upsertPayload = {
+      towar_id: poz.towar_id,
+      magazyn_id: magazynId,
+      ilosc: nowaIlosc,
+      updated_at: new Date().toISOString(),
+    }
+    if (workspaceId) upsertPayload.workspace_id = workspaceId
+
     const { error: upsertError } = await supabase
       .from('stany_magazynowe')
-      .upsert(
-        {
-          towar_id: poz.towar_id,
-          magazyn_id: magazynId,
-          ilosc: nowaIlosc,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'towar_id,magazyn_id' }
-      )
+      .upsert(upsertPayload, { onConflict: 'towar_id,magazyn_id' })
 
     if (upsertError) {
       errors.push(`${poz.towary?.nazwa || poz.towar_id}: ${upsertError.message}`)
       continue
     }
 
-    // Zapisz ruch magazynowy (niekrytyczny)
-    await supabase.from('ruchy_magazynowe').insert([{
+    const ruchPayload = {
       towar_id: poz.towar_id,
       magazyn_docelowy_id: magazynId,
       ilosc: Number(poz.ilosc),
       typ: 'invoice_purchase',
       powod: `Faktura ${faktura.numer}`,
       faktura_id: fakturaId,
-    }])
+    }
+    if (workspaceId) ruchPayload.workspace_id = workspaceId
+    await supabase.from('ruchy_magazynowe').insert([ruchPayload])
 
     zaktualizowane.push({ towar: poz.towary?.nazwa, ilosc: poz.ilosc, nowaIlosc })
   }
@@ -282,7 +287,6 @@ export async function zatwierdźFakturę(fakturaId) {
     return { success: false, error: `Błędy aktualizacji stanów: ${errors.join('; ')}` }
   }
 
-  // 4. Zaktualizuj status i wartość netto faktury
   const wartoscNetto = pozycje.reduce((s, p) => s + (Number(p.ilosc) * Number(p.cena_netto)), 0)
 
   const { error: updateError } = await supabase
@@ -299,7 +303,6 @@ export async function zatwierdźFakturę(fakturaId) {
 }
 
 export async function cofnijDoRoboczej(fakturaId) {
-  // 1. Pobierz fakturę z pozycjami
   const { data: faktura } = await supabase
     .from('faktury')
     .select('*, pozycje_faktury(towar_id, magazyn_id, ilosc)')
@@ -310,7 +313,6 @@ export async function cofnijDoRoboczej(fakturaId) {
     return { success: false, error: 'Faktura nie jest zatwierdzona' }
   }
 
-  // 2. Odwróć stany magazynowe
   for (const poz of faktura.pozycje_faktury || []) {
     if (!poz.towar_id) continue
     const magazynId = poz.magazyn_id || faktura.magazyn_id
@@ -333,10 +335,8 @@ export async function cofnijDoRoboczej(fakturaId) {
       )
   }
 
-  // 3. Usuń powiązane ruchy magazynowe
   await supabase.from('ruchy_magazynowe').delete().eq('faktura_id', fakturaId)
 
-  // 4. Zmień status na robocza
   const { error } = await supabase
     .from('faktury')
     .update({ status: 'robocza' })
@@ -390,7 +390,7 @@ export async function wykonajPakiet(pakietId, magazynId) {
 
   const braki = []
   for (const el of elementy) {
-    const stan = await getStan(el.towar_id, magazynId)
+    const stan = await getStan(el.towar_id, magazynId, null)
     const dostepne = Number(stan?.ilosc ?? 0)
     if (dostepne < Number(el.ilosc)) {
       braki.push({ nazwa: el.towary?.nazwa || el.towar_id, potrzebne: el.ilosc, dostepne })

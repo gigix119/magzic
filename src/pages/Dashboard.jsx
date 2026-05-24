@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
+import { Link } from 'react-router-dom'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock } from 'lucide-react'
@@ -36,15 +37,58 @@ const SEV_COLORS = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', lo
 const SEV_LABELS = { critical: 'Krytyczny', high: 'Wysoki', medium: 'Średni', low: 'Niski' }
 const SEV_BADGE  = { critical: 'red', high: 'red', medium: 'yellow', low: 'zinc' }
 
+function OnboardingScreen() {
+  return (
+    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+      <div style={{
+        width: 72, height: 72, borderRadius: 20, background: 'rgba(59,130,246,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
+      }}>
+        <Warehouse size={32} style={{ color: '#3b82f6' }} />
+      </div>
+      <h2 className="text-xl font-semibold mb-3" style={{ color: 'var(--text)' }}>Witaj w Magzic!</h2>
+      <p className="text-sm mb-8 mx-auto" style={{ color: 'var(--text-2)', maxWidth: 400, lineHeight: 1.6 }}>
+        Twój magazyn jest pusty. Zacznij od dodania produktów, dostawców lub wgrania pierwszej faktury.
+      </p>
+      <div className="flex flex-wrap justify-center gap-3">
+        {[
+          { label: 'Dodaj magazyn', to: '/magazyny', color: '#8b5cf6', icon: Warehouse },
+          { label: 'Dodaj produkt', to: '/towary', color: '#3b82f6', icon: Package },
+          { label: 'Dodaj dostawcę', to: '/kontrahenci', color: '#10b981', icon: Users },
+        ].map(({ label, to, color, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 10,
+              background: color + '1a', color, border: `1px solid ${color}33`,
+              fontWeight: 600, fontSize: 14, textDecoration: 'none',
+              transition: 'background 0.15s',
+            }}
+          >
+            <Icon size={16} />
+            {label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
+  const { workspaceId, wsQuery } = useWorkspace()
   const [stats, setStats] = useState({})
   const [stockStatus, setStockStatus] = useState({ ok: 0, low: 0, empty: 0 })
   const [topAlerts, setTopAlerts] = useState([])
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isEmpty, setIsEmpty] = useState(false)
 
   useEffect(() => {
+    if (!workspaceId) { setLoading(false); return }
+
     async function fetchAll() {
       try {
         const [
@@ -56,13 +100,13 @@ export default function Dashboard() {
           { data: stany, error: e5 },
           { data: towarList, error: e6 },
         ] = await Promise.all([
-          supabase.from('towary').select('*', { count: 'exact', head: true }).eq('aktywny', true),
-          supabase.from('magazyny').select('*', { count: 'exact', head: true }).eq('aktywny', true),
-          supabase.from('kontrahenci').select('*', { count: 'exact', head: true }).eq('aktywny', true),
-          supabase.from('faktury').select('*', { count: 'exact', head: true }),
-          supabase.from('faktury').select('*', { count: 'exact', head: true }).eq('status', 'robocza'),
-          supabase.from('stany_magazynowe').select('towar_id, ilosc'),
-          supabase.from('towary').select('id, nazwa, stan_minimalny, jednostka').eq('aktywny', true),
+          wsQuery('towary').select('*', { count: 'exact', head: true }).eq('aktywny', true),
+          wsQuery('magazyny').select('*', { count: 'exact', head: true }).eq('aktywny', true),
+          wsQuery('kontrahenci').select('*', { count: 'exact', head: true }).eq('aktywny', true),
+          wsQuery('faktury').select('*', { count: 'exact', head: true }),
+          wsQuery('faktury').select('*', { count: 'exact', head: true }).eq('status', 'robocza'),
+          wsQuery('stany_magazynowe').select('towar_id, ilosc'),
+          wsQuery('towary').select('id, nazwa, stan_minimalny, jednostka').eq('aktywny', true),
         ])
 
         for (const e of [e1, e2, e3, e4, e5, e6, e7]) {
@@ -71,12 +115,18 @@ export default function Dashboard() {
 
         setStats({ towary, magazyny, kontrahenci, faktury, fakturyRobocze })
 
+        if (!towary && !magazyny && !kontrahenci && !faktury) {
+          setIsEmpty(true)
+          setLoading(false)
+          return
+        }
+        setIsEmpty(false)
+
         const stockMap = {}
         for (const s of stany || []) {
           stockMap[s.towar_id] = (stockMap[s.towar_id] || 0) + Number(s.ilosc)
         }
 
-        // stock status counts
         let ok = 0, low = 0, empty = 0
         const alerts = []
         for (const t of towarList || []) {
@@ -110,17 +160,30 @@ export default function Dashboard() {
       }
     }
     fetchAll()
-  }, [])
+  }, [workspaceId, wsQuery])
 
   if (loading) return <Spinner />
 
   const alertCount = stockStatus.low + stockStatus.empty
 
+  if (isEmpty) {
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dashboard</h1>
+        </div>
+        <div className="rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+          <OnboardingScreen />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dashboard</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>Przegląd stanu magazynu blueapart.pl</p>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>Przegląd stanu magazynu</p>
       </div>
 
       {error && (
@@ -196,7 +259,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Pending invoices notice */}
           {stats.fakturyRobocze > 0 && (
             <div className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
               <Clock size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />

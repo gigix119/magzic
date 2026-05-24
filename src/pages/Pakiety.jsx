@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
@@ -19,6 +20,7 @@ const emptyForm = { nazwa: '', opis: '', aktywny: true }
 
 export default function Pakiety() {
   const { addToast } = useToast()
+  const { workspaceId, wsQuery } = useWorkspace()
   const [pakiety, setPakiety] = useState([])
   const [elementy, setElementy] = useState({})
   const [stany, setStany] = useState({})
@@ -40,12 +42,13 @@ export default function Pakiety() {
   const [execBraki, setExecBraki] = useState([])
 
   async function fetchData() {
+    if (!workspaceId) { setLoading(false); return }
     const [{ data: pak, error: e1 }, { data: elem }, { data: stanyRaw }, { data: t }, { data: mag }] = await Promise.all([
       supabase.from('pakiety_sprzatania').select('*').order('nazwa'),
       supabase.from('elementy_pakietu').select('*, towary(id, nazwa, jednostka)'),
-      supabase.from('stany_magazynowe').select('towar_id, ilosc'),
-      supabase.from('towary').select('id, nazwa, jednostka').eq('aktywny', true).order('nazwa'),
-      supabase.from('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
+      wsQuery('stany_magazynowe').select('towar_id, ilosc'),
+      wsQuery('towary').select('id, nazwa, jednostka').eq('aktywny', true).order('nazwa'),
+      wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setPakiety(pak || [])
@@ -88,7 +91,7 @@ export default function Pakiety() {
     setExecing(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [workspaceId])
 
   function calcMax(pakietId) {
     const items = elementy[pakietId] || []

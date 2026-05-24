@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
@@ -79,6 +80,7 @@ function statusBadge(status) {
 
 export default function Faktury() {
   const { addToast } = useToast()
+  const { workspaceId, wsQuery, wsData } = useWorkspace()
   const fileRef = useRef(null)
 
   const [faktury, setFaktury] = useState([])
@@ -141,12 +143,13 @@ export default function Faktury() {
   // ─────────────────────────────────────────────────────────────
 
   async function fetchData() {
+    if (!workspaceId) { setLoading(false); return }
     const [{ data: f, error: e1 }, { data: k }, { data: t }, { data: m }, { data: p }] = await Promise.all([
-      supabase.from('faktury').select('*, kontrahenci(nazwa)').order('data_zakupu', { ascending: false }),
-      supabase.from('kontrahenci').select('id, nazwa').eq('aktywny', true).order('nazwa'),
-      supabase.from('towary').select('id, nazwa, typ, jednostka').eq('aktywny', true).order('nazwa'),
-      supabase.from('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
-      supabase.from('pozycje_faktury').select('*, towary(nazwa, jednostka), magazyny(nazwa)'),
+      wsQuery('faktury').select('*, kontrahenci(nazwa)').order('data_zakupu', { ascending: false }),
+      wsQuery('kontrahenci').select('id, nazwa').eq('aktywny', true).order('nazwa'),
+      wsQuery('towary').select('id, nazwa, typ, jednostka').eq('aktywny', true).order('nazwa'),
+      wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
+      wsQuery('pozycje_faktury').select('*, towary(nazwa, jednostka), magazyny(nazwa)'),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setFaktury(f || [])
@@ -162,7 +165,7 @@ export default function Faktury() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [workspaceId])
 
   function totalNetto(fakId) {
     return (pozycje[fakId] || []).reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
@@ -262,6 +265,7 @@ export default function Faktury() {
       ilosc: Number(pozForm.ilosc),
       cena_netto: Number(pozForm.cena_netto),
       vat_procent: Number(pozForm.vat_procent) || 23,
+      ...wsData(),
     }])
     if (error) { console.error(error); addToast(`Błąd zapisu pozycji: ${error.message}`, 'error'); setSavingPoz(false); return }
 
@@ -345,6 +349,7 @@ export default function Faktury() {
       typ: typ.trim() || nazwa.trim(),
       jednostka: jednostka || 'szt',
       aktywny: true,
+      ...wsData(),
     }]).select('id, nazwa, typ, jednostka').single()
     if (error) {
       addToast(`Błąd tworzenia towaru: ${error.message}`, 'error')
@@ -792,6 +797,7 @@ export default function Faktury() {
         notatki: nForm.notatki || null,
         plik_url,
         status: 'robocza',
+        ...wsData(),
       }]).select().single()
       if (fakErr) throw fakErr
 
@@ -826,6 +832,7 @@ export default function Faktury() {
           cena_netto: Number(poz.cena_netto) || 0,
           vat_procent: Number(poz.vat_procent) || 23,
           raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
+          ...wsData(),
         }
         let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
         // Fallback: if raw_name column does not exist yet (migration not run), retry without it

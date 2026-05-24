@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
@@ -21,6 +22,7 @@ const empty = { nazwa: '', nip: '', email: '', telefon: '', adres: '', aktywny: 
 
 export default function Kontrahenci() {
   const { addToast } = useToast()
+  const { workspaceId, wsQuery, wsData } = useWorkspace()
   const [items, setItems] = useState([])
   const [fakturyCount, setFakturyCount] = useState({})
   const [loading, setLoading] = useState(true)
@@ -32,9 +34,10 @@ export default function Kontrahenci() {
   const [form, setForm] = useState(empty)
 
   async function fetchData() {
+    if (!workspaceId) { setLoading(false); return }
     const [{ data: k, error: e1 }, { data: f }] = await Promise.all([
-      supabase.from('kontrahenci').select('*').order('nazwa'),
-      supabase.from('faktury').select('kontrahent_id'),
+      wsQuery('kontrahenci').select('*').order('nazwa'),
+      wsQuery('faktury').select('kontrahent_id'),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setItems(k || [])
@@ -44,7 +47,7 @@ export default function Kontrahenci() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [workspaceId])
 
   const filtered = items.filter(i =>
     i.nazwa.toLowerCase().includes(search.toLowerCase()) ||
@@ -79,7 +82,7 @@ export default function Kontrahenci() {
     if (editItem) {
       ({ error } = await supabase.from('kontrahenci').update(payload).eq('id', editItem.id))
     } else {
-      ({ error } = await supabase.from('kontrahenci').insert([payload]))
+      ({ error } = await supabase.from('kontrahenci').insert([{ ...payload, ...wsData() }]))
     }
     if (error) { console.error(error); addToast(error.message, 'error') }
     else { addToast(editItem ? 'Kontrahent zaktualizowany' : 'Kontrahent dodany', 'success'); setShowModal(false); fetchData() }

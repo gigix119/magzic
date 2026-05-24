@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
@@ -26,6 +27,7 @@ const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
 
 export default function Alerty() {
   const { addToast } = useToast()
+  const { workspaceId, wsQuery, wsData } = useWorkspace()
   const [allAlerts, setAllAlerts] = useState([])
   const [alertyCenowe, setAlertyCenowe] = useState([])
   const [priceAlerts, setPriceAlerts] = useState([])
@@ -38,14 +40,15 @@ export default function Alerty() {
   const [form, setForm] = useState(emptyForm)
 
   async function fetchData() {
+    if (!workspaceId) { setLoading(false); return }
     const ago30 = new Date(Date.now() - 30 * 86400000).toISOString()
     const ago7  = new Date(Date.now() -  7 * 86400000).toISOString()
 
     const [{ data: t, error: e1 }, { data: stanyRaw }, { data: ac }, { data: ruchy30 }] = await Promise.all([
-      supabase.from('towary').select('id, nazwa, jednostka, stan_minimalny, kategorie(nazwa)').eq('aktywny', true).order('nazwa'),
-      supabase.from('stany_magazynowe').select('towar_id, ilosc'),
+      wsQuery('towary').select('id, nazwa, jednostka, stan_minimalny, kategorie(nazwa)').eq('aktywny', true).order('nazwa'),
+      wsQuery('stany_magazynowe').select('towar_id, ilosc'),
       supabase.from('alerty_cenowe').select('*, towary(nazwa)').order('id'),
-      supabase.from('ruchy_magazynowe').select('towar_id, ilosc, typ, created_at')
+      wsQuery('ruchy_magazynowe').select('towar_id, ilosc, typ, created_at')
         .in('typ', ['issue', 'transfer'])
         .gte('created_at', ago30),
     ])
@@ -152,7 +155,7 @@ export default function Alerty() {
     addToast('Wszystkie alerty oznaczone jako przeczytane', 'success')
   }
 
-  useEffect(() => { fetchData(); fetchPriceAlerts() }, [])
+  useEffect(() => { fetchData(); fetchPriceAlerts() }, [workspaceId])
 
   function validate() {
     const e = {}
@@ -170,6 +173,7 @@ export default function Alerty() {
       towar_id: form.towar_id,
       prog_procentowy: Number(form.prog_procentowy),
       aktywny: form.aktywny,
+      ...wsData(),
     }])
     if (error) { console.error(error); addToast(error.message, 'error') }
     else { addToast('Alert cenowy dodany', 'success'); setShowModal(false); setForm(emptyForm); fetchData() }
