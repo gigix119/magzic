@@ -182,19 +182,19 @@ export default function Magazyny() {
 
     if (actionModal === 'add') {
       if (!ilosc || ilosc <= 0) { addToast('Podaj ilość > 0', 'error'); setASaving(false); return }
-      result = await dodajStan(towarId, magId, ilosc, aForm.powod || null)
+      result = await dodajStan(towarId, magId, ilosc, aForm.powod || null, null, workspaceId)
     } else if (actionModal === 'issue') {
       if (!ilosc || ilosc <= 0) { addToast('Podaj ilość > 0', 'error'); setASaving(false); return }
-      result = await wydajStan(towarId, magId, ilosc, aForm.powod || null)
+      result = await wydajStan(towarId, magId, ilosc, aForm.powod || null, workspaceId)
     } else if (actionModal === 'transfer') {
       if (!ilosc || ilosc <= 0) { addToast('Podaj ilość > 0', 'error'); setASaving(false); return }
       if (!aForm.targetMagId) { addToast('Wybierz magazyn docelowy', 'error'); setASaving(false); return }
-      result = await transferujStan(towarId, magId, aForm.targetMagId, ilosc, aForm.powod || null)
+      result = await transferujStan(towarId, magId, aForm.targetMagId, ilosc, aForm.powod || null, workspaceId)
     } else if (actionModal === 'korekta') {
       const nowaIlosc = Number(aForm.ilosc)
       if (nowaIlosc < 0) { addToast('Ilość nie może być ujemna', 'error'); setASaving(false); return }
       if (!aForm.powod?.trim()) { addToast('Podaj powód korekty', 'error'); setASaving(false); return }
-      result = await korektaStan(towarId, magId, nowaIlosc, aForm.powod)
+      result = await korektaStan(towarId, magId, nowaIlosc, aForm.powod, workspaceId)
     }
 
     if (result?.success) {

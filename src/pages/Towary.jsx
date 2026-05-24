@@ -110,7 +110,7 @@ export default function Towary() {
     setExpandedRow(towarId)
     if (!rowRuchy[towarId]) {
       setRowLoading(towarId)
-      const ruchy = await getRuchyTowaru(towarId, 5)
+      const ruchy = await getRuchyTowaru(towarId, 5, workspaceId)
       setRowRuchy(r => ({ ...r, [towarId]: ruchy }))
       setRowLoading(null)
     }
@@ -210,7 +210,7 @@ export default function Towary() {
 
     // Początkowy stan jeśli podano
     if (!editItem && form.poczatkowy_stan && form.poczatkowy_magazyn && newId) {
-      const result = await dodajStan(newId, form.poczatkowy_magazyn, Number(form.poczatkowy_stan), 'Stan początkowy')
+      const result = await dodajStan(newId, form.poczatkowy_magazyn, Number(form.poczatkowy_stan), 'Stan początkowy', null, workspaceId)
       if (!result.success) addToast(`Towar dodany, ale błąd stanu: ${result.error}`, 'error')
     }
 
@@ -246,13 +246,13 @@ export default function Towary() {
     let result
 
     if (actionModal === 'add') {
-      result = await dodajStan(actionTowar.id, actionForm.magazyn_id, Number(actionForm.ilosc), actionForm.powod || null)
+      result = await dodajStan(actionTowar.id, actionForm.magazyn_id, Number(actionForm.ilosc), actionForm.powod || null, null, workspaceId)
     } else if (actionModal === 'issue') {
-      result = await wydajStan(actionTowar.id, actionForm.magazyn_id, Number(actionForm.ilosc), actionForm.powod || null)
+      result = await wydajStan(actionTowar.id, actionForm.magazyn_id, Number(actionForm.ilosc), actionForm.powod || null, workspaceId)
     } else if (actionModal === 'transfer') {
-      result = await transferujStan(actionTowar.id, actionForm.z_magazyn_id, actionForm.do_magazyn_id, Number(actionForm.ilosc), actionForm.powod || null)
+      result = await transferujStan(actionTowar.id, actionForm.z_magazyn_id, actionForm.do_magazyn_id, Number(actionForm.ilosc), actionForm.powod || null, workspaceId)
     } else if (actionModal === 'korekta') {
-      result = await korektaStan(actionTowar.id, actionForm.magazyn_id, Number(actionForm.nowaIlosc), actionForm.powod)
+      result = await korektaStan(actionTowar.id, actionForm.magazyn_id, Number(actionForm.nowaIlosc), actionForm.powod, workspaceId)
     }
 
     if (result?.success) {
