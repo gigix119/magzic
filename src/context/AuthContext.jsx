@@ -24,20 +24,21 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null
       setUser(u)
-      await loadProfileAndWorkspace(u?.id ?? null)
       setLoading(false)
+      if (u?.id) loadProfileAndWorkspace(u.id)
     }).catch((err) => {
       console.error('[AuthContext] getSession failed:', err)
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null
       setUser(u)
-      await loadProfileAndWorkspace(u?.id ?? null)
+      if (u?.id) loadProfileAndWorkspace(u.id)
+      else { setProfile(null); setWorkspace(null) }
     })
 
     return () => subscription.unsubscribe()
@@ -57,9 +58,26 @@ export function AuthProvider({ children }) {
 
   const refreshWorkspace = useCallback(() => loadProfileAndWorkspace(user?.id ?? null), [user, loadProfileAndWorkspace])
 
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', background: '#0f172a',
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%',
+          border: '3px solid rgba(59,130,246,0.2)',
+          borderTopColor: '#3b82f6',
+          animation: 'spin 0.7s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
   return (
     <AuthContext.Provider value={{ user, profile, workspace, loading, signIn, signUp, signOut, refreshWorkspace }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   )
 }
