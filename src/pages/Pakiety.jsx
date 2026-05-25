@@ -20,7 +20,7 @@ const emptyForm = { nazwa: '', opis: '', aktywny: true }
 
 export default function Pakiety() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const [pakiety, setPakiety] = useState([])
   const [elementy, setElementy] = useState({})
   const [stany, setStany] = useState({})
@@ -44,11 +44,11 @@ export default function Pakiety() {
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: pak, error: e1 }, { data: elem }, { data: stanyRaw }, { data: t }, { data: mag }] = await Promise.all([
-      wsQuery('pakiety_sprzatania').select('*').order('nazwa'),
-      wsQuery('elementy_pakietu').select('*, towary(id, nazwa, jednostka)'),
-      wsQuery('stany_magazynowe').select('towar_id, ilosc'),
-      wsQuery('towary').select('id, nazwa, jednostka').eq('aktywny', true).order('nazwa'),
-      wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('pakiety_sprzatania').select('*')).order('nazwa'),
+      addWsFilter(wsQuery('elementy_pakietu').select('*, towary(id, nazwa, jednostka)')),
+      addWsFilter(wsQuery('stany_magazynowe').select('towar_id, ilosc')),
+      addWsFilter(wsQuery('towary').select('id, nazwa, jednostka')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('magazyny').select('id, nazwa')).eq('aktywny', true).order('nazwa'),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setPakiety(pak || [])

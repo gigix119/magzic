@@ -6,7 +6,8 @@ const NULL_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
 
 const WorkspaceContext = createContext({
   workspaceId: null,
-  wsQuery: () => supabase.from(''),
+  wsQuery: (tableName) => supabase.from(tableName),
+  addWsFilter: (q) => q,
   wsData: () => ({}),
 })
 
@@ -14,15 +15,18 @@ export function WorkspaceProvider({ children }) {
   const { workspace } = useAuth()
   const workspaceId = workspace?.id ?? null
 
-  const wsQuery = useMemo(() => (tableName) => {
-    const id = workspaceId ?? NULL_WORKSPACE_ID
-    return supabase.from(tableName).eq('workspace_id', id)
+  // Returns a raw PostgrestQueryBuilder — call .select() on the result, then addWsFilter
+  const wsQuery = useMemo(() => (tableName) => supabase.from(tableName), [])
+
+  // Apply workspace filter to a PostgrestFilterBuilder (after .select() has been called)
+  const addWsFilter = useMemo(() => (query) => {
+    return query.eq('workspace_id', workspaceId ?? NULL_WORKSPACE_ID)
   }, [workspaceId])
 
   const wsData = useMemo(() => () => ({ workspace_id: workspaceId }), [workspaceId])
 
   return (
-    <WorkspaceContext.Provider value={{ workspaceId, wsQuery, wsData }}>
+    <WorkspaceContext.Provider value={{ workspaceId, wsQuery, addWsFilter, wsData }}>
       {children}
     </WorkspaceContext.Provider>
   )

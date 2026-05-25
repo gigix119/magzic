@@ -43,7 +43,7 @@ function stanBadge(stan, min) {
 
 export default function Towary() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const [items, setItems] = useState([])
   const [kategorie, setKategorie] = useState([])
   const [magazyny, setMagazyny] = useState([])
@@ -78,13 +78,13 @@ export default function Towary() {
 
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
-    let tQuery = wsQuery('towary').select('*, kategorie(nazwa)').order('nazwa')
+    let tQuery = addWsFilter(wsQuery('towary').select('*, kategorie(nazwa)')).order('nazwa')
     if (!pokazZarchiwizowane) tQuery = tQuery.is('archived_at', null)
     const [{ data: t, error: e1 }, { data: k }, { data: m }, { data: s }] = await Promise.all([
       tQuery,
-      wsQuery('kategorie').select('*').order('nazwa'),
-      wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
-      wsQuery('stany_magazynowe').select('towar_id, magazyn_id, ilosc, magazyny(nazwa)'),
+      addWsFilter(wsQuery('kategorie').select('*')).order('nazwa'),
+      addWsFilter(wsQuery('magazyny').select('id, nazwa')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('stany_magazynowe').select('towar_id, magazyn_id, ilosc, magazyny(nazwa)')),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setItems(t || [])
@@ -235,8 +235,8 @@ export default function Towary() {
 
   async function loadKorektaStan(towarId, magazynId) {
     if (!magazynId) { setActionKorektaStan(null); return }
-    const { data } = await wsQuery('stany_magazynowe')
-      .select('ilosc').eq('towar_id', towarId).eq('magazyn_id', magazynId).maybeSingle()
+    const { data } = await addWsFilter(wsQuery('stany_magazynowe').select('ilosc'))
+      .eq('towar_id', towarId).eq('magazyn_id', magazynId).maybeSingle()
     setActionKorektaStan(data?.ilosc ?? 0)
   }
 

@@ -22,7 +22,7 @@ const empty = { nazwa: '', nip: '', email: '', telefon: '', adres: '', aktywny: 
 
 export default function Kontrahenci() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const [items, setItems] = useState([])
   const [fakturyCount, setFakturyCount] = useState({})
   const [loading, setLoading] = useState(true)
@@ -36,8 +36,8 @@ export default function Kontrahenci() {
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: k, error: e1 }, { data: f }] = await Promise.all([
-      wsQuery('kontrahenci').select('*').order('nazwa'),
-      wsQuery('faktury').select('kontrahent_id'),
+      addWsFilter(wsQuery('kontrahenci').select('*')).order('nazwa'),
+      addWsFilter(wsQuery('faktury').select('kontrahent_id')),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setItems(k || [])

@@ -77,7 +77,7 @@ function OnboardingScreen() {
 }
 
 export default function Dashboard() {
-  const { workspaceId, wsQuery } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter } = useWorkspace()
   const [stats, setStats] = useState({})
   const [stockStatus, setStockStatus] = useState({ ok: 0, low: 0, empty: 0 })
   const [topAlerts, setTopAlerts] = useState([])
@@ -100,13 +100,13 @@ export default function Dashboard() {
           { data: stany, error: e5 },
           { data: towarList, error: e6 },
         ] = await Promise.all([
-          wsQuery('towary').select('*', { count: 'exact', head: true }).eq('aktywny', true),
-          wsQuery('magazyny').select('*', { count: 'exact', head: true }).eq('aktywny', true),
-          wsQuery('kontrahenci').select('*', { count: 'exact', head: true }).eq('aktywny', true),
-          wsQuery('faktury').select('*', { count: 'exact', head: true }),
-          wsQuery('faktury').select('*', { count: 'exact', head: true }).eq('status', 'robocza'),
-          wsQuery('stany_magazynowe').select('towar_id, ilosc'),
-          wsQuery('towary').select('id, nazwa, stan_minimalny, jednostka').eq('aktywny', true),
+          addWsFilter(wsQuery('towary').select('*', { count: 'exact', head: true })).eq('aktywny', true),
+          addWsFilter(wsQuery('magazyny').select('*', { count: 'exact', head: true })).eq('aktywny', true),
+          addWsFilter(wsQuery('kontrahenci').select('*', { count: 'exact', head: true })).eq('aktywny', true),
+          addWsFilter(wsQuery('faktury').select('*', { count: 'exact', head: true })),
+          addWsFilter(wsQuery('faktury').select('*', { count: 'exact', head: true })).eq('status', 'robocza'),
+          addWsFilter(wsQuery('stany_magazynowe').select('towar_id, ilosc')),
+          addWsFilter(wsQuery('towary').select('id, nazwa, stan_minimalny, jednostka')).eq('aktywny', true),
         ])
 
         for (const e of [e1, e2, e3, e4, e5, e6, e7]) {

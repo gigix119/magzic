@@ -27,7 +27,7 @@ const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
 
 export default function Alerty() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const [allAlerts, setAllAlerts] = useState([])
   const [alertyCenowe, setAlertyCenowe] = useState([])
   const [priceAlerts, setPriceAlerts] = useState([])
@@ -45,10 +45,10 @@ export default function Alerty() {
     const ago7  = new Date(Date.now() -  7 * 86400000).toISOString()
 
     const [{ data: t, error: e1 }, { data: stanyRaw }, { data: ac }, { data: ruchy30 }] = await Promise.all([
-      wsQuery('towary').select('id, nazwa, jednostka, stan_minimalny, kategorie(nazwa)').eq('aktywny', true).order('nazwa'),
-      wsQuery('stany_magazynowe').select('towar_id, ilosc'),
-      wsQuery('alerty_cenowe').select('*, towary(nazwa)').order('id'),
-      wsQuery('ruchy_magazynowe').select('towar_id, ilosc, typ, created_at')
+      addWsFilter(wsQuery('towary').select('id, nazwa, jednostka, stan_minimalny, kategorie(nazwa)')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('stany_magazynowe').select('towar_id, ilosc')),
+      addWsFilter(wsQuery('alerty_cenowe').select('*, towary(nazwa)')).order('id'),
+      addWsFilter(wsQuery('ruchy_magazynowe').select('towar_id, ilosc, typ, created_at'))
         .in('typ', ['issue', 'transfer'])
         .gte('created_at', ago30),
     ])
@@ -111,8 +111,8 @@ export default function Alerty() {
   async function fetchPriceAlerts() {
     setPriceAlertsLoading(true)
     try {
-      const { data, error } = await wsQuery('alerty_cenowe_faktury')
-        .select('*, towary(nazwa), faktury(numer), kontrahenci(nazwa)')
+      const { data, error } = await addWsFilter(wsQuery('alerty_cenowe_faktury')
+        .select('*, towary(nazwa), faktury(numer), kontrahenci(nazwa)'))
         .eq('przeczytany', false)
         .order('created_at', { ascending: false })
         .limit(50)

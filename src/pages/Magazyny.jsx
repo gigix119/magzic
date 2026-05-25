@@ -34,7 +34,7 @@ function StanBadge({ ilosc, min }) {
 
 export default function Magazyny() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const [magazyny, setMagazyny] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -54,8 +54,8 @@ export default function Magazyny() {
 
   async function loadMagazyny() {
     if (!workspaceId) { setLoading(false); return }
-    const { data: mag, error: magError } = await wsQuery('magazyny')
-      .select('id, nazwa, lokalizacja, opis, aktywny')
+    const { data: mag, error: magError } = await addWsFilter(wsQuery('magazyny')
+      .select('id, nazwa, lokalizacja, opis, aktywny'))
       .eq('aktywny', true)
       .order('nazwa')
 
@@ -66,7 +66,7 @@ export default function Magazyny() {
       return
     }
 
-    const { data: stany, error: stanyError } = await wsQuery('stany_magazynowe')
+    const { data: stany, error: stanyError } = await addWsFilter(wsQuery('stany_magazynowe')
       .select(`
         id,
         towar_id,
@@ -77,7 +77,7 @@ export default function Magazyny() {
           id, nazwa, typ, jednostka, stan_minimalny, aktywny,
           kategorie(nazwa)
         )
-      `)
+      `))
       .gt('ilosc', 0)
 
     if (stanyError) {

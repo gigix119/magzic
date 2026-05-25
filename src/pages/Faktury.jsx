@@ -80,7 +80,7 @@ function statusBadge(status) {
 
 export default function Faktury() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const fileRef = useRef(null)
 
   const [faktury, setFaktury] = useState([])
@@ -145,11 +145,11 @@ export default function Faktury() {
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: f, error: e1 }, { data: k }, { data: t }, { data: m }, { data: p }] = await Promise.all([
-      wsQuery('faktury').select('*, kontrahenci(nazwa)').order('data_zakupu', { ascending: false }),
-      wsQuery('kontrahenci').select('id, nazwa').eq('aktywny', true).order('nazwa'),
-      wsQuery('towary').select('id, nazwa, typ, jednostka').eq('aktywny', true).order('nazwa'),
-      wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
-      wsQuery('pozycje_faktury').select('*, towary(nazwa, jednostka), magazyny(nazwa)'),
+      addWsFilter(wsQuery('faktury').select('*, kontrahenci(nazwa)')).order('data_zakupu', { ascending: false }),
+      addWsFilter(wsQuery('kontrahenci').select('id, nazwa')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('towary').select('id, nazwa, typ, jednostka')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('magazyny').select('id, nazwa')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('pozycje_faktury').select('*, towary(nazwa, jednostka), magazyny(nazwa)')),
     ])
     if (e1) { console.error(e1); addToast(e1.message, 'error') }
     setFaktury(f || [])
