@@ -47,7 +47,7 @@ export default function Alerty() {
     const [{ data: t, error: e1 }, { data: stanyRaw }, { data: ac }, { data: ruchy30 }] = await Promise.all([
       wsQuery('towary').select('id, nazwa, jednostka, stan_minimalny, kategorie(nazwa)').eq('aktywny', true).order('nazwa'),
       wsQuery('stany_magazynowe').select('towar_id, ilosc'),
-      supabase.from('alerty_cenowe').select('*, towary(nazwa)').order('id'),
+      wsQuery('alerty_cenowe').select('*, towary(nazwa)').order('id'),
       wsQuery('ruchy_magazynowe').select('towar_id, ilosc, typ, created_at')
         .in('typ', ['issue', 'transfer'])
         .gte('created_at', ago30),
@@ -111,8 +111,7 @@ export default function Alerty() {
   async function fetchPriceAlerts() {
     setPriceAlertsLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('alerty_cenowe_faktury')
+      const { data, error } = await wsQuery('alerty_cenowe_faktury')
         .select('*, towary(nazwa), faktury(numer), kontrahenci(nazwa)')
         .eq('przeczytany', false)
         .order('created_at', { ascending: false })

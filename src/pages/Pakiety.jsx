@@ -20,7 +20,7 @@ const emptyForm = { nazwa: '', opis: '', aktywny: true }
 
 export default function Pakiety() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery } = useWorkspace()
+  const { workspaceId, wsQuery, wsData } = useWorkspace()
   const [pakiety, setPakiety] = useState([])
   const [elementy, setElementy] = useState({})
   const [stany, setStany] = useState({})
@@ -44,8 +44,8 @@ export default function Pakiety() {
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: pak, error: e1 }, { data: elem }, { data: stanyRaw }, { data: t }, { data: mag }] = await Promise.all([
-      supabase.from('pakiety_sprzatania').select('*').order('nazwa'),
-      supabase.from('elementy_pakietu').select('*, towary(id, nazwa, jednostka)'),
+      wsQuery('pakiety_sprzatania').select('*').order('nazwa'),
+      wsQuery('elementy_pakietu').select('*, towary(id, nazwa, jednostka)'),
       wsQuery('stany_magazynowe').select('towar_id, ilosc'),
       wsQuery('towary').select('id, nazwa, jednostka').eq('aktywny', true).order('nazwa'),
       wsQuery('magazyny').select('id, nazwa').eq('aktywny', true).order('nazwa'),
@@ -78,7 +78,7 @@ export default function Pakiety() {
     if (!execMagId) { addToast('Wybierz magazyn', 'error'); return }
     setExecing(true)
     setExecBraki([])
-    const result = await wykonajPakiet(execPak.id, execMagId)
+    const result = await wykonajPakiet(execPak.id, execMagId, workspaceId)
     if (result.success) {
       addToast(`Pakiet "${execPak.nazwa}" wykonany`, 'success')
       setExecPak(null)
@@ -140,7 +140,7 @@ export default function Pakiety() {
       }
     } else {
       let data
-      ;({ data, error } = await supabase.from('pakiety_sprzatania').insert([payload]).select().single())
+      ;({ data, error } = await supabase.from('pakiety_sprzatania').insert([{ ...payload, ...wsData() }]).select().single())
       if (data) pakId = data.id
     }
 
@@ -152,7 +152,7 @@ export default function Pakiety() {
     const valid = formItems.filter(i => i.towar_id && i.ilosc)
     if (valid.length && pakId) {
       const { error: eElem } = await supabase.from('elementy_pakietu').insert(
-        valid.map(i => ({ pakiet_id: pakId, towar_id: i.towar_id, ilosc: Number(i.ilosc) }))
+        valid.map(i => ({ pakiet_id: pakId, towar_id: i.towar_id, ilosc: Number(i.ilosc), ...wsData() }))
       )
       if (eElem) { console.error(eElem); addToast(eElem.message, 'error') }
     }

@@ -380,7 +380,7 @@ export async function sprawdzPowiazaniaTowaru(towarId) {
   }
 }
 
-export async function wykonajPakiet(pakietId, magazynId) {
+export async function wykonajPakiet(pakietId, magazynId, workspaceId = null) {
   const { data: elementy, error } = await supabase
     .from('elementy_pakietu')
     .select('*, towary(nazwa)')
@@ -401,7 +401,7 @@ export async function wykonajPakiet(pakietId, magazynId) {
 
   const wykonano = []
   for (const el of elementy) {
-    const result = await wydajStan(el.towar_id, magazynId, Number(el.ilosc), 'Pakiet sprzątania')
+    const result = await wydajStan(el.towar_id, magazynId, Number(el.ilosc), 'Pakiet sprzątania', workspaceId)
     if (result.success) wykonano.push(el.towar_id)
     else console.error('Błąd wydania:', result.error)
   }

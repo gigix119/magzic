@@ -593,6 +593,7 @@ export default function Faktury() {
             roznica_procent: analyzed.ostatniaCena
               ? ((Number(poz.cena_netto) - analyzed.ostatniaCena) / analyzed.ostatniaCena * 100)
               : null,
+            ...wsData(),
           })
         }
       } catch (err) {
