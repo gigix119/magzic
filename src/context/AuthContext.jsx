@@ -29,6 +29,9 @@ export function AuthProvider({ children }) {
       setUser(u)
       await loadProfileAndWorkspace(u?.id ?? null)
       setLoading(false)
+    }).catch((err) => {
+      console.error('[AuthContext] getSession failed:', err)
+      setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {

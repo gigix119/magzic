@@ -1,3 +1,4 @@
+import { Component } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './context/ToastContext'
@@ -16,8 +17,25 @@ import Faktury from './pages/Faktury'
 import Pakiety from './pages/Pakiety'
 import Alerty from './pages/Alerty'
 
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, fontFamily: 'monospace', color: '#dc2626' }}>
+          <h2>Błąd aplikacji</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{String(this.state.error)}</pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
   return (
+    <ErrorBoundary>
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
@@ -42,5 +60,6 @@ export default function App() {
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   )
 }
