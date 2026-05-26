@@ -9,6 +9,7 @@
 -- === 0. Rozszerzenie tabeli profiles ===
 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS display_name  text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at    timestamptz NOT NULL DEFAULT now();
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_login_at timestamptz;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_seen_at  timestamptz;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at    timestamptz NOT NULL DEFAULT now();

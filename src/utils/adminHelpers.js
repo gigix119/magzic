@@ -1,7 +1,7 @@
 import { supabase } from '../supabase'
 
 export function isOwner(profile) {
-  return profile?.role === 'owner'
+  return profile?.role === 'owner' && profile?.status === 'active'
 }
 
 export function getDisplayName(profile) {
