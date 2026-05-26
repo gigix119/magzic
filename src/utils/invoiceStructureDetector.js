@@ -134,10 +134,43 @@ export function detectInvoiceStructure(pdfLayout) {
   let sprzedawca = { nazwa: '', nip: '', adres: '' }
   let nabywca = { nazwa: '', nip: '', adres: '' }
 
-  if (allNipIdxs.length >= 1) {
+  // ── Label-based detection (highest priority) ─────────────────────────
+  const SELLER_LABEL = /^(sprzedawca|wystawca|vendor|supplier)\s*[:;]?\s*$/i
+  const BUYER_LABEL  = /^(nabywca|odbiorca|buyer|customer|płatnik|platnik)\s*[:;]?\s*$/i
+
+  function findNipAfterLabel(startIdx, range) {
+    for (let j = startIdx; j < Math.min(allLines.length, startIdx + range); j++) {
+      const nip = extractNip(lineText(allLines[j]))
+      if (nip) return j
+    }
+    return -1
+  }
+
+  let sellerNipIdx = -1
+  let buyerNipIdx  = -1
+
+  for (let i = 0; i < Math.min(allLines.length, 60); i++) {
+    const text = lineText(allLines[i]).trim()
+    if (sellerNipIdx === -1 && SELLER_LABEL.test(text)) {
+      const idx = findNipAfterLabel(i + 1, 10)
+      if (idx !== -1) sellerNipIdx = idx
+    }
+    if (buyerNipIdx === -1 && BUYER_LABEL.test(text)) {
+      const idx = findNipAfterLabel(i + 1, 10)
+      if (idx !== -1) buyerNipIdx = idx
+    }
+  }
+
+  // Use labels if found, otherwise positional
+  if (sellerNipIdx !== -1) {
+    sprzedawca = extractCompanyBlock(allLines, sellerNipIdx)
+  } else if (allNipIdxs.length >= 1) {
     sprzedawca = extractCompanyBlock(allLines, allNipIdxs[0])
   }
-  if (allNipIdxs.length >= 2) {
+
+  if (buyerNipIdx !== -1) {
+    nabywca = extractCompanyBlock(allLines, buyerNipIdx)
+  } else if (allNipIdxs.length >= 2) {
     nabywca = extractCompanyBlock(allLines, allNipIdxs[1])
   }
 

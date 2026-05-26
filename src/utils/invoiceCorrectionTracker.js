@@ -1,3 +1,5 @@
+import { logCorrection } from './modelLogger.js'
+
 const CORRECTIONS_KEY = 'magzic_invoice_correction_events'
 const MAX_EVENTS = 500
 
@@ -99,7 +101,7 @@ export function buildCorrectionSummary(corrections) {
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-export function saveCorrectionEvent(extracted, approved) {
+export function saveCorrectionEvent(extracted, approved, extractionLogId = null) {
   if (!extracted || !approved) return
   const corrections = diffInvoiceExtraction(extracted, approved)
   if (!corrections.length) return
@@ -125,6 +127,26 @@ export function saveCorrectionEvent(extracted, approved) {
     if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS)
     localStorage.setItem(CORRECTIONS_KEY, JSON.stringify(events))
   } catch { /* non-critical */ }
+
+  // Dual-write to Supabase — fire-and-forget, never throws
+  const originalCtx = {
+    documentType: extracted.documentType,
+    confidence: extracted.confidence,
+    source: extracted.source,
+  }
+  const correctedCtx = {
+    documentType: approved.documentType || extracted.documentType,
+  }
+  for (const correction of corrections.slice(0, 20)) {
+    logCorrection({
+      extractionLogId,
+      fieldKey: correction.fieldPath,
+      originalValue: correction.oldValue != null ? String(correction.oldValue) : null,
+      correctedValue: correction.newValue != null ? String(correction.newValue) : null,
+      originalData: originalCtx,
+      correctedData: correctedCtx,
+    }).catch(() => {})
+  }
 
   return event
 }

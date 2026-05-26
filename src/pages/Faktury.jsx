@@ -19,6 +19,7 @@ import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rem
 import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
 import { calculateInvoiceQualityMetrics, getQualityBadge, shouldRequireManualReview, getQualityWarnings } from '../utils/invoiceQualityMetrics'
 import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
+import { logExtraction, addToReviewQueue } from '../utils/modelLogger'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { rankProductCandidates } from '../utils/invoiceScoringEngine'
@@ -122,6 +123,7 @@ export default function Faktury() {
   const [nPositions, setNPositions] = useState([])
   const [nSaving, setNSaving] = useState(false)
   const [nContractorValue, setNContractorValue] = useState(null)
+  const [nExtractionLogId, setNExtractionLogId] = useState(null)
   const [nPriceData, setNPriceData] = useState({})
   const [nExtractedItems, setNExtractedItems] = useState([])
   const [nShowExtracted, setNShowExtracted] = useState(false)
@@ -427,6 +429,7 @@ export default function Faktury() {
     setNFormErr({})
     setNPositions([])
     setNContractorValue(null)
+    setNExtractionLogId(null)
     setNPriceData({})
     setNDraftZeroPriceConfirmed(false)
     setShowNModal(true)
@@ -623,12 +626,46 @@ export default function Faktury() {
     setNAiLoading(true)
     setNExtractStatus('Analizuję plik PDF…')
 
+    const _extractionStartMs = Date.now()
+
     try {
       const { extractFromFile } = await import('../utils/invoiceExtractor')
       setNExtractStatus('Odczytuję tekst z dokumentu…')
 
       const result = await extractFromFile(nFile)
       result._fileName = nFile.name
+
+      // Fire-and-forget extraction log to Supabase
+      const _processingMs = Date.now() - _extractionStartMs
+      const _logStatus = result.confidence >= 85 ? 'success'
+        : result.confidence >= 60 ? 'partial'
+        : result.confidence > 0 ? 'review_needed'
+        : 'failed'
+      logExtraction({
+        fileName: nFile.name,
+        supplierName: result.fields?.kontrahent_nazwa || null,
+        supplierNip: result.fields?.kontrahent_nip || null,
+        extractorVersion: '2.0',
+        status: _logStatus,
+        confidenceTotal: result.confidence / 100,
+        processingTimeMs: _processingMs,
+        metadata: {
+          documentType: result.documentType,
+          itemCount: result.fields?.pozycje?.length ?? 0,
+          warningsCount: result.warnings?.length ?? 0,
+          source: result.source,
+        },
+      }).then(logId => {
+        if (!logId) return
+        setNExtractionLogId(logId)
+        if (result.confidence < 60) {
+          addToReviewQueue({
+            extractionLogId: logId,
+            reason: `Niska pewność ekstrakcji (${result.confidence}%) — ${nFile.name}`,
+            priority: result.confidence < 40 ? 'high' : 'normal',
+          }).catch(() => {})
+        }
+      }).catch(() => {})
 
       if (result.source === 'pdf_text') {
         setNExtractStatus('Znaleziono tekst w PDF — sprawdź dane')
@@ -906,7 +943,7 @@ export default function Faktury() {
               kontrahent_nazwa: kontrahentNazwa || extractedResult.fields?.kontrahent_nazwa,
             },
           }
-          saveCorrectionEvent(extractedResult, approvedResult)
+          saveCorrectionEvent(extractedResult, approvedResult, nExtractionLogId)
         } catch { /* non-critical */ }
       }
 
@@ -1279,6 +1316,19 @@ export default function Faktury() {
                       <div style={{ color: '#64748b' }}>Ostrzeżenia</div>
                       <div style={{ fontWeight: 500, color: qualityMetrics.warningsCount === 0 ? '#16a34a' : '#d97706' }}>
                         {qualityMetrics.warningsCount}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748b' }}>Kontrahent</div>
+                      <div style={{ fontWeight: 500,
+                        color: nContractorValue?.matchStatus === 'matched_nip' || nContractorValue?.matchStatus === 'matched_name' ? '#16a34a'
+                          : nContractorValue?.matchStatus === 'new_from_pdf' ? '#1d4ed8'
+                          : '#d97706' }}>
+                        {nContractorValue?.matchStatus === 'matched_nip' ? '✓ NIP'
+                          : nContractorValue?.matchStatus === 'matched_name' ? '✓ Nazwa'
+                          : nContractorValue?.matchStatus === 'new_from_pdf' ? '+ Nowy (PDF)'
+                          : nContractorValue?.matchStatus === 'new_manual' ? '+ Nowy'
+                          : '— brak'}
                       </div>
                     </div>
                   </div>
@@ -1673,6 +1723,8 @@ export default function Faktury() {
                     <span style={{ color: '#64748b' }}>· {qualityMetrics.itemCount} poz. ({qualityMetrics.inventoryItemCount}T {qualityMetrics.serviceItemCount}U)</span>
                     {!qualityMetrics.mathValid && <span style={{ color: '#dc2626', fontWeight: 500 }}>· ❌ Sprawdź matematykę</span>}
                     {qualityMetrics.warningsCount > 0 && <span style={{ color: '#d97706' }}>· ⚠ {qualityMetrics.warningsCount} ostrzeżeń</span>}
+                    {nContractorValue?.matchStatus === 'matched_nip' && <span style={{ color: '#16a34a' }}>· ✓ Kontrahent (NIP)</span>}
+                    {nContractorValue?.matchStatus === 'new_from_pdf' && <span style={{ color: '#1d4ed8' }}>· + Nowy kontrahent (PDF)</span>}
                   </div>
                 </div>
               )}

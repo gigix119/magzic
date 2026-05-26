@@ -3,6 +3,25 @@
  * No side effects — fully testable.
  */
 
+// ── Internal helpers ───────────────────────────────────────────────────────────
+
+function tokenize(name) {
+  return normalizeContractorName(name)
+    .split(/\s+/)
+    .filter(t => t.length >= 3)
+}
+
+function tokenJaccard(nameA, nameB) {
+  const sa = new Set(tokenize(nameA))
+  const sb = new Set(tokenize(nameB))
+  if (!sa.size || !sb.size) return 0
+  let intersection = 0
+  for (const t of sa) { if (sb.has(t)) intersection++ }
+  return intersection / (sa.size + sb.size - intersection)
+}
+
+// ── Public exports ─────────────────────────────────────────────────────────────
+
 export function normalizeNip(nip) {
   if (nip === null || nip === undefined || nip === '') return null
   const result = String(nip)
@@ -91,6 +110,24 @@ export function findMatchingContractor(extractedContractor, contractors) {
       }
       if (exactMatches.length > 1) {
         return { match: null, suggestions: exactMatches, confidence: 'ambiguous', matchedBy: 'name' }
+      }
+
+      // 2.5. Token Jaccard similarity — covers abbreviations and word-order variants
+      if (extNorm.length >= 5) {
+        const TOKEN_THRESHOLD = 0.5
+        const tokenScored = contractors
+          .map(c => ({ c, score: tokenJaccard(extractedContractor.nazwa, c.nazwa) }))
+          .filter(x => x.score >= TOKEN_THRESHOLD)
+          .sort((a, b) => b.score - a.score)
+
+        if (tokenScored.length > 0) {
+          const top = tokenScored[0]
+          // Clear winner (highest score alone, or ≥0.7 dominating)
+          if (tokenScored.length === 1 || top.score >= 0.7) {
+            return { match: top.c, suggestions: tokenScored.map(x => x.c).slice(0, 5), confidence: 'fuzzy', matchedBy: 'name_tokens' }
+          }
+          return { match: null, suggestions: tokenScored.map(x => x.c).slice(0, 5), confidence: 'ambiguous', matchedBy: 'name_tokens' }
+        }
       }
 
       // 3. Partial name match (prefix of up to 15 chars)

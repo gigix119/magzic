@@ -775,7 +775,7 @@ export default function BackendModel() {
       </div>
 
       {/* Tab navigation */}
-      <div className="flex gap-1 flex-wrap mb-5 pb-3" style={{ borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+      <div className="tab-bar-scroll flex gap-1 mb-5 pb-3" style={{ borderBottom: '1px solid var(--border)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {TABS.map(t => (
           <TabBtn key={t.id} id={t.id} active={tab === t.id} onClick={setTab} icon={t.icon} label={t.label} />
         ))}

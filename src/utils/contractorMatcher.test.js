@@ -151,6 +151,37 @@ describe('findContractorDuplicates', () => {
   })
 })
 
+describe('findMatchingContractor — token fuzzy matching', () => {
+  const contractors = [
+    { id: '10', nazwa: 'Centrum Sprzętu Budowlanego Sp. z o.o.', nip: '1111111111' },
+    { id: '11', nazwa: 'Hurtownia Materiałów Budowlanych', nip: '2222222222' },
+    { id: '12', nazwa: 'Sklep ABC', nip: '3333333333' },
+  ]
+
+  it('matches by token overlap (word order variant)', () => {
+    const result = findMatchingContractor({ nip: null, nazwa: 'Sprzętu Budowlanego Centrum' }, contractors)
+    expect(result.match?.id).toBe('10')
+    expect(result.matchedBy).toBe('name_tokens')
+    expect(result.confidence).toBe('fuzzy')
+  })
+
+  it('matches by token overlap (abbreviated name)', () => {
+    const result = findMatchingContractor({ nip: null, nazwa: 'Hurtownia Materiałów Budowlanych' }, contractors)
+    // Exact normalized match wins before tokens even needed
+    expect(result.match?.id).toBe('11')
+  })
+
+  it('does not match unrelated name', () => {
+    const result = findMatchingContractor({ nip: null, nazwa: 'Całkowicie Inna Firma' }, contractors)
+    expect(result.match).toBe(null)
+  })
+
+  it('token match does not trigger for very short names', () => {
+    const result = findMatchingContractor({ nip: null, nazwa: 'AB' }, contractors)
+    expect(result.match).toBe(null)
+  })
+})
+
 describe('prepareContractorFromInvoice', () => {
   it('extracts from kontrahent fields', () => {
     const extracted = {

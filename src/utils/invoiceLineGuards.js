@@ -28,6 +28,7 @@ const FORBIDDEN_PATTERNS = [
   // Dane bankowe i adresowe
   /^(numer\s+konta|nr\s+konta|konto|iban|swift)\b/i,
   /\bIBAN\s+PL\b/i,
+  /\bPL\s*\d{2}[\s\d]{20,32}\b/,
   /^(bank|nazwa banku)\b/i,
   /^(nip|regon|krs)\s*:/i,
   /^(ul\.|ulica|adres|miasto|kod pocztowy|kod\s+pocz\.)/i,

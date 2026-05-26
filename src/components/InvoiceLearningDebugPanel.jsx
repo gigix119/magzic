@@ -11,6 +11,7 @@ import {
   exportInvoiceModelConfig, importInvoiceModelConfig,
   resetInvoiceModelConfig,
 } from '../utils/invoiceModelConfig'
+import { logModelRun, syncModelConfigToSupabase } from '../utils/modelLogger'
 
 export default function InvoiceLearningDebugPanel() {
   const [testResult, setTestResult] = useState(null)
@@ -170,6 +171,10 @@ export default function InvoiceLearningDebugPanel() {
       const result = await trainInvoiceModel()
       setTrainResult(result)
       refreshModelConfig()
+      // Log training run to Supabase (fire-and-forget)
+      const cfg = getInvoiceModelConfig()
+      logModelRun(result, cfg).catch(() => {})
+      syncModelConfigToSupabase(cfg).catch(() => {})
     } catch (e) {
       setTrainResult({ success: false, error: String(e) })
     } finally {
@@ -190,6 +195,7 @@ export default function InvoiceLearningDebugPanel() {
       if (applied.applied) {
         alert(`Model aktywowany. Poprawa: +${(applied.improvement * 100).toFixed(2)}%`)
         refreshModelConfig()
+        syncModelConfigToSupabase(getInvoiceModelConfig()).catch(() => {})
       } else {
         alert(`Model NIE aktywowany — ${applied.reason}. Stary model jest lepszy.`)
       }
