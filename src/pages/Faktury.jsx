@@ -960,22 +960,22 @@ export default function Faktury() {
                     {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}
                   </button>
 
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0 faktura-row-actions">
                     {fak.status === 'robocza' && (
                       <>
-                        <button onClick={() => handleZatwierdz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#22c55e' }} title="Zatwierdź fakturę">
+                        <button onClick={() => handleZatwierdz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#22c55e', minHeight: 36 }} title="Zatwierdź fakturę">
                           <CheckCircle2 size={12} /> Zatwierdź
                         </button>
-                        <button onClick={() => openAddPoz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }} title="Dodaj pozycję">
+                        <button onClick={() => openAddPoz(fak)} className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }} title="Dodaj pozycję">
                           <Plus size={12} /> Dodaj poz.
                         </button>
                         {fak.plik_url && (
-                          <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center" style={{ color: '#3b82f6' }} title="Pobierz plik">
+                          <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center justify-center" style={{ color: '#3b82f6', minHeight: 36, minWidth: 36 }} title="Pobierz plik">
                             <Download size={13} />
                           </a>
                         )}
-                        <button onClick={() => openEditFak(fak)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                        <button onClick={() => handleDeleteFak(fak)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                        <button onClick={() => openEditFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
+                        <button onClick={() => handleDeleteFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
                       </>
                     )}
                     {fak.status === 'zatwierdzona' && (
@@ -983,14 +983,14 @@ export default function Faktury() {
                         <button
                           onClick={() => setExpanded(isOpen ? null : fak.id)}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                          style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                          style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }}
                         >
                           {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Pozycje
                         </button>
                         <button
                           onClick={() => handleCofnij(fak)}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                          style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid #fcd34d' }}
+                          style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid #fcd34d', minHeight: 36 }}
                           title="Cofnij do roboczej i odwróć stany magazynowe"
                         >
                           Cofnij
@@ -1000,11 +1000,11 @@ export default function Faktury() {
                     {fak.status === 'anulowana' && (
                       <>
                         {fak.plik_url && (
-                          <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center" style={{ color: '#3b82f6' }} title="Pobierz plik">
+                          <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center justify-center" style={{ color: '#3b82f6', minHeight: 36, minWidth: 36 }} title="Pobierz plik">
                             <Download size={13} />
                           </a>
                         )}
-                        <button onClick={() => handleDeleteFak(fak)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                        <button onClick={() => handleDeleteFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
                       </>
                     )}
                   </div>

@@ -91,7 +91,7 @@ body {
 
 /* Reduce panel main padding on mobile */
 @media (max-width: 767px) {
-  .panel-main { padding: 16px !important; }
+  .panel-main { padding: 12px !important; }
 }
 
 /* Modal responsive */
@@ -120,4 +120,88 @@ body {
 /* 4-col positions grid in Faktury modal → 2-col on mobile */
 @media (max-width: 600px) {
   .modal-4col { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* Modal — 4col → 1col na bardzo małych ekranach */
+@media (max-width: 400px) {
+  .modal-4col { grid-template-columns: 1fr !important; }
+}
+
+/* Slide-up animation dla bottom sheet modali */
+@keyframes slideUpModal {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@media (max-width: 640px) {
+  .modal-mobile-sheet {
+    animation: slideUpModal 0.25s cubic-bezier(0.32,0.72,0,1);
+    border-radius: 20px 20px 0 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  .modal-mobile-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+}
+
+/* Przyciski akcji w tabelach — większe touch targets */
+@media (max-width: 767px) {
+  .table-action-btn {
+    padding: 8px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+}
+
+/* StatCard — kompaktowy na xs */
+@media (max-width: 480px) {
+  .stat-card-compact { padding: 12px !important; gap: 10px !important; }
+  .stat-card-compact .stat-icon { width: 36px !important; height: 36px !important; }
+  .stat-card-compact .stat-value { font-size: 20px !important; }
+}
+
+/* Tabela — ukryj kolumny na xs */
+@media (max-width: 640px) {
+  .col-hide-xs { display: none !important; }
+}
+
+/* Expanded row tabs — przewijalne na mobile */
+@media (max-width: 640px) {
+  .tab-bar-scroll {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}
+
+/* Faktury — przyciski w wierszu faktury wrap na mobile */
+@media (max-width: 640px) {
+  .faktura-row-actions {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+}
+
+/* Badge — nie przyciskaj tekstu */
+.badge-nowrap { white-space: nowrap; }
+
+/* Bottom navigation bar na mobile */
+@media (max-width: 1023px) {
+  .mobile-bottombar {
+    display: flex !important;
+  }
+  .panel-main {
+    padding-bottom: 72px !important;
+  }
+}
+@media (min-width: 1024px) {
+  .mobile-bottombar { display: none !important; }
+}
+
+/* Auth card — mniejszy padding na xs */
+@media (max-width: 480px) {
+  .auth-card { padding: 20px !important; }
+  .auth-name-grid { grid-template-columns: 1fr !important; }
 }

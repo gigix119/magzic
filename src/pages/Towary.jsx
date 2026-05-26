@@ -316,8 +316,8 @@ export default function Towary() {
             <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Nazwa</th>
               <th className="text-left px-4 py-3 font-medium hidden md:table-cell" style={{ color: 'var(--text-2)' }}>Typ</th>
-              <th className="text-left px-4 py-3 font-medium hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>Kategoria</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Jedn.</th>
+              <th className="text-left px-4 py-3 font-medium hidden md:table-cell" style={{ color: 'var(--text-2)' }}>Kategoria</th>
+              <th className="text-left px-4 py-3 font-medium hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>Jedn.</th>
               <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Stan</th>
               <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Status</th>
               <th className="px-4 py-3" />
@@ -372,19 +372,19 @@ export default function Towary() {
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'var(--text-2)' }}>{item.typ || '—'}</td>
-                      <td className="px-4 py-3 hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{item.kategorie?.nazwa || '—'}</td>
-                      <td className="px-4 py-3" style={{ color: 'var(--text-2)' }}>{item.jednostka || '—'}</td>
+                      <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'var(--text-2)' }}>{item.kategorie?.nazwa || '—'}</td>
+                      <td className="px-4 py-3 hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{item.jednostka || '—'}</td>
                       <td className="px-4 py-3 text-right font-medium" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>{total}</td>
                       <td className="px-4 py-3 text-center">{stanBadge(total, item.stan_minimalny)}</td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => openAction('add', item)} className="p-1.5 rounded-lg" style={{ color: '#16a34a' }} title="Dodaj stan"><Plus size={12} /></button>
-                          <button onClick={() => openAction('issue', item)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Wydaj"><Minus size={12} /></button>
-                          <button onClick={() => openAction('transfer', item)} className="p-1.5 rounded-lg" style={{ color: '#3b82f6' }} title="Transfer"><ArrowLeftRight size={12} /></button>
-                          <button onClick={() => openAction('korekta', item)} className="p-1.5 rounded-lg" style={{ color: '#f59e0b' }} title="Korekta"><SlidersHorizontal size={12} /></button>
-                          <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
-                          <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                          <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                          <button onClick={() => openAction('add', item)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#16a34a' }} title="Dodaj stan"><Plus size={12} /></button>
+                          <button onClick={() => openAction('issue', item)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Wydaj"><Minus size={12} /></button>
+                          <button onClick={() => openAction('transfer', item)} className="p-1.5 rounded-lg table-action-btn hidden sm:inline-flex" style={{ color: '#3b82f6' }} title="Transfer"><ArrowLeftRight size={12} /></button>
+                          <button onClick={() => openAction('korekta', item)} className="p-1.5 rounded-lg table-action-btn hidden sm:inline-flex" style={{ color: '#f59e0b' }} title="Korekta"><SlidersHorizontal size={12} /></button>
+                          <div className="hidden sm:block" style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
+                          <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
+                          <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
                         </div>
                       </td>
                     </tr>
@@ -395,7 +395,7 @@ export default function Towary() {
                         <td colSpan={7} style={{ padding: 0, background: 'var(--table-sub)' }}>
 
                           {/* Tab bar */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', paddingLeft: 12 }}>
+                          <div className="tab-bar-scroll" style={{ display: 'flex', borderBottom: '1px solid var(--border)', paddingLeft: 12 }}>
                             {[['stany', 'Stany i ruchy'], ['historia', 'Historia zakupów']].map(([key, label]) => (
                               <button
                                 key={key}

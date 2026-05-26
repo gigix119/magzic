@@ -260,7 +260,7 @@ export default function Magazyny() {
                     {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}
                   </button>
 
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                     {isConfirmDelete ? (
                       <>
                         <button
@@ -280,8 +280,8 @@ export default function Magazyny() {
                       </>
                     ) : (
                       <>
-                        <button onClick={() => openEdit(mag)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                        <button onClick={() => setConfirmDeleteMag(mag.id)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                        <button onClick={() => openEdit(mag)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
+                        <button onClick={() => setConfirmDeleteMag(mag.id)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
                       </>
                     )}
                   </div>
@@ -317,17 +317,17 @@ export default function Magazyny() {
                                   <StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} />
                                 </td>
                                 <td className="px-5 py-3">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                                  <div className="flex items-center justify-center gap-1 flex-wrap">
+                                    <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
                                       <PackagePlus size={13} />
                                     </button>
-                                    <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                                    <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
                                       <PackageMinus size={13} />
                                     </button>
-                                    <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
+                                    <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
                                       <ArrowLeftRight size={13} />
                                     </button>
-                                    <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="p-1.5 rounded-md" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+                                    <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
                                       <SlidersHorizontal size={13} />
                                     </button>
                                   </div>

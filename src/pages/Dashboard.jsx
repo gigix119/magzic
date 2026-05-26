@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext'
 import Spinner from '../components/Spinner'
@@ -8,13 +8,13 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 
 function StatCard({ icon: Icon, label, value, color = '#3b82f6', sub }) {
   return (
-    <div className="rounded-xl p-5 flex items-center gap-4" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-      <div className="rounded-lg flex items-center justify-center" style={{ width: 44, height: 44, background: color + '1a' }}>
+    <div className="rounded-xl p-5 flex items-center gap-4 stat-card-compact" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      <div className="stat-icon rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 44, height: 44, background: color + '1a' }}>
         <Icon size={20} style={{ color }} />
       </div>
       <div>
         <p className="text-sm" style={{ color: 'var(--text-2)' }}>{label}</p>
-        <p className="text-2xl font-semibold mt-0.5" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>
+        <p className="stat-value text-2xl font-semibold mt-0.5" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>
           {value ?? '—'}
         </p>
         {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{sub}</p>}
@@ -39,7 +39,7 @@ const SEV_BADGE  = { critical: 'red', high: 'red', medium: 'yellow', low: 'zinc'
 
 function OnboardingScreen() {
   return (
-    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+    <div style={{ textAlign: 'center', padding: 'clamp(32px, 8vw, 60px) 16px' }}>
       <div style={{
         width: 72, height: 72, borderRadius: 20, background: 'rgba(59,130,246,0.1)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
@@ -85,6 +85,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isEmpty, setIsEmpty] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   useEffect(() => {
     if (!workspaceId) { setLoading(false); return }
@@ -213,9 +220,9 @@ export default function Dashboard() {
         <div className="rounded-xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <h2 className="font-medium mb-4" style={{ fontSize: 14, color: 'var(--text)' }}>Stan magazynowy — top 8 towarów</h2>
           {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={isMobile ? 160 : 220}>
               <BarChart data={chartData} barCategoryGap="30%">
-                <XAxis dataKey="name" tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={{ fill: 'var(--text-2)', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>

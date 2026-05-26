@@ -215,14 +215,14 @@ export default function Pakiety() {
                     <Badge variant={pak.aktywny ? 'green' : 'zinc'}>{pak.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge>
                     {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}
                   </button>
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                     {pak.aktywny && (
-                      <button onClick={() => openExec(pak)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#8b5cf6' }} title="Wykonaj pakiet">
+                      <button onClick={() => openExec(pak)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#8b5cf6', minHeight: 40 }} title="Wykonaj pakiet">
                         <PlayCircle size={13} /> Wykonaj
                       </button>
                     )}
-                    <button onClick={() => openEdit(pak)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                    <button onClick={() => handleDelete(pak)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                    <button onClick={() => openEdit(pak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
+                    <button onClick={() => handleDelete(pak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
                   </div>
                 </div>
 
@@ -320,7 +320,7 @@ export default function Pakiety() {
 
             <div className="flex gap-3 pt-2">
               <button onClick={() => setExecPak(null)} className="flex-1 rounded-lg py-2 text-sm font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
-              <button onClick={handleExec} disabled={execing || !execMagId} className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium text-white" style={{ background: '#8b5cf6', opacity: (execing || !execMagId) ? 0.7 : 1 }}>
+              <button onClick={handleExec} disabled={execing || !execMagId} className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium text-white" style={{ background: '#8b5cf6', opacity: (execing || !execMagId) ? 0.7 : 1, minHeight: 48 }}>
                 <PlayCircle size={15} />
                 {execing ? 'Wykonywanie...' : 'Wykonaj pakiet'}
               </button>

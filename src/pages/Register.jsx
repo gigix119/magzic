@@ -116,7 +116,7 @@ export default function Register() {
         </div>
 
         {/* Card */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 32, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <div className="auth-card" style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 32, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           {done ? (
             <div style={{ textAlign: 'center', padding: '8px 0' }}>
               <CheckCircle2 size={48} color="#22c55e" style={{ margin: '0 auto 16px' }} />
@@ -143,7 +143,7 @@ export default function Register() {
               )}
 
               {/* Imię + Nazwisko */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="auth-name-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Imię</label>
                   <input

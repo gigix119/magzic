@@ -120,7 +120,7 @@ export default function Kontrahenci() {
           <thead>
             <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Nazwa</th>
-              <th className="text-left px-4 py-3 font-medium hidden md:table-cell" style={{ color: 'var(--text-2)' }}>NIP</th>
+              <th className="text-left px-4 py-3 font-medium hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>NIP</th>
               <th className="text-left px-4 py-3 font-medium hidden lg:table-cell" style={{ color: 'var(--text-2)' }}>Email</th>
               <th className="text-left px-4 py-3 font-medium hidden lg:table-cell" style={{ color: 'var(--text-2)' }}>Telefon</th>
               <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--text-2)' }}>Faktury</th>
@@ -142,8 +142,9 @@ export default function Kontrahenci() {
                   <td className="px-4 py-3">
                     <p className="font-medium" style={{ color: 'var(--text)' }}>{item.nazwa}</p>
                     {item.adres && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{item.adres}</p>}
+                    {item.nip && <p className="text-xs mt-0.5 sm:hidden" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace' }}>{item.nip}</p>}
                   </td>
-                  <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'var(--text-2)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{item.nip || '—'}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell" style={{ color: 'var(--text-2)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{item.nip || '—'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     {item.email
                       ? <a href={`mailto:${item.email}`} className="flex items-center gap-1.5 hover:underline" style={{ fontSize: 13, color: '#2563eb' }}><Mail size={13} /> {item.email}</a>
@@ -156,8 +157,8 @@ export default function Kontrahenci() {
                   <td className="px-4 py-3 text-center"><Badge variant={item.aktywny ? 'green' : 'zinc'}>{item.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                      <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                      <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
+                      <button onClick={() => handleDelete(item)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
                     </div>
                   </td>
                 </tr>

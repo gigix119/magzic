@@ -10,12 +10,12 @@ export default function Modal({ title, onClose, children, maxWidth = 560 }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-mobile-overlay"
       style={{ background: 'rgba(0,0,0,0.6)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="relative w-full rounded-xl shadow-2xl flex flex-col modal-inner"
+        className="relative w-full rounded-xl shadow-2xl flex flex-col modal-inner modal-mobile-sheet"
         style={{ maxWidth, background: 'var(--card)', border: '1px solid var(--border)' }}
       >
         <div

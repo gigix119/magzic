@@ -415,12 +415,12 @@ export default function Alerty() {
             <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Wykryte anomalie cenowe w zakupach</h2>
             {priceAlerts.length > 0 && <Badge variant="blue">{priceAlerts.length} nieprzeczytanych</Badge>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {priceAlerts.length > 1 && (
               <button
                 onClick={markAllPriceAlertsRead}
                 className="flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 font-medium text-white"
-                style={{ background: '#22c55e' }}
+                style={{ background: '#22c55e', minHeight: 36 }}
               >
                 <CheckCheck size={12} /> Wszystkie przeczytane
               </button>
@@ -429,7 +429,7 @@ export default function Alerty() {
               onClick={fetchPriceAlerts}
               disabled={priceAlertsLoading}
               className="text-xs rounded-lg px-3 py-1.5 font-medium"
-              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }}
             >
               {priceAlertsLoading ? 'Sprawdzam…' : 'Odśwież'}
             </button>

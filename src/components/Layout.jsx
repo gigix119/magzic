@@ -8,6 +8,14 @@ import {
   Sparkles, Bell, Menu, X, Sun, Moon, LogOut,
 } from 'lucide-react'
 
+const BOTTOM_NAV = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/towary', icon: Package, label: 'Towary' },
+  { to: '/faktury', icon: FileText, label: 'Faktury' },
+  { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
+  { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
+]
+
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/towary', icon: Package, label: 'Towary' },
@@ -157,17 +165,17 @@ export default function Layout() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
         <header
-          className="flex items-center gap-3 px-4 py-3"
+          className="flex items-center gap-3 px-3 py-2 lg:px-4 lg:py-3"
           style={{ background: 'var(--card)', borderBottom: '1px solid var(--border)' }}
         >
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-1.5 rounded-lg lg:hidden"
-            style={{ color: 'var(--muted)' }}
+            className="rounded-lg lg:hidden flex items-center justify-center"
+            style={{ color: 'var(--muted)', minWidth: 44, minHeight: 44 }}
           >
             <Menu size={20} />
           </button>
-          <span className="font-semibold lg:hidden" style={{ fontSize: 15, color: 'var(--text)' }}>magzic</span>
+          <span className="font-semibold lg:hidden" style={{ fontSize: 14, color: 'var(--text)' }}>magzic</span>
           <div className="ml-auto">
             <button
               onClick={toggleTheme}
@@ -184,6 +192,43 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav
+        className="mobile-bottombar fixed bottom-0 left-0 right-0 z-40 items-center justify-around px-2 py-1"
+        style={{
+          background: 'var(--card)',
+          borderTop: '1px solid var(--border)',
+          paddingBottom: 'env(safe-area-inset-bottom, 8px)',
+        }}
+      >
+        {BOTTOM_NAV.map(({ to, icon: Icon, label, showBadge }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg relative"
+            style={({ isActive }) => ({
+              color: isActive ? '#3b82f6' : 'var(--text-2)',
+              minWidth: 48,
+              minHeight: 44,
+              justifyContent: 'center',
+            })}
+          >
+            <Icon size={20} />
+            <span style={{ fontSize: 10, fontWeight: 500 }}>{label}</span>
+            {showBadge && alertCount > 0 && (
+              <span style={{
+                position: 'absolute', top: 4, right: 8,
+                background: '#ef4444', color: '#fff',
+                borderRadius: 10, padding: '1px 5px',
+                fontSize: 9, fontWeight: 700, lineHeight: '14px',
+              }}>
+                {alertCount > 9 ? '9+' : alertCount}
+              </span>
+            )}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }

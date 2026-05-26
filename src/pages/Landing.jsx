@@ -317,10 +317,10 @@ export default function Landing() {
                 <Brain size={12} /> Napędzany przez AI
               </div>
 
-              <h1 className="hb" style={{ fontSize: 'clamp(38px,6vw,72px)', fontWeight: 800, lineHeight: 1.04, color: '#f0f6ff', marginBottom: 14, letterSpacing: '-2.5px' }}>
+              <h1 className="hb" style={{ fontSize: 'clamp(28px,7vw,72px)', fontWeight: 800, lineHeight: 1.04, color: '#f0f6ff', marginBottom: 14, letterSpacing: '-2px' }}>
                 Koniec zgadywania.
               </h1>
-              <h1 className="hc" style={{ fontSize: 'clamp(38px,6vw,72px)', fontWeight: 800, lineHeight: 1.04, letterSpacing: '-2.5px', marginBottom: 32, background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 55%, #22d3ee 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              <h1 className="hc" style={{ fontSize: 'clamp(28px,7vw,72px)', fontWeight: 800, lineHeight: 1.04, letterSpacing: '-2px', marginBottom: 32, background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 55%, #22d3ee 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 Magzic pilnuje<br />Twojego magazynu.
               </h1>
 
