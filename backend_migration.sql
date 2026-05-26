@@ -1,7 +1,9 @@
 -- ============================================================
--- MAGZIC Backend/Admin Migration v1
+-- MAGZIC Backend/Admin Migration v2
 -- Uruchom w: Supabase Dashboard → SQL Editor → New query
--- Bezpieczne: idempotentne, nie kasuje danych
+-- Idempotentne — bezpieczne do wielokrotnego uruchamiania
+-- Nie kasuje żadnych danych. Nie dropuje żadnych tabel.
+-- Używa: public.profiles (NIE public.user_profiles)
 -- ============================================================
 
 -- === 0. Rozszerzenie tabeli profiles ===
@@ -11,7 +13,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_login_at timestamptz;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_seen_at  timestamptz;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at    timestamptz NOT NULL DEFAULT now();
 
--- Kolumna status (bezpieczna dla istniejących wierszy – domyślnie 'active')
+-- Kolumna status (bezpieczna dla istniejących wierszy — domyślnie 'active')
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -23,12 +25,11 @@ BEGIN
 END;
 $$;
 
--- Rozszerzenie constraint role o 'owner'
+-- Rozszerzenie constraint role o 'owner' (DROP + ADD = idempotentne)
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check
   CHECK (role IN ('owner', 'admin', 'user'));
 
--- Constraint na status
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_status_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_status_check
   CHECK (status IN ('active', 'blocked', 'pending'));
@@ -92,29 +93,41 @@ CREATE TABLE IF NOT EXISTS public.app_error_logs (
 );
 ALTER TABLE public.app_error_logs ENABLE ROW LEVEL SECURITY;
 
--- === 5. Funkcja pomocnicza is_owner() ===
+-- === 5. Funkcja is_owner() ===
 -- SECURITY DEFINER: omija RLS, zapobiega circular reference na tabeli profiles
+-- Sprawdza role = 'owner' ORAZ status = 'active'
 
 CREATE OR REPLACE FUNCTION public.is_owner()
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = public AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'owner'
+    WHERE id = auth.uid()
+      AND role = 'owner'
+      AND status = 'active'
   );
 $$;
 
 -- === 6. Trigger: ochrona role/status przed zmianą przez non-owner ===
+-- postgres / service_role / supabase_admin mogą zawsze zmieniać role/status
+-- Zwykły user nie może sam sobie zmieniać roli ani statusu
 
 CREATE OR REPLACE FUNCTION public.guard_profile_sensitive_fields()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public AS $$
 BEGIN
+  -- Superuser i service roles mogą zmieniać wszystko
+  IF current_user IN ('postgres', 'supabase_admin', 'service_role') THEN
+    NEW.updated_at := now();
+    RETURN NEW;
+  END IF;
+
   -- Non-owner nie może zmieniać role ani status
   IF NOT public.is_owner() THEN
     NEW.role   := OLD.role;
     NEW.status := OLD.status;
   END IF;
+
   NEW.updated_at := now();
   RETURN NEW;
 END;
@@ -125,54 +138,66 @@ CREATE TRIGGER guard_profile_sensitive_fields
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE PROCEDURE public.guard_profile_sensitive_fields();
 
--- === 7. RLS POLICIES ===
+-- === 7. RLS Policies ===
 
--- profiles: owner może czytać wszystkich użytkowników
+-- profiles: user widzi tylko swój własny profil
+DROP POLICY IF EXISTS "user_read_own_profile" ON public.profiles;
+CREATE POLICY "user_read_own_profile" ON public.profiles
+  FOR SELECT USING (auth.uid() = id);
+
+-- profiles: user aktualizuje tylko swój własny profil
+DROP POLICY IF EXISTS "user_update_own_profile" ON public.profiles;
+CREATE POLICY "user_update_own_profile" ON public.profiles
+  FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+-- profiles: owner czyta wszystkich użytkowników
 DROP POLICY IF EXISTS "owner_read_all_profiles" ON public.profiles;
 CREATE POLICY "owner_read_all_profiles" ON public.profiles
   FOR SELECT USING (public.is_owner());
 
--- profiles: owner może aktualizować wszystkich (role, status, itp.)
+-- profiles: owner aktualizuje wszystkich
 DROP POLICY IF EXISTS "owner_update_all_profiles" ON public.profiles;
 CREATE POLICY "owner_update_all_profiles" ON public.profiles
   FOR UPDATE USING (public.is_owner()) WITH CHECK (public.is_owner());
 
--- user_permissions: user widzi tylko swoje uprawnienia
+-- user_permissions: user widzi tylko swoje
 DROP POLICY IF EXISTS "user_read_own_permissions" ON public.user_permissions;
 CREATE POLICY "user_read_own_permissions" ON public.user_permissions
   FOR SELECT USING (auth.uid() = user_id);
 
--- user_permissions: owner zarządza wszystkimi uprawnieniami
+-- user_permissions: owner zarządza wszystkimi
 DROP POLICY IF EXISTS "owner_manage_permissions" ON public.user_permissions;
 CREATE POLICY "owner_manage_permissions" ON public.user_permissions
   FOR ALL USING (public.is_owner()) WITH CHECK (public.is_owner());
 
--- app_events: zalogowany user może tworzyć własne eventy
+-- app_events: zalogowany user tworzy własne eventy
 DROP POLICY IF EXISTS "user_insert_own_events" ON public.app_events;
 CREATE POLICY "user_insert_own_events" ON public.app_events
   FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
 
--- app_events: owner czyta wszystkie eventy
+-- app_events: owner czyta wszystkie
 DROP POLICY IF EXISTS "owner_read_all_events" ON public.app_events;
 CREATE POLICY "owner_read_all_events" ON public.app_events
   FOR SELECT USING (public.is_owner());
 
--- admin_audit_logs: tylko owner tworzy i czyta
+-- admin_audit_logs: tylko owner
 DROP POLICY IF EXISTS "owner_manage_audit_logs" ON public.admin_audit_logs;
 CREATE POLICY "owner_manage_audit_logs" ON public.admin_audit_logs
   FOR ALL USING (public.is_owner()) WITH CHECK (public.is_owner());
 
--- app_error_logs: zalogowany user może tworzyć wpisy błędów
+-- app_error_logs: zalogowany user tworzy wpisy błędów
 DROP POLICY IF EXISTS "user_insert_error_logs" ON public.app_error_logs;
 CREATE POLICY "user_insert_error_logs" ON public.app_error_logs
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
--- app_error_logs: owner czyta wszystkie błędy
+-- app_error_logs: owner czyta wszystkie
 DROP POLICY IF EXISTS "owner_read_error_logs" ON public.app_error_logs;
 CREATE POLICY "owner_read_error_logs" ON public.app_error_logs
   FOR SELECT USING (public.is_owner());
 
--- === 8. Bootstrap administrator@blueapart.pl jako owner ===
+-- === 8. Funkcja bootstrap_admin_owner() ===
+-- KRYTYCZNE: najpierw INSERT INTO public.profiles ON CONFLICT,
+-- dopiero potem user_permissions — żeby uniknąć FK error gdy profil nie istnieje.
 
 CREATE OR REPLACE FUNCTION public.bootstrap_admin_owner()
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER
@@ -180,17 +205,38 @@ SET search_path = public AS $$
 DECLARE
   admin_uid uuid;
 BEGIN
+  -- Znajdź administrator@blueapart.pl w auth.users
   SELECT id INTO admin_uid FROM auth.users
   WHERE email = 'administrator@blueapart.pl' LIMIT 1;
 
   IF admin_uid IS NULL THEN
-    RETURN 'administrator@blueapart.pl nie istnieje jeszcze w auth.users – uruchom po pierwszym zalogowaniu';
+    RETURN 'administrator@blueapart.pl nie istnieje jeszcze w auth.users — uruchom po pierwszym zalogowaniu';
   END IF;
 
-  UPDATE public.profiles
-  SET role = 'owner', status = 'active', updated_at = now()
-  WHERE id = admin_uid;
+  -- KROK 1: Upsert profilu (INSERT jeśli nie istnieje, UPDATE jeśli istnieje)
+  -- Musi być przed user_permissions, bo FK wymaga istniejącego profilu
+  INSERT INTO public.profiles (
+    id,
+    email,
+    role,
+    status,
+    updated_at
+  )
+  SELECT
+    u.id,
+    u.email,
+    'owner',
+    'active',
+    now()
+  FROM auth.users u
+  WHERE u.id = admin_uid
+  ON CONFLICT (id) DO UPDATE
+    SET email      = EXCLUDED.email,
+        role       = 'owner',
+        status     = 'active',
+        updated_at = now();
 
+  -- KROK 2: Nadaj pełne uprawnienia do wszystkich modułów
   INSERT INTO public.user_permissions (user_id, module_key, can_view, can_create, can_edit, can_delete)
   VALUES
     (admin_uid, 'dashboard',   true, true, true, true),
@@ -201,34 +247,54 @@ BEGIN
     (admin_uid, 'settings',    true, true, true, true),
     (admin_uid, 'backend',     true, true, true, true)
   ON CONFLICT (user_id, module_key) DO UPDATE
-    SET can_view = true, can_create = true, can_edit = true, can_delete = true,
+    SET can_view   = true,
+        can_create = true,
+        can_edit   = true,
+        can_delete = true,
         updated_at = now();
 
-  RETURN 'OK: administrator@blueapart.pl nadano rolę owner (uid: ' || admin_uid::text || ')';
+  RETURN 'OK: administrator@blueapart.pl — rola owner, status active (uid: ' || admin_uid::text || ')';
 END;
 $$;
 
+-- Uruchom bootstrap (idempotentne)
 SELECT public.bootstrap_admin_owner();
 
--- === 9. Zaktualizowany trigger dla nowych użytkowników ===
--- Automatycznie nadaje rolę owner dla administrator@blueapart.pl
+-- Kontrola: profil admina
+SELECT id, email, role, status, updated_at
+FROM public.profiles
+WHERE email = 'administrator@blueapart.pl';
+
+-- Kontrola: uprawnienia admina
+SELECT module_key, can_view, can_create, can_edit, can_delete
+FROM public.user_permissions
+WHERE user_id = (
+  SELECT id FROM public.profiles WHERE email = 'administrator@blueapart.pl'
+)
+ORDER BY module_key;
+
+-- === 9. Trigger dla nowych użytkowników ===
+-- Automatycznie ustawia rolę 'owner' dla administrator@blueapart.pl przy rejestracji
 
 CREATE OR REPLACE FUNCTION public.handle_new_user_workspace()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   new_workspace_id uuid;
 BEGIN
+  -- Utwórz domyślny workspace
   INSERT INTO public.workspaces (owner_user_id, name)
   VALUES (NEW.id, 'Mój magazyn') RETURNING id INTO new_workspace_id;
 
-  INSERT INTO public.profiles (id, email, first_name, last_name, role, status)
+  -- Utwórz profil — INSERT z ON CONFLICT dla bezpieczeństwa
+  INSERT INTO public.profiles (id, email, first_name, last_name, role, status, updated_at)
   VALUES (
     NEW.id,
     NEW.email,
     NEW.raw_user_meta_data->>'first_name',
     NEW.raw_user_meta_data->>'last_name',
     CASE WHEN NEW.email = 'administrator@blueapart.pl' THEN 'owner' ELSE 'user' END,
-    'active'
+    'active',
+    now()
   )
   ON CONFLICT (id) DO UPDATE
     SET first_name = EXCLUDED.first_name,
@@ -253,7 +319,11 @@ BEGIN
       (NEW.id, 'settings',    true, true, true, true),
       (NEW.id, 'backend',     true, true, true, true)
     ON CONFLICT (user_id, module_key) DO UPDATE
-      SET can_view = true, can_create = true, can_edit = true, can_delete = true;
+      SET can_view   = true,
+          can_create = true,
+          can_edit   = true,
+          can_delete = true,
+          updated_at = now();
   END IF;
 
   RETURN NEW;
@@ -266,7 +336,8 @@ CREATE TRIGGER on_auth_user_created_workspace
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user_workspace();
 
 -- ============================================================
--- GOTOWE! Sprawdź wynik SELECT bootstrap_admin_owner() powyżej.
--- Jeśli zwrócił "nie istnieje" – uruchom tę migrację ponownie
--- po pierwszym zalogowaniu administrator@blueapart.pl.
+-- KONIEC backend_migration.sql v2
+-- Sprawdź wyniki SELECT powyżej:
+--   1. profiles: role = 'owner', status = 'active'
+--   2. user_permissions: 7 modułów z can_view = true
 -- ============================================================
