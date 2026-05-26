@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, Activity, ShieldCheck, ScrollText, AlertTriangle } from 'lucide-react'
+import { LayoutDashboard, Users, Activity, ShieldCheck, ScrollText, AlertTriangle, Brain } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const BACKEND_NAV = [
@@ -9,6 +9,7 @@ const BACKEND_NAV = [
   { to: '/backend/permissions', icon: ShieldCheck,     label: 'Uprawnienia' },
   { to: '/backend/audit',       icon: ScrollText,      label: 'Audit log' },
   { to: '/backend/errors',      icon: AlertTriangle,   label: 'Błędy' },
+  { to: '/backend/model',       icon: Brain,           label: 'Model faktur' },
 ]
 
 export default function BackendLayout() {
