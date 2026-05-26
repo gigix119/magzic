@@ -12,9 +12,19 @@ export function AuthProvider({ children }) {
   async function loadUserData(sessionUser) {
     try {
       const [{ data: prof }, { data: ws }] = await Promise.all([
-        supabase.from('profiles').select('id, email, first_name, last_name, role').eq('id', sessionUser.id).maybeSingle(),
+        supabase.from('profiles')
+          .select('id, email, first_name, last_name, role, status, display_name, last_login_at, last_seen_at')
+          .eq('id', sessionUser.id)
+          .maybeSingle(),
         supabase.from('workspaces').select('id, name, owner_user_id').eq('owner_user_id', sessionUser.id).maybeSingle(),
       ])
+
+      // Auto-sign-out blocked users
+      if (prof?.status === 'blocked') {
+        await supabase.auth.signOut()
+        return
+      }
+
       setProfile(prof ?? null)
       setWorkspace(ws ?? null)
     } catch (err) {
@@ -22,6 +32,18 @@ export function AuthProvider({ children }) {
       setProfile(null)
       setWorkspace(null)
     }
+  }
+
+  async function updateLastLogin(userId) {
+    try {
+      await supabase.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', userId)
+    } catch { /* ignore */ }
+  }
+
+  async function updateLastSeen(userId) {
+    try {
+      await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', userId)
+    } catch { /* ignore */ }
   }
 
   useEffect(() => {
@@ -38,11 +60,25 @@ export function AuthProvider({ children }) {
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null
       setUser(u)
       if (u) {
         loadUserData(u)
+        if (event === 'SIGNED_IN') {
+          updateLastLogin(u.id)
+          // Track login event
+          setTimeout(async () => {
+            try {
+              await supabase.from('app_events').insert({
+                user_id: u.id,
+                event_type: 'auth_login',
+                action: 'user_logged_in',
+                metadata: {},
+              })
+            } catch { /* ignore */ }
+          }, 800)
+        }
       } else {
         setProfile(null)
         setWorkspace(null)
@@ -51,6 +87,14 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update last_seen_at every 5 minutes while logged in
+  useEffect(() => {
+    if (!user) return
+    updateLastSeen(user.id)
+    const interval = setInterval(() => updateLastSeen(user.id), 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password })

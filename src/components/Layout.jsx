@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../supabase'
+import { isOwner, trackEvent } from '../utils/adminHelpers'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
-  Sparkles, Bell, Menu, X, Sun, Moon, LogOut,
+  Sparkles, Bell, Menu, X, Sun, Moon, LogOut, Shield,
 } from 'lucide-react'
 
 const BOTTOM_NAV = [
@@ -16,7 +17,7 @@ const BOTTOM_NAV = [
   { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
 ]
 
-const navItems = [
+const STATIC_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/towary', icon: Package, label: 'Towary' },
   { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
@@ -26,13 +27,37 @@ const navItems = [
   { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
 ]
 
+const ROUTE_TRACKING = {
+  '/dashboard':   { module: 'dashboard',   action: 'dashboard_opened' },
+  '/towary':      { module: 'inventory',   action: 'inventory_opened' },
+  '/magazyny':    { module: 'warehouses',  action: 'warehouses_opened' },
+  '/kontrahenci': { module: 'contractors', action: 'contractors_opened' },
+  '/faktury':     { module: 'invoices',    action: 'invoices_opened' },
+  '/pakiety':     { module: 'packages',    action: 'packages_opened' },
+  '/alerty':      { module: 'alerts',      action: 'alerts_opened' },
+}
+
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [alertCount, setAlertCount] = useState(0)
   const { theme, toggleTheme } = useTheme()
-  const { user, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const dark = theme === 'dark'
+
+  const navItems = [
+    ...STATIC_NAV,
+    ...(isOwner(profile) ? [{ to: '/backend', icon: Shield, label: 'Backend', isBackend: true }] : []),
+  ]
+
+  // Page view tracking on navigation
+  useEffect(() => {
+    const match = ROUTE_TRACKING[location.pathname]
+    if (match) {
+      trackEvent({ eventType: 'page_view', moduleKey: match.module, action: match.action })
+    }
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function fetchAlertCount() {
@@ -62,6 +87,7 @@ export default function Layout() {
   }, [])
 
   async function handleSignOut() {
+    trackEvent({ eventType: 'auth_logout', action: 'user_logged_out' })
     await signOut()
     navigate('/login', { replace: true })
   }
@@ -108,32 +134,38 @@ export default function Layout() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {navItems.map(({ to, icon: Icon, label, showBadge }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => setSidebarOpen(false)}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg mb-0.5 text-sm transition-colors"
-              style={({ isActive }) => isActive
-                ? { background: 'rgba(59,130,246,0.12)', color: dark ? '#60a5fa' : '#2563eb', fontWeight: 500 }
-                : { color: 'var(--text-2)' }
-              }
-              onMouseEnter={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = 'var(--hover-bg)' }}
-              onMouseLeave={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = '' }}
-            >
-              <Icon size={16} />
-              <span className="flex-1">{label}</span>
-              {showBadge && alertCount > 0 && (
-                <span style={{
-                  background: '#ef4444', color: '#fff',
-                  borderRadius: 10, padding: '1px 6px',
-                  fontSize: 11, fontWeight: 700,
-                  minWidth: 18, textAlign: 'center', lineHeight: '16px',
-                }}>
-                  {alertCount > 99 ? '99+' : alertCount}
-                </span>
+          {navItems.map(({ to, icon: Icon, label, showBadge, isBackend }) => (
+            <div key={to}>
+              {isBackend && (
+                <div style={{ borderTop: '1px solid var(--sidebar-border)', margin: '6px 0 6px' }} />
               )}
-            </NavLink>
+              <NavLink
+                to={to}
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg mb-0.5 text-sm transition-colors"
+                style={({ isActive }) => isActive
+                  ? isBackend
+                    ? { background: 'rgba(124,58,237,0.12)', color: '#7c3aed', fontWeight: 500 }
+                    : { background: 'rgba(59,130,246,0.12)', color: dark ? '#60a5fa' : '#2563eb', fontWeight: 500 }
+                  : { color: isBackend ? '#7c3aed' : 'var(--text-2)' }
+                }
+                onMouseEnter={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = 'var(--hover-bg)' }}
+                onMouseLeave={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = '' }}
+              >
+                <Icon size={16} />
+                <span className="flex-1">{label}</span>
+                {showBadge && alertCount > 0 && (
+                  <span style={{
+                    background: '#ef4444', color: '#fff',
+                    borderRadius: 10, padding: '1px 6px',
+                    fontSize: 11, fontWeight: 700,
+                    minWidth: 18, textAlign: 'center', lineHeight: '16px',
+                  }}>
+                    {alertCount > 99 ? '99+' : alertCount}
+                  </span>
+                )}
+              </NavLink>
+            </div>
           ))}
         </nav>
 

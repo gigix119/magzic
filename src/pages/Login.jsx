@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../supabase'
-import { Warehouse, Loader2, Eye, EyeOff, CheckCircle2, MailWarning } from 'lucide-react'
+import { Warehouse, Loader2, Eye, EyeOff, CheckCircle2, MailWarning, KeyRound } from 'lucide-react'
 
 const inputStyle = {
   width: '100%', padding: '10px 14px', fontSize: 14, border: '1px solid #d1d5db',
@@ -144,9 +144,20 @@ export default function Login() {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
-                Hasło
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                  Hasło
+                </label>
+                <Link
+                  to="/forgot-password"
+                  style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#3b82f6'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#6b7280'}
+                >
+                  <KeyRound size={11} />
+                  Nie pamiętasz hasła?
+                </Link>
+              </div>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPass ? 'text' : 'password'}
