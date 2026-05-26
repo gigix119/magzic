@@ -108,6 +108,7 @@ export default function Layout() {
         className={`fixed lg:static inset-y-0 left-0 z-30 flex flex-col sidebar-panel ${sidebarOpen ? '' : 'sidebar-panel-closed'}`}
         style={{
           width: 220,
+          height: '100dvh',
           background: 'var(--sidebar)',
           borderRight: '1px solid var(--sidebar-border)',
           transition: 'transform 0.2s',
@@ -170,7 +171,10 @@ export default function Layout() {
         </nav>
 
         {/* User + Logout footer */}
-        <div style={{ borderTop: '1px solid var(--sidebar-border)' }}>
+        <div
+          className="sidebar-footer flex-shrink-0"
+          style={{ borderTop: '1px solid var(--sidebar-border)' }}
+        >
           {user && (
             <div className="px-4 py-2.5">
               <p className="text-xs truncate" style={{ color: 'var(--muted)' }} title={user.email}>
@@ -178,7 +182,7 @@ export default function Layout() {
               </p>
             </div>
           )}
-          <div className="px-2 pb-3">
+          <div className="px-2 sidebar-logout-wrap">
             <button
               onClick={handleSignOut}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"

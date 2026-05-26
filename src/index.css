@@ -205,3 +205,61 @@ body {
   .auth-card { padding: 20px !important; }
   .auth-name-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ── Sidebar — zawsze pełna wysokość z safe-area ── */
+.sidebar-panel {
+  height: 100dvh;
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+}
+
+/* Padding na logout uwzględniający safe area (notch / pasek iPhone) */
+.sidebar-logout-wrap {
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+}
+
+/* ── Faktury — lista kart na mobile ── */
+@media (max-width: 640px) {
+  /* Mniejsze poziome pady kart na xs */
+  .faktura-card-row {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  /* Numer faktury nie wychodził poza ekran */
+  .faktura-numer {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ── Modal faktury — lepsza obsługa na mobile ── */
+@media (max-width: 640px) {
+  /* Modal na xs: prawie pełnoekranowy, z miejscem na klawiaturę */
+  .modal-invoice-new .modal-inner {
+    max-height: 94dvh !important;
+  }
+}
+
+/* Sticky footer z przyciskami zapisu w formularzu faktury */
+.invoice-form-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  padding-top: 12px;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  z-index: 10;
+}
+
+/* PDF preview w modalach: na mobile odpada pod formularz, nie łamie layoutu */
+@media (max-width: 767px) {
+  .invoice-pdf-preview {
+    display: none !important;
+  }
+}
+

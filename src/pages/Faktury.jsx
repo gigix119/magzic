@@ -24,6 +24,9 @@ import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { rankProductCandidates } from '../utils/invoiceScoringEngine'
 import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
 import { mapParsedPozycjaToFormPozycja } from '../utils/invoiceLineMapper'
+import { findMatchingContractor, prepareContractorFromInvoice } from '../utils/contractorMatcher'
+import { ensureContractorForInvoice } from '../utils/contractorService'
+import ContractorCombobox from '../components/ContractorCombobox'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp, AlertTriangle,
@@ -118,7 +121,7 @@ export default function Faktury() {
   const [nFormErr, setNFormErr] = useState({})
   const [nPositions, setNPositions] = useState([])
   const [nSaving, setNSaving] = useState(false)
-  const [nKontrahentHint, setNKontrahentHint] = useState('')
+  const [nContractorValue, setNContractorValue] = useState(null)
   const [nPriceData, setNPriceData] = useState({})
   const [nExtractedItems, setNExtractedItems] = useState([])
   const [nShowExtracted, setNShowExtracted] = useState(false)
@@ -146,7 +149,7 @@ export default function Faktury() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: f, error: e1 }, { data: k }, { data: t }, { data: m }, { data: p }] = await Promise.all([
       addWsFilter(wsQuery('faktury').select('*, kontrahenci(nazwa)')).order('data_zakupu', { ascending: false }),
-      addWsFilter(wsQuery('kontrahenci').select('id, nazwa')).eq('aktywny', true).order('nazwa'),
+      addWsFilter(wsQuery('kontrahenci').select('id, nazwa, nip')).eq('aktywny', true).order('nazwa'),
       addWsFilter(wsQuery('towary').select('id, nazwa, typ, jednostka')).eq('aktywny', true).order('nazwa'),
       addWsFilter(wsQuery('magazyny').select('id, nazwa')).eq('aktywny', true).order('nazwa'),
       addWsFilter(wsQuery('pozycje_faktury').select('*, towary(nazwa, jednostka), magazyny(nazwa)')),
@@ -402,6 +405,12 @@ export default function Faktury() {
     }
   }
 
+  function handleContractorChange(val) {
+    setNContractorValue(val)
+    // Keep nForm.kontrahent_id in sync for existing-contractor case
+    setNForm(f => ({ ...f, kontrahent_id: val?.existingId || '' }))
+  }
+
   // ── New invoice modal ─────────────────────────────────────────
   function openNewModal() {
     setNFile(null)
@@ -417,7 +426,7 @@ export default function Faktury() {
     setNForm({ ...emptyFak, magazyn_id: magazyny[0]?.id || '' })
     setNFormErr({})
     setNPositions([])
-    setNKontrahentHint('')
+    setNContractorValue(null)
     setNPriceData({})
     setNDraftZeroPriceConfirmed(false)
     setShowNModal(true)
@@ -429,7 +438,9 @@ export default function Faktury() {
     try {
       const history = await getPriceHistoryCached(towarId, supabase)
       const analyzed = analyzePriceHistory(history)
-      const kontrahentNazwa = kontrahenci.find(k => k.id === nForm.kontrahent_id)?.nazwa || ''
+      const kontrahentNazwa =
+        kontrahenci.find(k => k.id === (nForm.kontrahent_id || nContractorValue?.existingId))?.nazwa ||
+        nContractorValue?.candidate?.nazwa || ''
       const alerts = cena > 0 ? generatePriceAlerts({ cena_netto: cena }, analyzed, kontrahentNazwa) : []
       setNPriceData(d => ({
         ...d,
@@ -626,19 +637,18 @@ export default function Faktury() {
         if (result.fields.numer) setNForm(f => ({ ...f, numer: result.fields.numer }))
         if (result.fields.data_zakupu) setNForm(f => ({ ...f, data_zakupu: result.fields.data_zakupu }))
 
-        // NIP → lookup kontrahent via Supabase
-        if (result.fields.kontrahent_nip) {
-          const nip = result.fields.kontrahent_nip.replace(/\D/g, '')
-          const { data: matchKontrahent } = await supabase
-            .from('kontrahenci')
-            .select('id, nazwa')
-            .eq('nip', nip)
-            .maybeSingle()
-          if (matchKontrahent) {
-            setNForm(f => ({ ...f, kontrahent_id: matchKontrahent.id }))
-            addToast(`Dopasowano kontrahenta: ${matchKontrahent.nazwa}`, 'success')
+        // Contractor detection & matching from loaded list (no extra network call)
+        const pdfCandidate = prepareContractorFromInvoice(result)
+        if (pdfCandidate) {
+          const matchResult = findMatchingContractor(pdfCandidate, kontrahenci)
+          if (matchResult.match) {
+            const status = matchResult.matchedBy === 'nip' ? 'matched_nip' : 'matched_name'
+            handleContractorChange({ existingId: matchResult.match.id, candidate: null, matchStatus: status })
+            addToast(`Dopasowano kontrahenta: ${matchResult.match.nazwa}`, 'success')
           } else {
-            addToast(`NIP ${result.fields.kontrahent_nip} — nie znaleziono kontrahenta. Wybierz ręcznie.`, 'info')
+            handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
+            const hint = pdfCandidate.nazwa || pdfCandidate.nip
+            addToast(`Wykryto kontrahenta z PDF: ${hint}. Zostanie utworzony przy zapisie.`, 'info')
           }
         }
 
@@ -765,10 +775,11 @@ export default function Faktury() {
   }
 
   async function handleSaveNew() {
+    const hasContractor = nForm.kontrahent_id || nContractorValue?.candidate?.nazwa?.trim()
     const e = {}
     if (!nForm.numer.trim()) e.numer = true
     if (!nForm.data_zakupu) e.data_zakupu = true
-    if (!nForm.kontrahent_id) e.kontrahent_id = true
+    if (!hasContractor) e.kontrahent_id = true
     if (!nForm.magazyn_id) e.magazyn_id = true
     setNFormErr(e)
     if (Object.keys(e).length > 0) return
@@ -777,6 +788,36 @@ export default function Faktury() {
     try {
       const { data: dupCheck } = await supabase.from('faktury').select('id').eq('numer', nForm.numer.trim()).maybeSingle()
       if (dupCheck) { addToast('Faktura o tym numerze już istnieje', 'error'); setNSaving(false); return }
+
+      // 0. Resolve / create contractor
+      let fakturaKontrahentId = nForm.kontrahent_id || null
+      if (!fakturaKontrahentId && nContractorValue?.candidate?.nazwa?.trim()) {
+        try {
+          const result = await ensureContractorForInvoice({
+            selectedContractorId: null,
+            candidateContractor: nContractorValue.candidate,
+            contractors: kontrahenci,
+            wsDataFn: wsData,
+          })
+          fakturaKontrahentId = result.id
+          if (result.created) {
+            setKontrahenci(prev => [...prev, result.contractor])
+            addToast(`Kontrahent „${result.contractor.nazwa}" został utworzony`, 'success')
+          } else if (result.reusedExisting) {
+            addToast(`Użyto istniejącego kontrahenta (duplikat NIP)`, 'info')
+          }
+        } catch (contractorErr) {
+          addToast(`Błąd tworzenia kontrahenta: ${contractorErr.message}`, 'error')
+          setNSaving(false)
+          return
+        }
+      }
+
+      if (!fakturaKontrahentId) {
+        addToast('Wybierz lub utwórz kontrahenta', 'error')
+        setNSaving(false)
+        return
+      }
 
       // 1. Upload file to storage
       let plik_url = null
@@ -791,7 +832,7 @@ export default function Faktury() {
       // 2. Insert faktura as 'robocza' (stock updated only on approval)
       const { data: fakData, error: fakErr } = await supabase.from('faktury').insert([{
         numer: nForm.numer.trim(),
-        kontrahent_id: nForm.kontrahent_id || null,
+        kontrahent_id: fakturaKontrahentId,
         data_zakupu: nForm.data_zakupu,
         typ: nForm.typ,
         magazyn_id: nForm.magazyn_id || null,
@@ -852,7 +893,10 @@ export default function Faktury() {
       // Correction tracking — diff what parser extracted vs what user approved
       if (extractedResult && extractedResult.source !== 'manual') {
         try {
-          const kontrahentNazwa = kontrahenci.find(k => k.id === nForm.kontrahent_id)?.nazwa
+          const kontrahentNazwa =
+            kontrahenci.find(k => k.id === fakturaKontrahentId)?.nazwa ||
+            nContractorValue?.candidate?.nazwa ||
+            null
           const approvedResult = {
             ...extractedResult,
             fields: {
@@ -889,7 +933,9 @@ export default function Faktury() {
 
   if (loading) return <Spinner />
 
-  const canSaveNew = nForm.numer.trim() && nForm.data_zakupu && nForm.kontrahent_id && nForm.magazyn_id
+  const canSaveNew = nForm.numer.trim() && nForm.data_zakupu &&
+    (nForm.kontrahent_id || nContractorValue?.candidate?.nazwa?.trim()) &&
+    nForm.magazyn_id
 
   return (
     <div>
@@ -933,7 +979,7 @@ export default function Faktury() {
             const total = totalNetto(fak.id)
             return (
               <div key={fak.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-3 px-5 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
+                <div className="flex items-center gap-3 px-5 py-4 faktura-card-row" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
                   <button className="flex-1 flex items-center gap-3 text-left min-w-0" onClick={() => setExpanded(isOpen ? null : fak.id)}>
                     <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 38, height: 38, background: 'rgba(59,130,246,0.1)' }}>
                       <FileText size={16} style={{ color: '#3b82f6' }} />
@@ -1665,20 +1711,13 @@ export default function Faktury() {
                   <div className="grid grid-cols-2 gap-3 modal-2col">
                     <div>
                       <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Kontrahent *</label>
-                      <select
-                        style={IS(nFormErr.kontrahent_id)}
-                        value={nForm.kontrahent_id}
-                        onChange={e => setNForm(f => ({ ...f, kontrahent_id: e.target.value }))}
-                      >
-                        <option value="">— wybierz —</option>
-                        {kontrahenci.map(k => <option key={k.id} value={k.id}>{k.nazwa}</option>)}
-                      </select>
-                      {nFormErr.kontrahent_id && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
-                      {nKontrahentHint && !nForm.kontrahent_id && (
-                        <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                          AI wykryło: {nKontrahentHint}
-                        </p>
-                      )}
+                      <ContractorCombobox
+                        contractors={kontrahenci}
+                        value={nContractorValue}
+                        onChange={handleContractorChange}
+                        hasError={!!nFormErr.kontrahent_id}
+                      />
+                      {nFormErr.kontrahent_id && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Wybierz lub wpisz kontrahenta</p>}
                     </div>
                     <div>
                       <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Typ dokumentu</label>
@@ -1866,8 +1905,8 @@ export default function Faktury() {
                     </div>
                   </div>
 
-                  {/* Action buttons */}
-                  <div className="flex gap-3 pt-2">
+                  {/* Action buttons — sticky na dole na mobile */}
+                  <div className="invoice-form-actions flex gap-3">
                     <button
                       type="button"
                       onClick={() => setShowNModal(false)}
