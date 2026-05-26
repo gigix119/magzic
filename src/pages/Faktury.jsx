@@ -22,7 +22,7 @@ import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import { logExtraction, addToReviewQueue } from '../utils/modelLogger'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
-import { rankProductCandidates } from '../utils/invoiceScoringEngine'
+import { rankProductCandidates, runShadowModelOnResult } from '../utils/invoiceScoringEngine'
 import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
 import { mapParsedPozycjaToFormPozycja } from '../utils/invoiceLineMapper'
 import { findMatchingContractor, prepareContractorFromInvoice } from '../utils/contractorMatcher'
@@ -124,6 +124,7 @@ export default function Faktury() {
   const [nSaving, setNSaving] = useState(false)
   const [nContractorValue, setNContractorValue] = useState(null)
   const [nExtractionLogId, setNExtractionLogId] = useState(null)
+  const [nShadowResult, setNShadowResult] = useState(null)
   const [nPriceData, setNPriceData] = useState({})
   const [nExtractedItems, setNExtractedItems] = useState([])
   const [nShowExtracted, setNShowExtracted] = useState(false)
@@ -430,6 +431,7 @@ export default function Faktury() {
     setNPositions([])
     setNContractorValue(null)
     setNExtractionLogId(null)
+    setNShadowResult(null)
     setNPriceData({})
     setNDraftZeroPriceConfirmed(false)
     setShowNModal(true)
@@ -734,39 +736,46 @@ export default function Faktury() {
               skipped: false,
             }
           })
-          // Shadow model: enrich items with model suggestions (does NOT change matched data)
+          // Shadow model: run once on full extraction result for rich suggestions
+          // Provides product candidates, item-type classification, and doc-type scores.
           const modelCfg = getInvoiceModelConfig()
-          const enriched = modelCfg.mode !== 'off' ? matched.map(item => {
+          let shadowData = null
+          if (modelCfg.mode !== 'off') {
             try {
-              const ranking = rankProductCandidates(
-                item.rawName || '',
+              shadowData = runShadowModelOnResult(
+                { ...result, fields: { ...result.fields, pozycje: matched } },
                 towary,
-                {
-                  itemType: item.itemType,
-                  unit: item.unit || item.jednostka,
-                  supplierNip: result.fields?.kontrahent_nip,
-                  cenaNetto: item.unitPriceNet ?? item.cenaNetto,
-                },
                 modelCfg
               )
-              const modelBest = ranking.best
-              const modelScore = modelBest?.score ?? 0
-              const legacyMatchId = item.matchedProductId
-              const modelBestId = modelBest?.product?.id ?? null
-              const matchDisagreement =
-                item.shouldAffectInventory !== false &&
-                legacyMatchId && modelBestId &&
-                legacyMatchId !== modelBestId &&
-                modelScore >= modelCfg.thresholds.productReviewMatch
-              return {
-                ...item,
-                _modelScore: modelScore,
-                _modelLabel: modelBest?.confidenceLabel ?? null,
-                _modelCandidatesCount: ranking.candidates.filter(c => c.score >= modelCfg.thresholds.productReviewMatch).length,
-                _matchDisagreement: matchDisagreement,
-              }
-            } catch { return item }
-          }) : matched
+              setNShadowResult(shadowData)
+            } catch { /* non-critical */ }
+          }
+
+          const enriched = shadowData
+            ? matched.map((item, idx) => {
+                const s = shadowData.itemSuggestions?.[idx]
+                if (!s) return item
+                const modelScore = s.modelScore
+                const modelBestId = s.bestCandidate?.product?.id ?? null
+                const matchDisagreement =
+                  item.shouldAffectInventory !== false &&
+                  item.matchedProductId && modelBestId &&
+                  item.matchedProductId !== modelBestId &&
+                  modelScore >= modelCfg.thresholds.productReviewMatch
+                return {
+                  ...item,
+                  _modelScore: modelScore,
+                  _modelLabel: s.bestCandidate?.confidenceLabel ?? null,
+                  _modelCandidatesCount: s.topCandidates.filter(c => c.score >= modelCfg.thresholds.productReviewMatch).length,
+                  _matchDisagreement: matchDisagreement,
+                  _topCandidates: s.topCandidates
+                    .slice(0, 3)
+                    .filter(c => c.score > 0.25)
+                    .map(c => ({ id: c.product.id, nazwa: c.product.nazwa, score: c.score })),
+                  _modelItemType: s.modelItemType !== 'unknown' ? s.modelItemType : null,
+                }
+              })
+            : matched
           setNExtractedItems(enriched)
           setNShowExtracted(true)
           result.warnings.forEach(w => addToast(w, 'info'))
@@ -1357,6 +1366,19 @@ export default function Faktury() {
                       </div>
                     )
                   })()}
+                  {nShadowResult?.documentScores && (
+                    <div style={{ marginTop: 8, fontSize: 11, color: '#475569', borderTop: '1px solid #e2e8f0', paddingTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600, color: '#64748b' }}>Ocena modelu:</span>
+                      <span title="Sygnały magazynowe">🏭 {Math.round((nShadowResult.documentScores.inventoryScore ?? 0) * 100)}%</span>
+                      <span title="Sygnały usługowe">🔧 {Math.round((nShadowResult.documentScores.serviceScore ?? 0) * 100)}%</span>
+                      {(nShadowResult.documentScores.telecomScore ?? 0) > 0.1 && (
+                        <span title="Sygnały telecom">📱 {Math.round(nShadowResult.documentScores.telecomScore * 100)}%</span>
+                      )}
+                      {(nShadowResult.documentScores.utilityScore ?? 0) > 0.1 && (
+                        <span title="Sygnały media">⚡ {Math.round(nShadowResult.documentScores.utilityScore * 100)}%</span>
+                      )}
+                    </div>
+                  )}
                   <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
                     System przygotował propozycję. Sprawdź dane przed zatwierdzeniem.
                   </div>
@@ -1486,6 +1508,14 @@ export default function Faktury() {
                                   ⚡ niezgodność
                                 </span>
                               )}
+                              {item._modelItemType && item._modelItemType !== item.itemType && item.itemType && item.itemType !== 'unknown' && (
+                                <span
+                                  title={`Model klasyfikuje jako: ${item._modelItemType}`}
+                                  style={{ background: '#fef3c7', color: '#92400e', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}
+                                >
+                                  M:{item._modelItemType === 'service_item' ? 'usługa?' : item._modelItemType === 'inventory_item' ? 'towar?' : item._modelItemType}
+                                </span>
+                              )}
                               {!item.skipped && (
                                 <span style={{ background: statusLabel.bg, color: statusLabel.color, borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>
                                   {statusLabel.text}
@@ -1522,6 +1552,30 @@ export default function Faktury() {
                                 >
                                   {item._suggestedProductNazwa}
                                 </button>
+                              </div>
+                            )}
+                            {!item.matchedProductId && item._topCandidates?.length > 0 && (
+                              <div style={{ fontSize: 10, marginTop: 3, lineHeight: 1.6 }}>
+                                <span style={{ color: 'var(--muted)' }}>Model: </span>
+                                {item._topCandidates.map(c => (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => setNExtractedItems(items => items.map((it, i) => i === idx
+                                      ? { ...it, matchedProductId: c.id, matchedProductNazwa: c.nazwa, matchScore: c.score }
+                                      : it
+                                    ))}
+                                    title={`Pewność modelu: ${Math.round(c.score * 100)}%`}
+                                    style={{
+                                      color: c.score >= 0.7 ? '#6366f1' : '#94a3b8',
+                                      textDecoration: 'underline', fontSize: 10,
+                                      background: 'none', border: 'none', cursor: 'pointer',
+                                      padding: '0 6px 0 0',
+                                    }}
+                                  >
+                                    {c.nazwa} ({Math.round(c.score * 100)}%)
+                                  </button>
+                                ))}
                               </div>
                             )}
                           </td>

@@ -10,16 +10,23 @@ const TELECOM_SIGNALS = [
 const UTILITY_SIGNALS = [
   'energia elektryczna', 'gaz', 'woda i ścieki', 'tauron',
   'pge', 'enea', 'energa', 'pgnig',
+  'prąd elektryczny', 'zużycie energii', 'odczyt licznika',
+  'innogy', 'e.on', 'polenergia', 'fortum',
 ]
 const INVENTORY_SIGNALS = [
+  // Column headers / table structure signals
   'cena jednostkowa', 'cena netto j', 'cena jedn',
   'wartość netto', 'jm', 'j.m.', 'ilość szt',
+  'indeks', 'symbol towaru', 'kod towaru', 'ean', 'indeks towaru',
+  // Physical goods keywords
   'syfon', 'bateria', 'listwa', 'żarówka', 'worki', 'papier toaletowy',
   'clin', 'płyn do', 'silikon', 'kołki', 'śruby', 'wąż prysznicowy',
+  'materiały budowlane', 'artykuł', 'opakowanie',
 ]
 const SERVICE_ITEM_KEYWORDS = [
   'usług', 'abonament', 'opłat', 'serwis', 'telekomunik', 'internet',
   'energia elektryczna', 'gaz ziemny', 'woda i ścieki',
+  'licencj', 'subskrypcj', 'konsulting', 'doradztw', 'szkoleni',
 ]
 const FORBIDDEN_AS_ITEM_KEYWORDS = [
   'razem', 'suma', 'do zapłaty', 'wartość faktury',

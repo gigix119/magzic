@@ -166,6 +166,27 @@ describe('extractWithPatterns — invoice number', () => {
     const result = extractWithPatterns('1234567890-20250315-ABC123-XY')
     expect(result.numer).toBeUndefined()
   })
+
+  it('extracts date from "z dnia" phrase', () => {
+    const result = extractWithPatterns('Faktura z dnia 15.03.2025')
+    expect(result.data).toBe('2025-03-15')
+  })
+
+  it('extracts year-first numer format', () => {
+    const result = extractWithPatterns('Numer: 2025/FV/001')
+    expect(result.numer).toBeTruthy()
+    expect(result.numer).toMatch(/2025/)
+  })
+
+  it('extracts NIP with PL prefix', () => {
+    const result = extractWithPatterns('NIP: PL1234567890')
+    expect(result.nipSprzedawcy).toBe('1234567890')
+  })
+
+  it('extracts kwotaVat from "w tym vat" line', () => {
+    const result = extractWithPatterns('W tym VAT: 284,95 zł')
+    expect(result.kwotaVat).toBeCloseTo(284.95)
+  })
 })
 
 // ── normalizeVatRate ──────────────────────────────────────────────────────────

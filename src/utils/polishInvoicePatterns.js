@@ -67,9 +67,11 @@ export function isKsefInvoiceId(str) {
 const NUMER_PATTERNS = [
   // KSeF-style S1/FAV/YYYY/NNNNNNN (EURO-NET and other KSeF issuers)
   /\b((?:S\d+|[A-Z]{1,4})\/[A-Z]{2,6}\/\d{4}\/\d{4,12})\b/i,
-  // Common Polish invoice prefixes: FV, FVS, FA, FP, FS, FZ, VAT, RK, WZ, PZ, FVAT
-  /\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ|MM|ZW|RW)[\s/\-]?\d{1,6}[\w/\-./]*)/i,
-  // After keyword "faktura", "nr faktury" etc.
+  // YYYY/PREFIX/NNN — year-first ERP format; must appear before the prefix-only pattern below
+  /\b(\d{4}\/(?:FV|FA|FS|FZ|FP|FVS|FVAT|VAT|WZ|PZ|RK)\/[\w/\-.]{1,20})\b/i,
+  // Common Polish invoice prefixes: FV, FVS, FA, FP, FS, FZ, VAT, RK, WZ, PZ, FVAT, INV
+  /\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ|MM|ZW|RW|EINV|INV|FINV)[\s/\-]?\d{1,6}[\w/\-./]*)/i,
+  // After keyword "faktura", "nr faktury", "numer faktury" etc.
   /(?:faktura\s*(?:vat|zakupu|sprzedaży)?|nr\s+faktury|numer\s+faktury|nr|numer)[:\s#]+([A-Z0-9][\w/\-.]{2,25})/i,
   // After "rachunek", "paragon"
   /(?:rachunek|paragon)\s*(?:nr|numer)?[:\s]+([A-Z0-9][\w/\-.]{2,25})/i,
@@ -79,6 +81,8 @@ const DATA_PATTERNS = [
   // Labeled date fields
   /(?:data\s+(?:wystawienia|sprzedaży|sprzedazy|zakupu|dokumentu|wystawie[nń]ia))[:\s]+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i,
   /(?:data)[:\s]+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i,
+  // "z dnia DD.MM.YYYY" — very common in Polish invoice preamble
+  /(?:z\s+dnia)[:\s]*(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i,
   // ISO date
   /(\d{4}-\d{2}-\d{2})/,
   // DD.MM.YYYY (standalone)
@@ -113,8 +117,9 @@ export function extractWithPatterns(text) {
   }
 
   // Extract NIPs: first = sprzedawca, second = nabywca
+  // Handles both plain digits and PL-prefixed formats (NIP: PL1234567890)
   const nipMatches = []
-  const nipPat = /(?:NIP|N\.I\.P\.)[:\s]*([\d\s\-]{10,15})/gi
+  const nipPat = /(?:NIP|N\.I\.P\.)[:\s]*(?:PL\s*)?([\d\s\-]{10,15})/gi
   let nipM
   while ((nipM = nipPat.exec(text)) !== null) {
     const clean = nipM[1].replace(/\D/g, '')
@@ -135,10 +140,13 @@ export function extractWithPatterns(text) {
   // Summary amounts
   const netPat = /(?:razem\s*netto|suma\s*netto|wartość\s*netto|ogółem\s*netto)[:\s]*([\d\s.,]+)/i
   const brutPat = /(?:do\s*zap[łl]aty|razem\s*brutto|suma\s*brutto|łącznie|ogółem)[:\s]*([\d\s.,]+)/i
+  const vatPat = /(?:w\s+tym\s+vat|kwota\s+vat|podatek\s+vat|razem\s+vat)[:\s]*([\d\s.,]+)/i
   const netM = text.match(netPat)
   if (netM) result.sumaNetto = normalizePolishNumber(netM[1])
   const brutM = text.match(brutPat)
   if (brutM) result.sumaBrutto = normalizePolishNumber(brutM[1])
+  const vatM = text.match(vatPat)
+  if (vatM) result.kwotaVat = normalizePolishNumber(vatM[1])
 
   return result
 }
