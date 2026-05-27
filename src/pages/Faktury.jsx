@@ -1318,7 +1318,7 @@ export default function Faktury() {
         <Modal
           title="Nowa faktura"
           onClose={() => setShowNModal(false)}
-          maxWidth={nShowForm ? 940 : nShowExtracted ? 800 : 560}
+          maxWidth={nShowForm ? 'min(1100px, calc(100vw - 48px))' : nShowExtracted ? 'min(900px, calc(100vw - 48px))' : 560}
         >
           {!nShowForm && !nShowExtracted ? (
             /* Phase 1: Upload zone */
@@ -1398,7 +1398,7 @@ export default function Faktury() {
                       {getQualityBadge(qualityMetrics).label}
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  <div className="quality-metrics-grid">
                     <div>
                       <div style={{ color: '#64748b' }}>Źródło</div>
                       <div style={{ fontWeight: 500 }}>
@@ -1547,7 +1547,7 @@ export default function Faktury() {
                 )
               })()}
               {/* Mobile card view — shown below sm (640px) */}
-              <div className="sm:hidden space-y-2 mt-1" style={{ maxHeight: 360, overflowY: 'auto' }}>
+              <div className="sm:hidden space-y-2 mt-1" style={{ maxHeight: 440, overflowY: 'auto' }}>
                 {nExtractedItems.map((item, idx) => {
                   const assignStatus = getAssignmentStatus(item, towary)
                   const borderColor = assignStatus === 'ready' || assignStatus === 'service_cost' ? '#16a34a'
@@ -1631,7 +1631,7 @@ export default function Faktury() {
                 })}
               </div>
               {/* Desktop table — hidden below sm (640px) */}
-              <div className="hidden sm:block table-scroll-x" style={{ maxHeight: 360, overflowY: 'auto' }}>
+              <div className="hidden sm:block table-scroll-x" style={{ maxHeight: 440, overflowY: 'auto' }}>
                 <table className="w-full text-sm" style={{ minWidth: 580 }}>
                   <thead>
                     <tr style={{ background: 'var(--table-sub)', position: 'sticky', top: 0 }}>
@@ -1723,7 +1723,7 @@ export default function Faktury() {
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2" style={{ minWidth: 180 }}>
                             <select
                               value={item.matchedProductId || ''}
                               onChange={e => {
@@ -1809,7 +1809,7 @@ export default function Faktury() {
                             {item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
                           </td>
                           <td className="px-2 py-2">
-                            <div className="flex flex-col gap-1 items-end" style={{ minWidth: 80 }}>
+                            <div className="flex flex-wrap gap-1 items-start justify-end" style={{ minWidth: 120 }}>
                               {!item.skipped && item.itemType !== 'service_item' && (
                                 <button
                                   type="button"
@@ -1883,7 +1883,7 @@ export default function Faktury() {
                   </div>
                 )
               })()}
-              <div className="flex gap-2 mt-3 flex-wrap">
+              <div className="flex gap-2 mt-4 flex-wrap items-center">
                 <button
                   type="button"
                   onClick={goToManualForm}
@@ -2075,7 +2075,7 @@ export default function Faktury() {
             </div>
           ) : (
             /* Phase 2: Form + positions */
-            <div style={{ maxHeight: 'calc(90vh - 130px)', overflowY: 'auto', paddingRight: 2 }}>
+            <div style={{ paddingRight: 2 }}>
               {/* AI success banner */}
               {nAiCount > 0 && (
                 <div className="rounded-lg px-4 py-3 mb-3 text-sm font-medium flex items-center gap-2"

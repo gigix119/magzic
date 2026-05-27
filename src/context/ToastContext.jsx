@@ -27,7 +27,7 @@ function ToastItem({ toast, onRemove }) {
   const { Icon } = style
   return (
     <div
-      className="flex items-start gap-3 rounded-xl px-4 py-3 shadow-2xl text-sm font-medium"
+      className="toast-item flex items-start gap-3 rounded-xl px-4 py-3 shadow-2xl text-sm font-medium"
       style={{
         background: style.bg,
         border: `1px solid ${style.border}`,
@@ -62,7 +62,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ addToast }}>
       {children}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end">
+      <div className="toast-container fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end">
         {toasts.map(t => <ToastItem key={t.id} toast={t} onRemove={removeToast} />)}
       </div>
     </ToastContext.Provider>

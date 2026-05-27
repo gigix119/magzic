@@ -16,7 +16,7 @@ export default function Modal({ title, onClose, children, maxWidth = 560 }) {
     >
       <div
         className="relative w-full rounded-xl shadow-2xl flex flex-col modal-inner modal-mobile-sheet"
-        style={{ maxWidth, background: 'var(--card)', border: '1px solid var(--border)' }}
+        style={{ maxWidth, maxHeight: '90dvh', background: 'var(--card)', border: '1px solid var(--border)' }}
       >
         <div
           className="flex items-center justify-between px-5 py-4 flex-shrink-0"

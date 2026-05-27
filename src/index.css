@@ -263,3 +263,30 @@ body {
   }
 }
 
+/* Quality metrics panel — responsive grid */
+.quality-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .quality-metrics-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 400px) {
+  .quality-metrics-grid { grid-template-columns: 1fr; }
+}
+
+/* Toast — full-width near edges on mobile */
+@media (max-width: 640px) {
+  .toast-container {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+    align-items: stretch !important;
+  }
+  .toast-item {
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}
+
