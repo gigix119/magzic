@@ -8,6 +8,41 @@ function invoicePluralLabel(n) {
   return 'fakturach'
 }
 
+export function formatInvoiceComparisonResponse(comparison) {
+  if (!comparison?.hasEnoughData) {
+    return 'Nie mam jeszcze dwóch faktur zakupowych do porównania w tym workspace.'
+  }
+
+  const { kpis, invoiceAInfo, invoiceBInfo, priceChanges = [] } = comparison
+  const parts = []
+
+  const diffAbs = Math.abs(kpis.diffBrutto)
+  const diffPctAbs = Math.abs(kpis.diffBruttoPct)
+  const diffLabel = kpis.diffBrutto > 0.005 ? 'droższa' : kpis.diffBrutto < -0.005 ? 'tańsza' : 'o tej samej wartości'
+
+  let line = `Ostatnia faktura (${invoiceBInfo.numer}) jest ${diffLabel}`
+  if (Math.abs(kpis.diffBrutto) > 0.005) {
+    line += ` o ${formatPLN(diffAbs)} brutto (${diffPctAbs.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%).`
+  } else {
+    line += '.'
+  }
+  parts.push(line)
+
+  if ((kpis.matchedCount ?? 0) > 0) parts.push(`Dopasowałem ${kpis.matchedCount} pozycji.`)
+  if ((kpis.onlyBCount ?? 0) > 0) parts.push(`Nowe pozycje: ${kpis.onlyBCount}.`)
+  if ((kpis.onlyACount ?? 0) > 0) parts.push(`Brakuje ${kpis.onlyACount} pozycji z poprzedniej.`)
+
+  if (priceChanges.length > 0) {
+    const top = priceChanges[0]
+    const sign = top.priceDiffPct >= 0 ? '+' : ''
+    parts.push(
+      `Największa zmiana ceny: ${top.name} — ${sign}${top.priceDiffPct.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%.`
+    )
+  }
+
+  return parts.join(' ')
+}
+
 export function formatLatestPriceChangesResponse(priceChanges, periodLabel = 'ostatnich 180 dniach') {
   if (!priceChanges?.hasEnoughData) {
     return `Nie znalazłem wystarczających danych do analizy zmian cen w ${periodLabel}. Potrzebne są co najmniej 2 zakupy tego samego produktu.`

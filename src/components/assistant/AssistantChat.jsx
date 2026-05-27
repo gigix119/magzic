@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, MessageCircle } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent, getAssistantResponse } from '../../utils/assistantIntentParser'
-import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData } from '../../utils/assistantQueryEngine'
+import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData } from '../../utils/assistantQueryEngine'
 import { buildPurchaseDashboard } from '../../utils/purchaseAnalyticsEngine'
 import { buildLatestPriceChanges } from '../../utils/priceAnalyticsEngine'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse } from '../../utils/assistantResponseFormatter'
+import { compareInvoices } from '../../utils/invoiceComparisonEngine'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse } from '../../utils/assistantResponseFormatter'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 
@@ -50,6 +51,8 @@ export default function AssistantChat() {
       await handlePurchaseDashboard()
     } else if (parsed.intent === 'latest_price_changes') {
       await handleLatestPriceChanges()
+    } else if (parsed.intent === 'compare_invoices') {
+      await handleCompareInvoices()
     } else {
       const responseText = getAssistantResponse(parsed)
       setMessages(prev => [...prev, { id: nextId(), role: 'assistant', text: responseText, intent: parsed.intent }])
@@ -160,6 +163,61 @@ export default function AssistantChat() {
       ))
     } catch (err) {
       console.error('AssistantChat handleLatestPriceChanges:', err)
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }
+          : m
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleCompareInvoices() {
+    const loadingId = nextId()
+    setIsLoading(true)
+    setMessages(prev => [...prev, { id: loadingId, role: 'assistant', text: '', loading: true, intent: 'compare_invoices' }])
+
+    try {
+      if (!workspaceId) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie mogę wykonać porównania, bo nie wykryłem aktywnego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const rawData = await fetchAssistantInvoiceComparisonData({ workspaceId })
+
+      if (rawData.errors.length > 0) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: `Błąd pobierania danych: ${rawData.errors.join(' ')}` }
+            : m
+        ))
+        return
+      }
+
+      if (!rawData.invoiceA || !rawData.invoiceB) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie mam jeszcze dwóch faktur zakupowych do porównania w tym workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const comparison = compareInvoices(rawData)
+      const responseText = formatInvoiceComparisonResponse(comparison)
+
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: responseText, structuredData: comparison }
+          : m
+      ))
+    } catch (err) {
+      console.error('AssistantChat handleCompareInvoices:', err)
       setMessages(prev => prev.map(m =>
         m.id === loadingId
           ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }

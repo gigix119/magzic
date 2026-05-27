@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -108,6 +108,54 @@ describe('formatLatestPriceChangesResponse', () => {
     const text = formatLatestPriceChangesResponse({ hasEnoughData: false, kpis: {} })
     expect(typeof text).toBe('string')
     expect(text.length).toBeGreaterThan(10)
+  })
+})
+
+describe('formatInvoiceComparisonResponse', () => {
+  const sampleComparison = {
+    hasEnoughData: true,
+    kpis: {
+      bruttoA: 1000,
+      bruttoB: 1200,
+      diffBrutto: 200,
+      diffBruttoPct: 20,
+      matchedCount: 5,
+      onlyBCount: 2,
+      onlyACount: 1,
+      topPriceChangeName: 'Rękawice nitrylowe',
+      topPriceChangePct: 35.5,
+    },
+    invoiceAInfo: { numer: 'F/001/2025' },
+    invoiceBInfo: { numer: 'F/002/2025' },
+    priceChanges: [
+      { name: 'Rękawice nitrylowe', priceDiff: 14, priceDiffPct: 35.5 },
+    ],
+  }
+
+  it('zawiera PLN (zł)', () => {
+    const text = formatInvoiceComparisonResponse(sampleComparison)
+    expect(text).toContain('zł')
+  })
+
+  it('zawiera procent (%)', () => {
+    const text = formatInvoiceComparisonResponse(sampleComparison)
+    expect(text).toContain('%')
+  })
+
+  it('zawiera informację o droższej/tańszej fakturze', () => {
+    const text = formatInvoiceComparisonResponse(sampleComparison)
+    expect(text.includes('droższa') || text.includes('tańsza')).toBe(true)
+  })
+
+  it('zawiera nazwę największej zmiany ceny', () => {
+    const text = formatInvoiceComparisonResponse(sampleComparison)
+    expect(text).toContain('Rękawice nitrylowe')
+  })
+
+  it('obsługuje brak danych', () => {
+    const text = formatInvoiceComparisonResponse({ hasEnoughData: false, kpis: {} })
+    expect(typeof text).toBe('string')
+    expect(text.length).toBeGreaterThan(5)
   })
 })
 
