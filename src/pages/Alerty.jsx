@@ -5,6 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
+import AssistantChat from '../components/assistant/AssistantChat'
 import { Plus, AlertTriangle, TrendingDown, TrendingUp, Bell, Percent, Trash2, Zap, Clock, Lightbulb, CheckCheck } from 'lucide-react'
 
 const IS = (err) => ({
@@ -514,6 +515,9 @@ export default function Alerty() {
           </div>
         )}
       </div>
+
+      {/* Asystent Magzic */}
+      <AssistantChat />
 
       {showModal && (
         <Modal title="Nowy alert cenowy" onClose={() => setShowModal(false)}>
