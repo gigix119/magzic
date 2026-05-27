@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, MessageCircle } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent, getAssistantResponse } from '../../utils/assistantIntentParser'
-import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData, fetchAssistantLowStockData, fetchAssistantOrderRecommendationData } from '../../utils/assistantQueryEngine'
+import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData, fetchAssistantLowStockData, fetchAssistantOrderRecommendationData, fetchAssistantInvoicesNeedingReviewData } from '../../utils/assistantQueryEngine'
 import { buildPurchaseDashboard } from '../../utils/purchaseAnalyticsEngine'
 import { buildLatestPriceChanges } from '../../utils/priceAnalyticsEngine'
 import { compareInvoices } from '../../utils/invoiceComparisonEngine'
 import { buildLowStockAnalysis } from '../../utils/lowStockAnalyticsEngine'
 import { buildOrderRecommendations } from '../../utils/orderRecommendationEngine'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse } from '../../utils/assistantResponseFormatter'
+import { buildInvoicesNeedingReview } from '../../utils/invoiceReviewEngine'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse } from '../../utils/assistantResponseFormatter'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 
@@ -59,6 +60,8 @@ export default function AssistantChat() {
       await handleLowStock()
     } else if (parsed.intent === 'order_recommendation') {
       await handleOrderRecommendation()
+    } else if (parsed.intent === 'invoices_needing_review') {
+      await handleInvoicesNeedingReview()
     } else {
       const responseText = getAssistantResponse(parsed)
       setMessages(prev => [...prev, { id: nextId(), role: 'assistant', text: responseText, intent: parsed.intent }])
@@ -334,6 +337,61 @@ export default function AssistantChat() {
       ))
     } catch (err) {
       console.error('AssistantChat handleOrderRecommendation:', err)
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }
+          : m
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleInvoicesNeedingReview() {
+    const loadingId = nextId()
+    setIsLoading(true)
+    setMessages(prev => [...prev, { id: loadingId, role: 'assistant', text: '', loading: true, intent: 'invoices_needing_review' }])
+
+    try {
+      if (!workspaceId) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie mogę sprawdzić faktur, bo nie wykryłem aktywnego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const rawData = await fetchAssistantInvoicesNeedingReviewData({ workspaceId })
+
+      if (rawData.errors.length > 0) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: `Błąd pobierania danych: ${rawData.errors.join(' ')}` }
+            : m
+        ))
+        return
+      }
+
+      if (!rawData.invoices.length) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie znalazłem faktur do analizy w tym workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const review = buildInvoicesNeedingReview(rawData)
+      const responseText = formatInvoicesNeedingReviewResponse(review)
+
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: responseText, structuredData: review }
+          : m
+      ))
+    } catch (err) {
+      console.error('AssistantChat handleInvoicesNeedingReview:', err)
       setMessages(prev => prev.map(m =>
         m.id === loadingId
           ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }

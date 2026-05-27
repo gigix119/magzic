@@ -96,6 +96,34 @@ export function formatLatestPriceChangesResponse(priceChanges, periodLabel = 'os
   return parts.join(' ')
 }
 
+export function formatInvoicesNeedingReviewResponse(review) {
+  if (!review?.hasEnoughData) {
+    return review?.summaryText || 'Nie znalazłem faktur wymagających weryfikacji w tym workspace.'
+  }
+
+  const { kpis, invoicesToReview, summaryText } = review
+  if (summaryText) return summaryText
+
+  const parts = []
+  parts.push(`Przeanalizowałem ${kpis.reviewedCount} faktur.`)
+  parts.push(`${kpis.reviewCount} wymaga weryfikacji`)
+  if (kpis.criticalCount > 0) {
+    parts.push(`, w tym ${kpis.criticalCount} krytyczn${kpis.criticalCount === 1 ? 'a' : 'ych'}`)
+  }
+  parts[parts.length - 1] += '.'
+
+  if (kpis.mostCommonIssue) {
+    parts.push(`Najczęstszy problem: ${kpis.mostCommonIssue.toLowerCase()}.`)
+  }
+
+  const top = invoicesToReview[0]
+  if (top) {
+    parts.push(`Najpilniej sprawdź: ${top.numer}.`)
+  }
+
+  return parts.join(' ')
+}
+
 export function formatOrderRecommendationResponse(recommendations) {
   if (!recommendations?.hasEnoughData) {
     return 'Nie znalazłem produktów poniżej minimum magazynowego, więc nie ma teraz co zamawiać.'

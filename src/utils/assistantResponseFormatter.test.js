@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -244,6 +244,48 @@ describe('formatOrderRecommendationResponse', () => {
   it('informuje o produktach krytycznych jeśli istnieją', () => {
     const text = formatOrderRecommendationResponse(sampleRecommendations)
     expect(text).toMatch(/krytyczn|Krytyczn/)
+  })
+})
+
+const sampleReview = {
+  hasEnoughData: true,
+  summaryText: null,
+  kpis: {
+    reviewedCount: 10,
+    reviewCount: 3,
+    criticalCount: 1,
+    mostCommonIssue: 'Pozycje bez towaru',
+  },
+  invoicesToReview: [
+    { id: 1, numer: 'FV/12/2025', severity: 'critical', issueCount: 3, contractor: 'Firma Z' },
+  ],
+}
+
+describe('formatInvoicesNeedingReviewResponse', () => {
+  it('zawiera liczbę faktur do weryfikacji', () => {
+    const text = formatInvoicesNeedingReviewResponse(sampleReview)
+    expect(text).toContain('3')
+  })
+
+  it('zawiera liczbę krytycznych faktur', () => {
+    const text = formatInvoicesNeedingReviewResponse(sampleReview)
+    expect(text).toMatch(/krytyczn/i)
+  })
+
+  it('zawiera najczęstszy problem jeśli istnieje', () => {
+    const text = formatInvoicesNeedingReviewResponse(sampleReview)
+    expect(text).toContain('pozycje bez towaru')
+  })
+
+  it('zawiera najpilniejszą fakturę jeśli istnieje', () => {
+    const text = formatInvoicesNeedingReviewResponse(sampleReview)
+    expect(text).toContain('FV/12/2025')
+  })
+
+  it('obsługuje brak danych', () => {
+    const text = formatInvoicesNeedingReviewResponse({ hasEnoughData: false })
+    expect(typeof text).toBe('string')
+    expect(text.length).toBeGreaterThan(5)
   })
 })
 
