@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -66,6 +66,48 @@ describe('formatPurchaseDashboardResponse', () => {
     const dash = { ...sampleDashboard, warnings: ['Brak pozycji'] }
     const text = formatPurchaseDashboardResponse(dash)
     expect(text).toContain('Brak pozycji')
+  })
+})
+
+describe('formatLatestPriceChangesResponse', () => {
+  const samplePriceChanges = {
+    hasEnoughData: true,
+    kpis: {
+      totalTracked: 8,
+      increaseCount: 5,
+      decreaseCount: 2,
+      anomalyCount: 3,
+      avgChangePct: 11.4,
+      maxIncreasePct: 27.5,
+    },
+  }
+
+  it('zwraca string z liczbą śledzonych produktów', () => {
+    const text = formatLatestPriceChangesResponse(samplePriceChanges)
+    expect(typeof text).toBe('string')
+    expect(text).toContain('8')
+  })
+
+  it('zawiera liczbę wzrostów i spadków', () => {
+    const text = formatLatestPriceChangesResponse(samplePriceChanges)
+    expect(text).toContain('5')
+    expect(text).toContain('2')
+  })
+
+  it('zawiera anomalie', () => {
+    const text = formatLatestPriceChangesResponse(samplePriceChanges)
+    expect(text).toContain('3')
+  })
+
+  it('zawiera maxIncreasePct', () => {
+    const text = formatLatestPriceChangesResponse(samplePriceChanges)
+    expect(text).toContain('27,5')
+  })
+
+  it('obsługuje brak danych — zwraca komunikat', () => {
+    const text = formatLatestPriceChangesResponse({ hasEnoughData: false, kpis: {} })
+    expect(typeof text).toBe('string')
+    expect(text.length).toBeGreaterThan(10)
   })
 })
 

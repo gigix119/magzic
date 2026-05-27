@@ -17,7 +17,18 @@ function KpiCard({ label, value, color }) {
   )
 }
 
-export default function AssistantKpiCards({ kpis }) {
+export default function AssistantKpiCards({ kpis, cards: cardsProp }) {
+  if (cardsProp) {
+    return (
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}
+      >
+        {cardsProp.map(c => <KpiCard key={c.label} {...c} />)}
+      </div>
+    )
+  }
+
   if (!kpis) return null
 
   const cards = [

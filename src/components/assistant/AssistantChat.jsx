@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, MessageCircle } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent, getAssistantResponse } from '../../utils/assistantIntentParser'
-import { fetchAssistantPurchaseDashboardData } from '../../utils/assistantQueryEngine'
+import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData } from '../../utils/assistantQueryEngine'
 import { buildPurchaseDashboard } from '../../utils/purchaseAnalyticsEngine'
-import { formatPurchaseDashboardResponse } from '../../utils/assistantResponseFormatter'
+import { buildLatestPriceChanges } from '../../utils/priceAnalyticsEngine'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse } from '../../utils/assistantResponseFormatter'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 
@@ -47,6 +48,8 @@ export default function AssistantChat() {
 
     if (parsed.intent === 'purchase_dashboard') {
       await handlePurchaseDashboard()
+    } else if (parsed.intent === 'latest_price_changes') {
+      await handleLatestPriceChanges()
     } else {
       const responseText = getAssistantResponse(parsed)
       setMessages(prev => [...prev, { id: nextId(), role: 'assistant', text: responseText, intent: parsed.intent }])
@@ -104,6 +107,62 @@ export default function AssistantChat() {
       setMessages(prev => prev.map(m =>
         m.id === loadingId
           ? { ...m, loading: false, text: `Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.` }
+          : m
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleLatestPriceChanges() {
+    const loadingId = nextId()
+    setIsLoading(true)
+    setMessages(prev => [...prev, { id: loadingId, role: 'assistant', text: '', loading: true, intent: 'latest_price_changes' }])
+
+    try {
+      if (!workspaceId) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie mogę wykonać analizy, bo nie wykryłem aktywnego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const rawData = await fetchAssistantPriceChangesData({ workspaceId })
+
+      if (rawData.errors.length > 0) {
+        const errMsg = rawData.errors.join(' ')
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: `Błąd pobierania danych: ${errMsg}` }
+            : m
+        ))
+        return
+      }
+
+      if (!rawData.invoices.length) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie znalazłem faktur zakupowych z ostatnich 180 dni dla tego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const priceChanges = buildLatestPriceChanges(rawData)
+      const responseText = formatLatestPriceChangesResponse(priceChanges)
+
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: responseText, structuredData: priceChanges }
+          : m
+      ))
+    } catch (err) {
+      console.error('AssistantChat handleLatestPriceChanges:', err)
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }
           : m
       ))
     } finally {

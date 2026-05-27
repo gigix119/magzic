@@ -8,6 +8,34 @@ function invoicePluralLabel(n) {
   return 'fakturach'
 }
 
+export function formatLatestPriceChangesResponse(priceChanges, periodLabel = 'ostatnich 180 dniach') {
+  if (!priceChanges?.hasEnoughData) {
+    return `Nie znalazłem wystarczających danych do analizy zmian cen w ${periodLabel}. Potrzebne są co najmniej 2 zakupy tego samego produktu.`
+  }
+
+  const { kpis } = priceChanges
+  const parts = []
+
+  parts.push(
+    `W ${periodLabel} śledziłem ${kpis.totalTracked} produkt${kpis.totalTracked === 1 ? '' : 'ów'} z historią cen.`
+  )
+
+  if (kpis.increaseCount > 0) {
+    parts.push(`Zdrożało: ${kpis.increaseCount} produkt${kpis.increaseCount === 1 ? '' : 'ów'}.`)
+  }
+  if (kpis.decreaseCount > 0) {
+    parts.push(`Potaniało: ${kpis.decreaseCount} produkt${kpis.decreaseCount === 1 ? '' : 'ów'}.`)
+  }
+  if (kpis.anomalyCount > 0) {
+    parts.push(`Anomalie cenowe (>15%): ${kpis.anomalyCount}.`)
+  }
+  if (kpis.maxIncreasePct > 0) {
+    parts.push(`Największy wzrost: +${kpis.maxIncreasePct.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%.`)
+  }
+
+  return parts.join(' ')
+}
+
 export function formatPurchaseDashboardResponse(dashboard, periodLabel = 'ostatnich 30 dniach') {
   if (!dashboard?.hasEnoughData) {
     return `Nie znalazłem faktur zakupowych w ${periodLabel}. Sprawdź, czy faktury zostały dodane i nie są anulowane.`

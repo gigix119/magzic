@@ -1,22 +1,23 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-function ChartTooltip({ active, payload, label }) {
+function ChartTooltip({ active, payload, label, tooltipSuffix = ' zł', tooltipDecimals = 2 }) {
   if (!active || !payload?.length) return null
   const val = Number(payload[0]?.value ?? 0)
+  const color = payload[0]?.fill ?? '#3b82f6'
   return (
     <div
       className="rounded-lg px-3 py-2 text-xs"
       style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)' }}
     >
       <p className="font-medium mb-0.5">{label}</p>
-      <p style={{ color: '#3b82f6', fontFamily: 'DM Mono, monospace' }}>
-        {val.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł
+      <p style={{ color, fontFamily: 'DM Mono, monospace' }}>
+        {val.toLocaleString('pl-PL', { minimumFractionDigits: tooltipDecimals, maximumFractionDigits: tooltipDecimals })}{tooltipSuffix}
       </p>
     </div>
   )
 }
 
-export default function AssistantChart({ data, dataKey = 'totalNetto', title = 'Zakupy w czasie' }) {
+export default function AssistantChart({ data, dataKey = 'totalNetto', title = 'Zakupy w czasie', xAxisKey = 'date', getBarColor, tooltipSuffix = ' zł', tooltipDecimals = 2 }) {
   if (!data?.length) {
     return (
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
@@ -39,7 +40,7 @@ export default function AssistantChart({ data, dataKey = 'totalNetto', title = '
         <ResponsiveContainer width="100%" height={150}>
           <BarChart data={data} barCategoryGap="28%" margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
             <XAxis
-              dataKey="date"
+              dataKey={xAxisKey}
               tick={{ fontSize: 10, fill: 'var(--muted)' }}
               tickLine={false}
               axisLine={false}
@@ -52,8 +53,12 @@ export default function AssistantChart({ data, dataKey = 'totalNetto', title = '
               width={44}
               tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
             />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(59,130,246,0.07)' }} />
-            <Bar dataKey={dataKey} fill="#3b82f6" radius={[3, 3, 0, 0]} />
+            <Tooltip content={<ChartTooltip tooltipSuffix={tooltipSuffix} tooltipDecimals={tooltipDecimals} />} cursor={{ fill: 'rgba(59,130,246,0.07)' }} />
+            <Bar dataKey={dataKey} fill="#3b82f6" radius={[3, 3, 0, 0]}>
+              {getBarColor && data.map((entry, index) => (
+                <Cell key={index} fill={getBarColor(entry)} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
