@@ -96,6 +96,32 @@ export function formatLatestPriceChangesResponse(priceChanges, periodLabel = 'os
   return parts.join(' ')
 }
 
+export function formatOrderRecommendationResponse(recommendations) {
+  if (!recommendations?.hasEnoughData) {
+    return 'Nie znalazłem produktów poniżej minimum magazynowego, więc nie ma teraz co zamawiać.'
+  }
+
+  const { kpis, summaryText } = recommendations
+  if (summaryText) return summaryText
+
+  const parts = []
+  parts.push(`Do zamówienia: ${kpis.orderCount} produkt${kpis.orderCount === 1 ? '' : 'ów'}.`)
+
+  if ((kpis.criticalCount ?? 0) > 0) {
+    parts.push(`Krytyczne: ${kpis.criticalCount}.`)
+  }
+
+  if (kpis.estimatedOrderCost != null && kpis.estimatedOrderCost > 0) {
+    parts.push(`Szacowany koszt: ${formatPLN(kpis.estimatedOrderCost)}.`)
+  }
+
+  if (kpis.topItemName) {
+    parts.push(`Najpilniejsze: ${kpis.topItemName}.`)
+  }
+
+  return parts.join(' ')
+}
+
 export function formatPurchaseDashboardResponse(dashboard, periodLabel = 'ostatnich 30 dniach') {
   if (!dashboard?.hasEnoughData) {
     return `Nie znalazłem faktur zakupowych w ${periodLabel}. Sprawdź, czy faktury zostały dodane i nie są anulowane.`

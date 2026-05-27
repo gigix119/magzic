@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -199,6 +199,51 @@ describe('formatLowStockResponse', () => {
     const text = formatLowStockResponse({ hasEnoughData: false, kpis: {} })
     expect(typeof text).toBe('string')
     expect(text.length).toBeGreaterThan(5)
+  })
+})
+
+const sampleRecommendations = {
+  hasEnoughData: true,
+  summaryText: null,
+  kpis: {
+    orderCount: 3,
+    criticalCount: 1,
+    estimatedOrderCost: 450.00,
+    topItemName: 'Rękawice nitrylowe',
+    noPriceCount: 0,
+    noSupplierCount: 1,
+  },
+  orderItems: [],
+  criticalItems: [],
+  supplierGroups: [],
+  watchList: [],
+}
+
+describe('formatOrderRecommendationResponse', () => {
+  it('zawiera liczbę produktów do zamówienia', () => {
+    const text = formatOrderRecommendationResponse(sampleRecommendations)
+    expect(text).toContain('3')
+  })
+
+  it('zawiera PLN jeśli istnieje szacowany koszt', () => {
+    const text = formatOrderRecommendationResponse(sampleRecommendations)
+    expect(text).toContain('zł')
+  })
+
+  it('zawiera nazwę najpilniejszego produktu', () => {
+    const text = formatOrderRecommendationResponse(sampleRecommendations)
+    expect(text).toContain('Rękawice nitrylowe')
+  })
+
+  it('obsługuje brak danych', () => {
+    const text = formatOrderRecommendationResponse({ hasEnoughData: false })
+    expect(typeof text).toBe('string')
+    expect(text.length).toBeGreaterThan(5)
+  })
+
+  it('informuje o produktach krytycznych jeśli istnieją', () => {
+    const text = formatOrderRecommendationResponse(sampleRecommendations)
+    expect(text).toMatch(/krytyczn|Krytyczn/)
   })
 })
 

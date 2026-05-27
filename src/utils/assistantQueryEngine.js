@@ -1,5 +1,9 @@
 import { supabase } from '../supabase'
 
+export async function fetchAssistantOrderRecommendationData({ workspaceId }) {
+  return fetchAssistantLowStockData({ workspaceId })
+}
+
 export async function fetchAssistantLowStockData({ workspaceId }) {
   if (!workspaceId) {
     return { products: [], stockRows: [], recentInvoiceLines: [], recentInvoices: [], errors: ['Brak aktywnego workspace'] }
