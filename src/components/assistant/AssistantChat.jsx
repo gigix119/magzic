@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, MessageCircle } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent, getAssistantResponse } from '../../utils/assistantIntentParser'
-import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData, fetchAssistantLowStockData, fetchAssistantOrderRecommendationData, fetchAssistantInvoicesNeedingReviewData, fetchAssistantProductPriceHistoryData } from '../../utils/assistantQueryEngine'
+import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData, fetchAssistantLowStockData, fetchAssistantOrderRecommendationData, fetchAssistantInvoicesNeedingReviewData, fetchAssistantProductPriceHistoryData, fetchAssistantSupplierComparisonData } from '../../utils/assistantQueryEngine'
 import { buildPurchaseDashboard } from '../../utils/purchaseAnalyticsEngine'
 import { buildLatestPriceChanges } from '../../utils/priceAnalyticsEngine'
 import { compareInvoices } from '../../utils/invoiceComparisonEngine'
@@ -10,7 +10,8 @@ import { buildLowStockAnalysis } from '../../utils/lowStockAnalyticsEngine'
 import { buildOrderRecommendations } from '../../utils/orderRecommendationEngine'
 import { buildInvoicesNeedingReview } from '../../utils/invoiceReviewEngine'
 import { buildProductPriceHistory } from '../../utils/productPriceHistoryEngine'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatProductPriceHistoryResponse } from '../../utils/assistantResponseFormatter'
+import { buildSupplierComparison } from '../../utils/supplierComparisonEngine'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatProductPriceHistoryResponse, formatSupplierComparisonResponse } from '../../utils/assistantResponseFormatter'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 
@@ -65,6 +66,8 @@ export default function AssistantChat() {
       await handleInvoicesNeedingReview()
     } else if (parsed.intent === 'product_price_history') {
       await handleProductPriceHistory(parsed.entities?.productQuery ?? null)
+    } else if (parsed.intent === 'compare_suppliers') {
+      await handleSupplierComparison(parsed.entities?.productQuery ?? null)
     } else {
       const responseText = getAssistantResponse(parsed)
       setMessages(prev => [...prev, { id: nextId(), role: 'assistant', text: responseText, intent: parsed.intent }])
@@ -451,6 +454,61 @@ export default function AssistantChat() {
       ))
     } catch (err) {
       console.error('AssistantChat handleInvoicesNeedingReview:', err)
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }
+          : m
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleSupplierComparison(productQuery) {
+    const loadingId = nextId()
+    setIsLoading(true)
+    setMessages(prev => [...prev, { id: loadingId, role: 'assistant', text: '', loading: true, intent: 'compare_suppliers' }])
+
+    try {
+      if (!workspaceId) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie mogę porównać dostawców, bo nie wykryłem aktywnego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const rawData = await fetchAssistantSupplierComparisonData({ workspaceId, productQuery })
+
+      if (rawData.errors.length > 0) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: `Błąd pobierania danych: ${rawData.errors.join(' ')}` }
+            : m
+        ))
+        return
+      }
+
+      if (!rawData.invoices.length) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie znalazłem faktur zakupowych z ostatnich 12 miesięcy dla tego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const comparison = buildSupplierComparison(rawData)
+      const responseText = formatSupplierComparisonResponse(comparison)
+
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: responseText, structuredData: comparison }
+          : m
+      ))
+    } catch (err) {
+      console.error('AssistantChat handleSupplierComparison:', err)
       setMessages(prev => prev.map(m =>
         m.id === loadingId
           ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }

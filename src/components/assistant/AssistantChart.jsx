@@ -45,6 +45,7 @@ export default function AssistantChart({
   tooltipSuffix = ' zł',
   tooltipDecimals = 2,
   type = 'bar',
+  yAxisDomain,
 }) {
   if (!data?.length) {
     return (
@@ -106,6 +107,7 @@ export default function AssistantChart({
                 interval="preserveStartEnd"
               />
               <YAxis
+                domain={yAxisDomain}
                 tick={{ fontSize: 10, fill: 'var(--muted)' }}
                 tickLine={false}
                 axisLine={false}

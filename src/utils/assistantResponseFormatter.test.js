@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatProductPriceHistoryResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatProductPriceHistoryResponse, formatSupplierComparisonResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -332,6 +332,40 @@ describe('formatProductPriceHistoryResponse', () => {
     const text = formatProductPriceHistoryResponse({ productQuery: 'Kret', hasEnoughData: false })
     expect(typeof text).toBe('string')
     expect(text.length).toBeGreaterThan(5)
+  })
+})
+
+describe('formatSupplierComparisonResponse', () => {
+  const sampleComparison = {
+    hasEnoughData: true,
+    summaryText: 'Porównałem 3 dostawców na podstawie 5 produktów kupowanych u minimum dwóch dostawców. Najtańszy wg indeksu cenowego: ABC Sp. z o.o. — 0,91 względem mediany. Najdroższy: XYZ Sp. z o.o. — 1,18. Największa różnica cen: Rękawice nitrylowe M — 6,20 zł vs 8,80 zł (+41,9%).',
+    kpis: { supplierCount: 3, comparableProductCount: 5, cheapestSupplier: 'ABC Sp. z o.o.', mostExpensiveSupplier: 'XYZ Sp. z o.o.' },
+  }
+
+  it('zawiera liczbę dostawców', () => {
+    const text = formatSupplierComparisonResponse(sampleComparison)
+    expect(text).toContain('3')
+  })
+
+  it('zawiera najtańszego dostawcę', () => {
+    const text = formatSupplierComparisonResponse(sampleComparison)
+    expect(text).toContain('ABC Sp. z o.o.')
+  })
+
+  it('zawiera najdroższego dostawcę', () => {
+    const text = formatSupplierComparisonResponse(sampleComparison)
+    expect(text).toContain('XYZ Sp. z o.o.')
+  })
+
+  it('zawiera największą różnicę cen', () => {
+    const text = formatSupplierComparisonResponse(sampleComparison)
+    expect(text).toContain('41')
+  })
+
+  it('obsługuje brak danych', () => {
+    const text = formatSupplierComparisonResponse({ hasEnoughData: false, summaryText: null })
+    expect(typeof text).toBe('string')
+    expect(text).toContain('minimum dwóch dostawców')
   })
 })
 

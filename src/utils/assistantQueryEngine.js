@@ -4,6 +4,50 @@ export async function fetchAssistantOrderRecommendationData({ workspaceId }) {
   return fetchAssistantLowStockData({ workspaceId })
 }
 
+export async function fetchAssistantSupplierComparisonData({ workspaceId, productQuery }) {
+  if (!workspaceId) {
+    return { invoices: [], invoiceLines: [], productQuery: productQuery ?? null, errors: ['Brak aktywnego workspace'] }
+  }
+
+  const errors = []
+  const dateFrom = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
+
+  const { data: invoices, error: e1 } = await supabase
+    .from('faktury')
+    .select('id, numer, data_zakupu, kontrahent_id, kontrahenci(id, nazwa)')
+    .eq('workspace_id', workspaceId)
+    .eq('typ', 'zakup')
+    .neq('status', 'anulowana')
+    .gte('data_zakupu', dateFrom)
+    .order('data_zakupu', { ascending: true })
+    .limit(1000)
+
+  if (e1) {
+    errors.push(`Błąd pobierania faktur: ${e1.message}`)
+    return { invoices: [], invoiceLines: [], productQuery: productQuery ?? null, errors }
+  }
+
+  const safeInvoices = invoices ?? []
+  let invoiceLines = []
+
+  if (safeInvoices.length > 0) {
+    const invoiceIds = safeInvoices.map(f => f.id)
+    const { data: lines, error: e2 } = await supabase
+      .from('pozycje_faktury')
+      .select('id, faktura_id, towar_id, ilosc, cena_netto, raw_name, towary(id, nazwa)')
+      .in('faktura_id', invoiceIds)
+      .limit(10000)
+
+    if (e2) {
+      errors.push(`Błąd pobierania pozycji: ${e2.message}`)
+    } else {
+      invoiceLines = lines ?? []
+    }
+  }
+
+  return { invoices: safeInvoices, invoiceLines, productQuery: productQuery ?? null, errors }
+}
+
 export async function fetchAssistantProductPriceHistoryData({ workspaceId, productQuery }) {
   if (!workspaceId) {
     return { invoices: [], invoiceLines: [], productQuery, errors: ['Brak aktywnego workspace'] }

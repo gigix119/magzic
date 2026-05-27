@@ -176,6 +176,22 @@ export function formatOrderRecommendationResponse(recommendations) {
   return parts.join(' ')
 }
 
+export function formatSupplierComparisonResponse(comparison) {
+  if (!comparison?.hasEnoughData) {
+    return comparison?.summaryText || 'Nie mam wystarczających danych do uczciwego porównania dostawców. Potrzebuję produktów kupowanych u minimum dwóch dostawców.'
+  }
+  if (comparison.summaryText) return comparison.summaryText
+
+  const { kpis } = comparison
+  const parts = []
+  parts.push(`Znalazłem ${kpis.supplierCount} dostawców${kpis.comparableProductCount > 0 ? `, ${kpis.comparableProductCount} produktów porównywalnych` : ''}.`)
+  if (kpis.cheapestSupplier) parts.push(`Najtańszy: ${kpis.cheapestSupplier}.`)
+  if (kpis.mostExpensiveSupplier && kpis.mostExpensiveSupplier !== kpis.cheapestSupplier) {
+    parts.push(`Najdroższy: ${kpis.mostExpensiveSupplier}.`)
+  }
+  return parts.join(' ')
+}
+
 export function formatPurchaseDashboardResponse(dashboard, periodLabel = 'ostatnich 30 dniach') {
   if (!dashboard?.hasEnoughData) {
     return `Nie znalazłem faktur zakupowych w ${periodLabel}. Sprawdź, czy faktury zostały dodane i nie są anulowane.`

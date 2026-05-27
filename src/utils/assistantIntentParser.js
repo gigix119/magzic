@@ -44,8 +44,10 @@ const INTENT_DEFS = {
       /zestawienie\s+dostaw/i,
       /który\s+dostaw/i,
       /porównanie\s+dostaw/i,
+      /gdzie\s+najtaniej/i,
+      /najtańszy\s+dostaw/i,
     ],
-    keywords: ['porównaj dostawców', 'dostawców', 'zestawienie dostawców', 'który dostawca', 'najlepszy dostawca', 'porównanie dostawców'],
+    keywords: ['porównaj dostawców', 'dostawców', 'zestawienie dostawców', 'który dostawca', 'najlepszy dostawca', 'porównanie dostawców', 'gdzie najtaniej', 'najtańszy dostawca'],
   },
   invoices_needing_review: {
     patterns: [
@@ -181,6 +183,32 @@ function extractProductQuery(rawInput) {
   return q
 }
 
+const SUPPLIER_QUERY_STRIP_PREFIXES = [
+  /^porównaj\s+dostawców?\b\s*(?:dla\s+)?/i,
+  /^porównanie\s+dostawców?\b\s*(?:dla\s+)?/i,
+  /^zestawienie\s+dostawców?\b\s*(?:dla\s+)?/i,
+  /^gdzie\s+najtaniej\s+kupujemy\s+/i,
+  /^gdzie\s+najtaniej\s+kupimy\s+/i,
+  /^który\s+dostawca\s+(?:jest\s+)?najtańszy\s*(?:(?:dla|do)\s+)?/i,
+  /^który\s+dostawca\s+(?:jest\s+)?najlepszy\s*(?:(?:dla|do)\s+)?/i,
+  /^u\s+którego\s+dostawcy\s+(?:kupujemy\s+)?(?:najtaniej\s+)?/i,
+  /^porównaj\s+ceny\s+(?:między\s+dostawcami\s+)?(?:(?:dla|do)\s+)?/i,
+]
+
+function extractSupplierProductQuery(rawInput) {
+  let q = rawInput.trim()
+
+  for (const prefix of SUPPLIER_QUERY_STRIP_PREFIXES) {
+    const stripped = q.replace(prefix, '')
+    if (stripped !== q) { q = stripped; break }
+  }
+
+  q = q.replace(/[?!.,]+$/, '').trim()
+
+  if (!q || q.length < 2 || GENERIC_PRODUCT_WORDS.has(q.toLowerCase())) return null
+  return q
+}
+
 function extractEntities(normalized, intent, rawInput) {
   const entities = {}
 
@@ -192,6 +220,10 @@ function extractEntities(normalized, intent, rawInput) {
 
   if (intent === 'product_price_history') {
     entities.productQuery = extractProductQuery(rawInput ?? '')
+  }
+
+  if (intent === 'compare_suppliers') {
+    entities.productQuery = extractSupplierProductQuery(rawInput ?? '')
   }
 
   return entities

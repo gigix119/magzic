@@ -129,6 +129,24 @@ describe('parseAssistantIntent', () => {
     expect(r.intent).toBe('product_price_history')
     expect(r.entities.productQuery).toBeNull()
   })
+
+  it('compare_suppliers — productQuery null gdy brak konkretnego produktu', () => {
+    const r = parseAssistantIntent('porównaj dostawców')
+    expect(r.intent).toBe('compare_suppliers')
+    expect(r.entities.productQuery).toBeNull()
+  })
+
+  it('compare_suppliers — productQuery Domestos z "porównaj dostawców Domestos"', () => {
+    const r = parseAssistantIntent('porównaj dostawców Domestos')
+    expect(r.intent).toBe('compare_suppliers')
+    expect(r.entities.productQuery).toBe('Domestos')
+  })
+
+  it('compare_suppliers — productQuery rękawice z "gdzie najtaniej kupujemy rękawice"', () => {
+    const r = parseAssistantIntent('gdzie najtaniej kupujemy rękawice')
+    expect(r.intent).toBe('compare_suppliers')
+    expect(r.entities.productQuery).toBe('rękawice')
+  })
 })
 
 describe('getAssistantResponse', () => {
