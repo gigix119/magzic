@@ -22,12 +22,16 @@ import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import { logExtraction, addToReviewQueue } from '../utils/modelLogger'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
-import { rankProductCandidates, runShadowModelOnResult } from '../utils/invoiceScoringEngine'
+import { runShadowModelOnResult } from '../utils/invoiceScoringEngine'
 import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
 import { mapParsedPozycjaToFormPozycja } from '../utils/invoiceLineMapper'
 import { findMatchingContractor, prepareContractorFromInvoice } from '../utils/contractorMatcher'
 import { ensureContractorForInvoice } from '../utils/contractorService'
 import ContractorCombobox from '../components/ContractorCombobox'
+import {
+  validateContractorFromPdf,
+  getVerificationStatusConfig,
+} from '../utils/invoiceVerificationStatus'
 import {
   Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
   Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp, AlertTriangle,
@@ -134,6 +138,11 @@ export default function Faktury() {
   const [showZatwierdzModal, setShowZatwierdzModal] = useState(false)
   const [zatwierdzFak, setZatwierdzFak] = useState(null)
   const [nDraftZeroPriceConfirmed, setNDraftZeroPriceConfirmed] = useState(false)
+  const [nCreateProductFor, setNCreateProductFor] = useState(null) // item index
+  const [nNewProductForm, setNNewProductForm] = useState({ nazwa: '', jednostka: 'szt', typ: 'towar', kategoria_id: '' })
+  const [nNewProductSaving, setNNewProductSaving] = useState(false)
+  const [nNewProductDupeWarning, setNNewProductDupeWarning] = useState(null)
+  const [nContractorNipWarning, setNContractorNipWarning] = useState(null)
 
   // ── Edit position modal (existing invoice) ────────────────────
   const [showEditPozModal, setShowEditPozModal] = useState(false)
@@ -433,6 +442,11 @@ export default function Faktury() {
     setNExtractionLogId(null)
     setNShadowResult(null)
     setNPriceData({})
+    setNCreateProductFor(null)
+    setNNewProductForm({ nazwa: '', jednostka: 'szt', typ: 'towar', kategoria_id: '' })
+    setNNewProductSaving(false)
+    setNNewProductDupeWarning(null)
+    setNContractorNipWarning(null)
     setNDraftZeroPriceConfirmed(false)
     setShowNModal(true)
   }
@@ -479,6 +493,76 @@ export default function Faktury() {
 
   function toggleSkipExtracted(idx) {
     setNExtractedItems(items => items.map((item, i) => i === idx ? { ...item, skipped: !item.skipped } : item))
+  }
+
+  function markItemAsService(idx) {
+    setNExtractedItems(items => items.map((item, i) => i === idx
+      ? { ...item, itemType: 'service_item', shouldAffectInventory: false, matchedProductId: null, matchedProductNazwa: null, matchScore: 0 }
+      : item
+    ))
+  }
+
+  function markItemAsInventory(idx) {
+    setNExtractedItems(items => items.map((item, i) => i === idx
+      ? { ...item, itemType: 'inventory_item', shouldAffectInventory: true }
+      : item
+    ))
+  }
+
+  function openCreateProductFor(idx) {
+    const item = nExtractedItems[idx]
+    if (!item) return
+    setNNewProductForm({
+      nazwa: item.rawName || item.nazwa || '',
+      jednostka: item.jednostka || item.unit || 'szt',
+      typ: 'towar',
+      kategoria_id: '',
+    })
+    setNNewProductDupeWarning(null)
+    setNCreateProductFor(idx)
+  }
+
+  async function handleSaveNewProduct() {
+    const form = nNewProductForm
+    if (!form.nazwa.trim()) { addToast('Podaj nazwę towaru', 'error'); return }
+    setNNewProductSaving(true)
+    try {
+      // Check for similar existing products first
+      if (!nNewProductDupeWarning) {
+        const { data: dupes } = await supabase.from('towary')
+          .select('id, nazwa')
+          .ilike('nazwa', `%${form.nazwa.trim().slice(0, 20)}%`)
+          .eq('aktywny', true)
+          .limit(3)
+        if (dupes?.length > 0) {
+          setNNewProductDupeWarning(dupes.map(d => d.nazwa).join(', '))
+          setNNewProductSaving(false)
+          return
+        }
+      }
+      // Create product
+      const { data: created, error } = await supabase.from('towary').insert([{
+        nazwa: form.nazwa.trim(),
+        jednostka: form.jednostka || 'szt',
+        typ: form.typ || 'towar',
+        kategoria_id: form.kategoria_id || null,
+        aktywny: true,
+        ...wsData(),
+      }]).select('id, nazwa, jednostka, typ').single()
+      if (error) throw error
+
+      // Update the item in nExtractedItems
+      setNExtractedItems(items => items.map((item, i) => i === nCreateProductFor
+        ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: 1.0 }
+        : item
+      ))
+      setTowary(prev => [...prev, created])
+      addToast(`Towar „${created.nazwa}" utworzony i przypisany do pozycji`, 'success')
+      setNCreateProductFor(null)
+    } catch (err) {
+      addToast(`Błąd tworzenia towaru: ${err.message}`, 'error')
+    }
+    setNNewProductSaving(false)
   }
 
   function commitExtractedItems() {
@@ -678,16 +762,34 @@ export default function Faktury() {
 
         // Contractor detection & matching from loaded list (no extra network call)
         const pdfCandidate = prepareContractorFromInvoice(result)
+        setNContractorNipWarning(null)
         if (pdfCandidate) {
-          const matchResult = findMatchingContractor(pdfCandidate, kontrahenci)
-          if (matchResult.match) {
-            const status = matchResult.matchedBy === 'nip' ? 'matched_nip' : 'matched_name'
-            handleContractorChange({ existingId: matchResult.match.id, candidate: null, matchStatus: status })
-            addToast(`Dopasowano kontrahenta: ${matchResult.match.nazwa}`, 'success')
+          const { valid: contractorValid, nipOk, warnings: contractorWarnings } = validateContractorFromPdf(pdfCandidate)
+
+          if (!contractorValid) {
+            // Generic name — require manual selection
+            addToast('Nie udało się pewnie odczytać nazwy kontrahenta — wybierz ręcznie.', 'warning')
           } else {
-            handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
-            const hint = pdfCandidate.nazwa || pdfCandidate.nip
-            addToast(`Wykryto kontrahenta z PDF: ${hint}. Zostanie utworzony przy zapisie.`, 'info')
+            if (!nipOk && nipOk !== null) setNContractorNipWarning(`NIP ${pdfCandidate.nip} — niepoprawna suma kontrolna`)
+            if (contractorWarnings.length > 0 && nipOk === false) {
+              addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
+            }
+
+            const matchResult = findMatchingContractor(pdfCandidate, kontrahenci)
+            if (matchResult.match) {
+              const byNip = matchResult.matchedBy === 'nip'
+              const status = byNip ? 'matched_nip' : 'matched_name'
+              handleContractorChange({ existingId: matchResult.match.id, candidate: null, matchStatus: status })
+              if (byNip && nipOk !== false) {
+                addToast(`Dopasowano kontrahenta po NIP: ${matchResult.match.nazwa}`, 'success')
+              } else {
+                addToast(`Dopasowano kontrahenta po nazwie: ${matchResult.match.nazwa} — sprawdź NIP.`, 'warning')
+              }
+            } else {
+              handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
+              const hint = pdfCandidate.nazwa || pdfCandidate.nip
+              addToast(`Wykryto kontrahenta z PDF: ${hint}. Zostanie utworzony przy zapisie.`, 'info')
+            }
           }
         }
 
@@ -778,12 +880,20 @@ export default function Faktury() {
             : matched
           setNExtractedItems(enriched)
           setNShowExtracted(true)
-          result.warnings.forEach(w => addToast(w, 'info'))
+          result.warnings.forEach(w => addToast(w, 'warning'))
           if (result.confidence >= 40) {
-            addToast(
-              `Odczytano dane (pewność: ${result.confidence}%). Sprawdź pozycje przed zatwierdzeniem.`,
-              'success'
-            )
+            const needsMatch = enriched.filter(i => !i.skipped && i.itemType !== 'service_item' && !i.matchedProductId).length
+            if (needsMatch > 0) {
+              addToast(
+                `Odczytano ${enriched.length} pozycji, ${needsMatch} wymaga dopasowania towaru — żadna nie trafi do magazynu bez wyboru.`,
+                'warning'
+              )
+            } else {
+              addToast(
+                `Odczytano dane (pewność: ${result.confidence}%). Sprawdź pozycje przed zatwierdzeniem.`,
+                'success'
+              )
+            }
           }
           return // exit — Phase 1.5 takes over
         }
@@ -1341,6 +1451,11 @@ export default function Faktury() {
                       </div>
                     </div>
                   </div>
+                  {nContractorNipWarning && (
+                    <div style={{ marginTop: 8, padding: '6px 10px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 4, color: '#92400e', fontSize: 11 }}>
+                      ⚠ {nContractorNipWarning}
+                    </div>
+                  )}
                   {qualityMetrics.errorsCount > 0 && (
                     <div style={{ marginTop: 8, padding: '6px 10px', background: '#fef2f2', borderRadius: 4, color: '#991b1b', fontSize: 11 }}>
                       ❌ {qualityMetrics.errorsCount} błędów — wymagane ręczne uzupełnienie
@@ -1431,7 +1546,92 @@ export default function Faktury() {
                   </div>
                 )
               })()}
-              <div className="table-scroll-x" style={{ maxHeight: 360, overflowY: 'auto' }}>
+              {/* Mobile card view — shown below sm (640px) */}
+              <div className="sm:hidden space-y-2 mt-1" style={{ maxHeight: 360, overflowY: 'auto' }}>
+                {nExtractedItems.map((item, idx) => {
+                  const assignStatus = getAssignmentStatus(item, towary)
+                  const borderColor = assignStatus === 'ready' || assignStatus === 'service_cost' ? '#16a34a'
+                    : assignStatus === 'needs_review' ? '#d97706'
+                    : assignStatus === 'needs_price' || assignStatus === 'needs_product' ? '#ef4444'
+                    : '#94a3b8'
+                  const statusCfg = getVerificationStatusConfig(assignStatus)
+                  return (
+                    <div key={idx} style={{
+                      background: 'var(--card)', borderRadius: 8, padding: '10px 12px',
+                      border: `1px solid var(--border)`, borderLeft: `3px solid ${borderColor}`,
+                      opacity: item.skipped ? 0.4 : 1,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{item.rawName}</span>
+                        {!item.skipped && (
+                          <span style={{ background: statusCfg.bg, color: statusCfg.color, borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                            {statusCfg.short}
+                          </span>
+                        )}
+                      </div>
+                      <select
+                        value={item.matchedProductId || ''}
+                        onChange={e => {
+                          const val = e.target.value || null
+                          setNExtractedItems(items => items.map((it, i) => i === idx
+                            ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0 }
+                            : it
+                          ))
+                        }}
+                        style={{ ...IS(), fontSize: 11, padding: '5px 8px', marginBottom: 8 }}
+                        disabled={item.skipped}
+                      >
+                        <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
+                        {towary.map(t => <option key={t.id} value={t.id}>{t.nazwa}</option>)}
+                      </select>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                        <input
+                          type="number" min="0" step="0.001"
+                          value={item.quantity}
+                          onChange={e => updateExtractedItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                          style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 70, textAlign: 'right' }}
+                          disabled={item.skipped}
+                        />
+                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>×</span>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={item.unitPriceNet}
+                          onChange={e => updateExtractedItem(idx, 'unitPriceNet', parseFloat(e.target.value) || 0)}
+                          style={{ ...IS(assignStatus === 'needs_price'), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
+                          disabled={item.skipped}
+                        />
+                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>zł</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {!item.skipped && item.itemType !== 'service_item' && (
+                          <button type="button" onClick={() => markItemAsService(idx)}
+                            style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
+                            Usługa
+                          </button>
+                        )}
+                        {!item.skipped && item.itemType === 'service_item' && (
+                          <button type="button" onClick={() => markItemAsInventory(idx)}
+                            style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
+                            Towar
+                          </button>
+                        )}
+                        {!item.skipped && !item.matchedProductId && item.itemType !== 'service_item' && (
+                          <button type="button" onClick={() => openCreateProductFor(idx)}
+                            style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
+                            + Towar
+                          </button>
+                        )}
+                        <button type="button" onClick={() => toggleSkipExtracted(idx)}
+                          style={{ background: 'var(--table-sub)', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
+                          {item.skipped ? 'Przywróć' : 'Pomiń'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Desktop table — hidden below sm (640px) */}
+              <div className="hidden sm:block table-scroll-x" style={{ maxHeight: 360, overflowY: 'auto' }}>
                 <table className="w-full text-sm" style={{ minWidth: 580 }}>
                   <thead>
                     <tr style={{ background: 'var(--table-sub)', position: 'sticky', top: 0 }}>
@@ -1608,15 +1808,50 @@ export default function Faktury() {
                           <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
                             {item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
                           </td>
-                          <td className="px-2 py-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => toggleSkipExtracted(idx)}
-                              className="text-xs px-2 py-1 rounded"
-                              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
-                            >
-                              {item.skipped ? 'Przywróć' : 'Pomiń'}
-                            </button>
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col gap-1 items-end" style={{ minWidth: 80 }}>
+                              {!item.skipped && item.itemType !== 'service_item' && (
+                                <button
+                                  type="button"
+                                  onClick={() => markItemAsService(idx)}
+                                  title="Oznacz jako usługę/koszt — nie wpłynie na magazyn"
+                                  className="text-xs px-2 py-0.5 rounded"
+                                  style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}
+                                >
+                                  Usługa
+                                </button>
+                              )}
+                              {!item.skipped && item.itemType === 'service_item' && (
+                                <button
+                                  type="button"
+                                  onClick={() => markItemAsInventory(idx)}
+                                  title="Przywróć jako towar magazynowy"
+                                  className="text-xs px-2 py-0.5 rounded"
+                                  style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}
+                                >
+                                  Towar
+                                </button>
+                              )}
+                              {!item.skipped && !item.matchedProductId && item.itemType !== 'service_item' && (
+                                <button
+                                  type="button"
+                                  onClick={() => openCreateProductFor(idx)}
+                                  title="Utwórz nowy towar na podstawie tej pozycji"
+                                  className="text-xs px-2 py-0.5 rounded"
+                                  style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap' }}
+                                >
+                                  + Towar
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => toggleSkipExtracted(idx)}
+                                className="text-xs px-2 py-0.5 rounded"
+                                style={{ background: 'var(--table-sub)', color: 'var(--muted)', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}
+                              >
+                                {item.skipped ? 'Przywróć' : 'Pomiń'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -1658,15 +1893,16 @@ export default function Faktury() {
                   Pomiń pozycje
                 </button>
                 {(() => {
-                  const statuses = nExtractedItems.map(i => getAssignmentStatus(i, towary))
+                  const active = nExtractedItems.filter(i => !i.skipped)
+                  const statuses = active.map(i => getAssignmentStatus(i, towary))
                   const readyCount = statuses.filter(s => isReadyToSave(s)).length
                   const draftCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
-                  const active = nExtractedItems.filter(i => !i.skipped)
                   const hasZeroPrice = active.some(i => {
                     const s = getAssignmentStatus(i, towary)
                     return (s === 'needs_review' || s === 'needs_product' || s === 'needs_price') && !((i.unitPriceNet ?? 0) > 0)
                   })
                   const draftDisabled = draftCount === 0 || (hasZeroPrice && !nDraftZeroPriceConfirmed)
+                  const allReady = readyCount > 0 && draftCount === 0
                   return (
                     <>
                       {draftCount > 0 && (
@@ -1674,16 +1910,18 @@ export default function Faktury() {
                           type="button"
                           onClick={commitDraftExtractedItems}
                           disabled={draftDisabled}
-                          className="rounded-lg py-2 px-3 text-sm font-semibold"
+                          className="flex-1 rounded-lg py-2 px-3 text-sm font-semibold"
                           style={{
-                            background: draftDisabled ? '#f1f5f9' : '#fef9c3',
+                            background: draftDisabled ? '#f1f5f9' : '#fffbeb',
                             color: draftDisabled ? '#94a3b8' : '#78350f',
                             border: `1px solid ${draftDisabled ? '#e2e8f0' : '#fde047'}`,
                             cursor: draftDisabled ? 'not-allowed' : 'pointer',
-                            flexShrink: 0,
+                            minWidth: 160,
                           }}
                         >
-                          Dodaj {draftCount} roboczych do weryfikacji
+                          {readyCount === 0
+                            ? 'Zapisz fakturę roboczą z pozycjami do weryfikacji'
+                            : `Zapisz ${draftCount} do weryfikacji`}
                         </button>
                       )}
                       <button
@@ -1691,16 +1929,100 @@ export default function Faktury() {
                         onClick={commitExtractedItems}
                         disabled={readyCount === 0}
                         className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                        style={{ background: readyCount > 0 ? '#3b82f6' : '#94a3b8', cursor: readyCount > 0 ? 'pointer' : 'not-allowed', minWidth: 140 }}
+                        style={{
+                          background: readyCount > 0 ? '#3b82f6' : '#94a3b8',
+                          cursor: readyCount > 0 ? 'pointer' : 'not-allowed',
+                          minWidth: 140,
+                        }}
                       >
-                        {readyCount > 0
-                          ? `Dodaj ${readyCount} gotowych →`
-                          : 'Brak gotowych pozycji'}
+                        {readyCount === 0
+                          ? 'Brak pozycji gotowych do magazynu'
+                          : allReady
+                          ? 'Dodaj wszystkie pozycje →'
+                          : `Dodaj ${readyCount} gotowych pozycji →`}
                       </button>
                     </>
                   )
                 })()}
               </div>
+              {/* ── Create-product mini-modal ── */}
+              {nCreateProductFor !== null && (() => {
+                const creatingFor = nExtractedItems[nCreateProductFor]
+                return (
+                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                      <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>Nowy towar</p>
+                      {creatingFor?.rawName && (
+                        <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 12 }}>
+                          z pozycji: <em>{creatingFor.rawName}</em>
+                        </p>
+                      )}
+                      {nNewProductDupeWarning && (
+                        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#92400e' }}>
+                          <p style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Znaleziono podobne towary w bazie:</p>
+                          <p style={{ marginBottom: 4 }}>{nNewProductDupeWarning}</p>
+                          <p>Wybierz istniejący towar z listy albo kliknij „Utwórz mimo to".</p>
+                        </div>
+                      )}
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs mb-1 font-medium" style={{ color: 'var(--text-2)' }}>Nazwa *</label>
+                          <input
+                            value={nNewProductForm.nazwa}
+                            onChange={e => setNNewProductForm(f => ({ ...f, nazwa: e.target.value }))}
+                            style={IS(!nNewProductForm.nazwa.trim())}
+                            placeholder="Pełna nazwa towaru"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs mb-1 font-medium" style={{ color: 'var(--text-2)' }}>Jednostka</label>
+                            <select value={nNewProductForm.jednostka} onChange={e => setNNewProductForm(f => ({ ...f, jednostka: e.target.value }))} style={IS()}>
+                              <option value="szt">szt</option>
+                              <option value="kg">kg</option>
+                              <option value="l">l</option>
+                              <option value="m">m</option>
+                              <option value="m2">m²</option>
+                              <option value="opak">opak</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs mb-1 font-medium" style={{ color: 'var(--text-2)' }}>Typ towaru</label>
+                            <select value={nNewProductForm.typ} onChange={e => setNNewProductForm(f => ({ ...f, typ: e.target.value }))} style={IS()}>
+                              <option value="towar">Towar</option>
+                              <option value="material">Materiał</option>
+                              <option value="urzadzenie">Urządzenie</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => { setNCreateProductFor(null); setNNewProductDupeWarning(null) }}
+                            className="flex-1 rounded-lg py-2 text-sm font-medium"
+                            style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                          >
+                            Anuluj
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveNewProduct}
+                            disabled={nNewProductSaving || !nNewProductForm.nazwa.trim()}
+                            className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                            style={{
+                              background: (nNewProductSaving || !nNewProductForm.nazwa.trim()) ? '#94a3b8' : '#3b82f6',
+                              cursor: (nNewProductSaving || !nNewProductForm.nazwa.trim()) ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            {nNewProductSaving ? 'Tworzenie...' : nNewProductDupeWarning ? 'Utwórz mimo to' : 'Utwórz towar'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               {import.meta.env.DEV && nExtractedItems.length > 0 && nExtractionResult && (
                 <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
