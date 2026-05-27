@@ -2,11 +2,12 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, MessageCircle } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent, getAssistantResponse } from '../../utils/assistantIntentParser'
-import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData } from '../../utils/assistantQueryEngine'
+import { fetchAssistantPurchaseDashboardData, fetchAssistantPriceChangesData, fetchAssistantInvoiceComparisonData, fetchAssistantLowStockData } from '../../utils/assistantQueryEngine'
 import { buildPurchaseDashboard } from '../../utils/purchaseAnalyticsEngine'
 import { buildLatestPriceChanges } from '../../utils/priceAnalyticsEngine'
 import { compareInvoices } from '../../utils/invoiceComparisonEngine'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse } from '../../utils/assistantResponseFormatter'
+import { buildLowStockAnalysis } from '../../utils/lowStockAnalyticsEngine'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse } from '../../utils/assistantResponseFormatter'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 
@@ -53,6 +54,8 @@ export default function AssistantChat() {
       await handleLatestPriceChanges()
     } else if (parsed.intent === 'compare_invoices') {
       await handleCompareInvoices()
+    } else if (parsed.intent === 'low_stock') {
+      await handleLowStock()
     } else {
       const responseText = getAssistantResponse(parsed)
       setMessages(prev => [...prev, { id: nextId(), role: 'assistant', text: responseText, intent: parsed.intent }])
@@ -218,6 +221,61 @@ export default function AssistantChat() {
       ))
     } catch (err) {
       console.error('AssistantChat handleCompareInvoices:', err)
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }
+          : m
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleLowStock() {
+    const loadingId = nextId()
+    setIsLoading(true)
+    setMessages(prev => [...prev, { id: loadingId, role: 'assistant', text: '', loading: true, intent: 'low_stock' }])
+
+    try {
+      if (!workspaceId) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie mogę wykonać analizy stanów, bo nie wykryłem aktywnego workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const rawData = await fetchAssistantLowStockData({ workspaceId })
+
+      if (rawData.errors.length > 0) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: `Błąd pobierania danych: ${rawData.errors.join(' ')}` }
+            : m
+        ))
+        return
+      }
+
+      if (!rawData.products.length) {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, loading: false, text: 'Nie znalazłem aktywnych towarów w tym workspace.' }
+            : m
+        ))
+        return
+      }
+
+      const analysis = buildLowStockAnalysis(rawData)
+      const responseText = formatLowStockResponse(analysis)
+
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
+          ? { ...m, loading: false, text: responseText, structuredData: analysis }
+          : m
+      ))
+    } catch (err) {
+      console.error('AssistantChat handleLowStock:', err)
       setMessages(prev => prev.map(m =>
         m.id === loadingId
           ? { ...m, loading: false, text: 'Wystąpił błąd podczas pobierania danych. Spróbuj ponownie za chwilę.' }

@@ -1,3 +1,28 @@
+export function formatLowStockResponse(analysis) {
+  if (!analysis?.hasEnoughData) {
+    return 'Nie znalazłem produktów poniżej minimum magazynowego. Sprawdź, czy towary mają ustawione minimum.'
+  }
+
+  const { kpis } = analysis
+  const parts = []
+
+  parts.push(`Poniżej minimum: ${kpis.belowCount} produkt${kpis.belowCount === 1 ? '' : 'ów'}.`)
+
+  if ((kpis.criticalCount ?? 0) > 0) {
+    parts.push(`Krytyczne: ${kpis.criticalCount}.`)
+  }
+
+  if (kpis.topMissingName) {
+    parts.push(`Największy brak: ${kpis.topMissingName} — brakuje ${kpis.topMissingQty.toLocaleString('pl-PL')} szt.`)
+  }
+
+  if (kpis.estimatedRestockCost != null && kpis.estimatedRestockCost > 0) {
+    parts.push(`Szacowany koszt uzupełnienia: ${formatPLN(kpis.estimatedRestockCost)}.`)
+  }
+
+  return parts.join(' ')
+}
+
 export function formatPLN(value) {
   const n = typeof value === 'number' && isFinite(value) ? value : 0
   return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł'

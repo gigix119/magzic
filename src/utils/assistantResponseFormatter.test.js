@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -154,6 +154,49 @@ describe('formatInvoiceComparisonResponse', () => {
 
   it('obsługuje brak danych', () => {
     const text = formatInvoiceComparisonResponse({ hasEnoughData: false, kpis: {} })
+    expect(typeof text).toBe('string')
+    expect(text.length).toBeGreaterThan(5)
+  })
+})
+
+describe('formatLowStockResponse', () => {
+  const sampleAnalysis = {
+    hasEnoughData: true,
+    kpis: {
+      belowCount: 7,
+      criticalCount: 2,
+      nearCount: 3,
+      totalMissing: 250,
+      estimatedRestockCost: 1450.50,
+      topMissingName: 'Kret 1L',
+      topMissingQty: 48,
+      topCostName: 'Kret 1L',
+      topCostValue: 1440,
+    },
+  }
+
+  it('zawiera liczbę produktów poniżej minimum', () => {
+    const text = formatLowStockResponse(sampleAnalysis)
+    expect(text).toContain('7')
+  })
+
+  it('zawiera informację o krytycznych produktach', () => {
+    const text = formatLowStockResponse(sampleAnalysis)
+    expect(text.toLowerCase()).toContain('krytyczne')
+  })
+
+  it('zawiera największy brak (nazwę produktu)', () => {
+    const text = formatLowStockResponse(sampleAnalysis)
+    expect(text).toContain('Kret 1L')
+  })
+
+  it('zawiera PLN jeśli jest szacowany koszt', () => {
+    const text = formatLowStockResponse(sampleAnalysis)
+    expect(text).toContain('zł')
+  })
+
+  it('obsługuje brak danych', () => {
+    const text = formatLowStockResponse({ hasEnoughData: false, kpis: {} })
     expect(typeof text).toBe('string')
     expect(text.length).toBeGreaterThan(5)
   })
