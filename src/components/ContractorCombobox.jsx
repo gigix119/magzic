@@ -21,6 +21,10 @@ const STATUS_CONFIG = {
     bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0',
     text: 'Dopasowano istniejącego kontrahenta',
   },
+  low_confidence: {
+    bg: '#fffbeb', color: '#d97706', border: '#fde68a',
+    text: 'Słabe dopasowanie — sprawdź kontrahenta ręcznie',
+  },
   new_from_pdf: {
     bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe',
     text: 'Wykryto z PDF — zostanie utworzony przy zapisie',

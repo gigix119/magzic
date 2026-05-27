@@ -778,13 +778,21 @@ export default function Faktury() {
             const matchResult = findMatchingContractor(pdfCandidate, kontrahenci)
             if (matchResult.match) {
               const byNip = matchResult.matchedBy === 'nip'
-              const status = byNip ? 'matched_nip' : 'matched_name'
+              const isLow = matchResult.confidence === 'low' || matchResult.confidence === 'fuzzy'
+              const status = byNip ? 'matched_nip' : isLow ? 'low_confidence' : 'matched_name'
               handleContractorChange({ existingId: matchResult.match.id, candidate: null, matchStatus: status })
               if (byNip && nipOk !== false) {
                 addToast(`Dopasowano kontrahenta po NIP: ${matchResult.match.nazwa}`, 'success')
+              } else if (isLow) {
+                addToast(`Słabe dopasowanie kontrahenta: „${matchResult.match.nazwa}" — sprawdź ręcznie.`, 'warning')
               } else {
                 addToast(`Dopasowano kontrahenta po nazwie: ${matchResult.match.nazwa} — sprawdź NIP.`, 'warning')
               }
+            } else if (matchResult.suggestions?.length > 0) {
+              // Ambiguous — multiple candidates, let user pick
+              handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
+              const hint = pdfCandidate.nazwa || pdfCandidate.nip
+              addToast(`Znaleziono kilka możliwych kontrahentów dla: ${hint} — wybierz ręcznie.`, 'warning')
             } else {
               handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
               const hint = pdfCandidate.nazwa || pdfCandidate.nip
@@ -1442,9 +1450,11 @@ export default function Faktury() {
                       <div style={{ fontWeight: 500,
                         color: nContractorValue?.matchStatus === 'matched_nip' || nContractorValue?.matchStatus === 'matched_name' ? '#16a34a'
                           : nContractorValue?.matchStatus === 'new_from_pdf' ? '#1d4ed8'
+                          : nContractorValue?.matchStatus === 'low_confidence' ? '#d97706'
                           : '#d97706' }}>
                         {nContractorValue?.matchStatus === 'matched_nip' ? '✓ NIP'
                           : nContractorValue?.matchStatus === 'matched_name' ? '✓ Nazwa'
+                          : nContractorValue?.matchStatus === 'low_confidence' ? '⚠ Sprawdź'
                           : nContractorValue?.matchStatus === 'new_from_pdf' ? '+ Nowy (PDF)'
                           : nContractorValue?.matchStatus === 'new_manual' ? '+ Nowy'
                           : '— brak'}
@@ -2100,6 +2110,8 @@ export default function Faktury() {
                     {!qualityMetrics.mathValid && <span style={{ color: '#dc2626', fontWeight: 500 }}>· ❌ Sprawdź matematykę</span>}
                     {qualityMetrics.warningsCount > 0 && <span style={{ color: '#d97706' }}>· ⚠ {qualityMetrics.warningsCount} ostrzeżeń</span>}
                     {nContractorValue?.matchStatus === 'matched_nip' && <span style={{ color: '#16a34a' }}>· ✓ Kontrahent (NIP)</span>}
+                    {nContractorValue?.matchStatus === 'matched_name' && <span style={{ color: '#16a34a' }}>· ✓ Kontrahent</span>}
+                    {nContractorValue?.matchStatus === 'low_confidence' && <span style={{ color: '#d97706' }}>· ⚠ Sprawdź kontrahenta</span>}
                     {nContractorValue?.matchStatus === 'new_from_pdf' && <span style={{ color: '#1d4ed8' }}>· + Nowy kontrahent (PDF)</span>}
                   </div>
                 </div>

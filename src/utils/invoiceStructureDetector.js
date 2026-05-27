@@ -135,8 +135,8 @@ export function detectInvoiceStructure(pdfLayout) {
   let nabywca = { nazwa: '', nip: '', adres: '' }
 
   // ── Label-based detection (highest priority) ─────────────────────────
-  const SELLER_LABEL = /^(sprzedawca|wystawca|vendor|supplier)\s*[:;]?\s*$/i
-  const BUYER_LABEL  = /^(nabywca|odbiorca|buyer|customer|płatnik|platnik)\s*[:;]?\s*$/i
+  const SELLER_LABEL = /^(sprzedawca|sprzedający|sprzedajacy|wystawca|wystawiający|wystawiajacy|vendor|supplier|dostawca|seller|from)\s*[:;]?\s*$/i
+  const BUYER_LABEL  = /^(nabywca|odbiorca|buyer|customer|płatnik|platnik|nabywca faktury|zamawiający|zamawiajacy)\s*[:;]?\s*$/i
 
   function findNipAfterLabel(startIdx, range) {
     for (let j = startIdx; j < Math.min(allLines.length, startIdx + range); j++) {

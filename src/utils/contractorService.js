@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { normalizeNip, isSameNip } from './contractorMatcher'
+import { normalizeNip, normalizeContractorName, isSameNip } from './contractorMatcher'
 
 /**
  * Creates a contractor if no duplicate exists (by NIP or by normalized name).
@@ -15,6 +15,17 @@ export async function createContractorIfNeeded(candidate, contractors, wsDataFn)
     const existing = contractors.find(c => isSameNip(c.nip, candidate.nip))
     if (existing) {
       return { id: existing.id, created: false, reusedExisting: true, contractor: existing }
+    }
+  }
+
+  // Anti-duplicate: normalized name check
+  if (candidate.nazwa) {
+    const normName = normalizeContractorName(candidate.nazwa)
+    if (normName.length >= 3) {
+      const existingByName = contractors.find(c => normalizeContractorName(c.nazwa) === normName)
+      if (existingByName) {
+        return { id: existingByName.id, created: false, reusedExisting: true, contractor: existingByName }
+      }
     }
   }
 

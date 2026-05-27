@@ -65,7 +65,11 @@ export function isSameNip(a, b) {
 
 export function prepareContractorFromInvoice(extracted) {
   if (!extracted?.fields) return null
-  const { kontrahent_nip, kontrahent_nazwa, sprzedawca_nip, sprzedawca_nazwa } = extracted.fields
+  const {
+    kontrahent_nip, kontrahent_nazwa,
+    sprzedawca_nip, sprzedawca_nazwa, sprzedawca_adres,
+    contractorConfidence,
+  } = extracted.fields
   const nip = kontrahent_nip || sprzedawca_nip || null
   const nazwa = kontrahent_nazwa || sprzedawca_nazwa || null
   if (!nip && !nazwa) return null
@@ -74,7 +78,8 @@ export function prepareContractorFromInvoice(extracted) {
     nip: normalizeNip(nip),
     email: null,
     telefon: null,
-    adres: null,
+    adres: sprzedawca_adres || null,
+    confidence: contractorConfidence ?? null,
   }
 }
 

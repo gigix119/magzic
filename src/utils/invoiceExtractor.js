@@ -24,6 +24,8 @@ export function EMPTY_RESULT() {
       kontrahent_nazwa: null,
       sprzedawca_nip: null,
       sprzedawca_nazwa: null,
+      sprzedawca_adres: null,
+      contractorConfidence: null,
       suma_netto: null,
       suma_brutto: null,
       pozycje: [],
@@ -162,6 +164,13 @@ export async function extractFromFile(file) {
     result.fields.kontrahent_nazwa = structure.sprzedawca?.nazwa || null
     result.fields.sprzedawca_nip = result.fields.kontrahent_nip
     result.fields.sprzedawca_nazwa = result.fields.kontrahent_nazwa
+    result.fields.sprzedawca_adres = structure.sprzedawca?.adres || null
+    // 0–1 confidence for contractor identification (NIP present + name present)
+    const _cNip = result.fields.kontrahent_nip
+    const _cNazwa = result.fields.kontrahent_nazwa
+    result.fields.contractorConfidence =
+      (_cNip && _cNip.replace(/\D/g, '').length >= 9 ? 0.6 : 0) +
+      (_cNazwa && _cNazwa.trim().length >= 3 ? 0.4 : 0)
     result.fields.suma_netto = patterns.sumaNetto || null
     result.fields.suma_brutto = patterns.sumaBrutto || null
 
