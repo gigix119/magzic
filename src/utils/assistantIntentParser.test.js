@@ -111,6 +111,24 @@ describe('parseAssistantIntent', () => {
     const r = parseAssistantIntent('dashboard zakupów z ostatniego miesiąca')
     expect(r.entities.timeRef).toBeDefined()
   })
+
+  it('wyciąga productQuery z historia ceny Domestos', () => {
+    const r = parseAssistantIntent('historia ceny Domestos')
+    expect(r.intent).toBe('product_price_history')
+    expect(r.entities.productQuery).toBe('Domestos')
+  })
+
+  it('wyciąga productQuery z wykres ceny rękawic nitrylowych', () => {
+    const r = parseAssistantIntent('wykres ceny rękawic nitrylowych')
+    expect(r.intent).toBe('product_price_history')
+    expect(r.entities.productQuery).toContain('rękawic nitrylowych')
+  })
+
+  it('zwraca productQuery null gdy brak konkretnej nazwy produktu', () => {
+    const r = parseAssistantIntent('Pokaż historię ceny produktu')
+    expect(r.intent).toBe('product_price_history')
+    expect(r.entities.productQuery).toBeNull()
+  })
 })
 
 describe('getAssistantResponse', () => {

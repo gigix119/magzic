@@ -96,6 +96,32 @@ export function formatLatestPriceChangesResponse(priceChanges, periodLabel = 'os
   return parts.join(' ')
 }
 
+export function formatProductPriceHistoryResponse(history) {
+  if (!history?.productQuery) {
+    return "Podaj nazwę produktu, np. 'historia ceny Domestos'."
+  }
+  if (!history?.hasEnoughData) {
+    return history?.summaryText || `Nie znalazłem historii ceny dla produktu „${history.productQuery}".`
+  }
+  if (history.summaryText) return history.summaryText
+
+  const { kpis, matchedProductName } = history
+  const fmtPLN = v => {
+    const n = typeof v === 'number' && isFinite(v) ? v : 0
+    return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł'
+  }
+  const parts = []
+  parts.push(`Znalazłem ${kpis.purchaseCount} zakup${kpis.purchaseCount === 1 ? '' : 'ów'} dla produktu ${matchedProductName}.`)
+  if (kpis.lastPrice != null) {
+    parts.push(`Ostatnia cena: ${fmtPLN(kpis.lastPrice)}.`)
+  }
+  if (kpis.purchaseCount >= 2 && kpis.diffPct != null) {
+    const sign = kpis.diffPct >= 0 ? '+' : ''
+    parts.push(`Zmiana: ${sign}${kpis.diffPct.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%.`)
+  }
+  return parts.join(' ')
+}
+
 export function formatInvoicesNeedingReviewResponse(review) {
   if (!review?.hasEnoughData) {
     return review?.summaryText || 'Nie znalazłem faktur wymagających weryfikacji w tym workspace.'

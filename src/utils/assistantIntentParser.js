@@ -33,8 +33,10 @@ const INTENT_DEFS = {
       /cena\s+(produktu|towaru|artykułu)/i,
       /jak\s+(zmieniał|zmieniała)\s+się\s+(cen|cena)/i,
       /historię\s+ceny/i,
+      /wykres\s+ceny/i,
+      /ile\s+kosztował/i,
     ],
-    keywords: ['historia ceny', 'historia cen', 'historia cenowa', 'cena produktu', 'cena towaru', 'historię ceny'],
+    keywords: ['historia ceny', 'historia cen', 'historia cenowa', 'cena produktu', 'cena towaru', 'historię ceny', 'wykres ceny'],
   },
   compare_suppliers: {
     patterns: [
@@ -123,7 +125,7 @@ export function parseAssistantIntent(input) {
 
   return {
     intent: bestIntent,
-    entities: extractEntities(normalized),
+    entities: extractEntities(normalized, bestIntent, input.trim()),
     confidence,
     rawQuery: input.trim(),
   }
@@ -133,7 +135,53 @@ export function getAssistantResponse(parsedResult) {
   return PLACEHOLDER_RESPONSES[parsedResult.intent] ?? PLACEHOLDER_RESPONSES.unknown
 }
 
-function extractEntities(normalized) {
+const PRODUCT_QUERY_STRIP_PREFIXES = [
+  /^pokaż\s+historię\s+ceny\s+/i,
+  /^historię\s+ceny\s+/i,
+  /^historia\s+ceny\s+/i,
+  /^historia\s+cen\s+/i,
+  /^historia\s+cenowa\s+/i,
+  /^wykres\s+ceny\s+/i,
+  /^wykres\s+cen\s+/i,
+  /^jak\s+zmieniał[ao]?\s+się\s+cen[ao]?\s+(?:produktu\s+|towaru\s+|artykułu\s+)?/i,
+  /^ile\s+kosztował[ao]?\s+/i,
+  /^pokaż\s+cenę?\s+/i,
+  /^cena\s+(?:produktu|towaru|artykułu)\s+/i,
+  /^pokaż\s+/i,
+]
+
+const PRODUCT_QUERY_STRIP_SUFFIXES = [
+  /\s+ostatnio$/i,
+  /\s+w\s+czasie$/i,
+  /\s+na\s+wykresie$/i,
+  /\s+produktu$/i,
+  /\s+towaru$/i,
+]
+
+const GENERIC_PRODUCT_WORDS = new Set([
+  'produktu', 'towaru', 'artykułu', 'produktem', 'towar', 'produkt', 'artykuł',
+  'pozycji', 'pozycję', 'pozycja',
+])
+
+function extractProductQuery(rawInput) {
+  let q = rawInput.trim()
+
+  for (const prefix of PRODUCT_QUERY_STRIP_PREFIXES) {
+    const stripped = q.replace(prefix, '')
+    if (stripped !== q) { q = stripped; break }
+  }
+
+  for (const suffix of PRODUCT_QUERY_STRIP_SUFFIXES) {
+    q = q.replace(suffix, '')
+  }
+
+  q = q.replace(/[?!.,]+$/, '').trim()
+
+  if (!q || q.length < 2 || GENERIC_PRODUCT_WORDS.has(q.toLowerCase())) return null
+  return q
+}
+
+function extractEntities(normalized, intent, rawInput) {
   const entities = {}
 
   const timeMatch = normalized.match(/ostatni(ego|ej|m)?\s+(miesiąc\w*|tydzień|tygodniu|roku?|kwartał\w*)/i)
@@ -141,6 +189,10 @@ function extractEntities(normalized) {
 
   const productMatch = normalized.match(/(?:produktu|towaru|artykułu|cena(?:\s+(?:za|dla))?)\s+([a-ząćęłńóśźż][a-ząćęłńóśźż\s-]{1,30})/i)
   if (productMatch) entities.product = productMatch[1].trim()
+
+  if (intent === 'product_price_history') {
+    entities.productQuery = extractProductQuery(rawInput ?? '')
+  }
 
   return entities
 }

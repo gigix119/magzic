@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatPLN } from './assistantResponseFormatter.js'
+import { formatPurchaseDashboardResponse, formatLatestPriceChangesResponse, formatInvoiceComparisonResponse, formatLowStockResponse, formatOrderRecommendationResponse, formatInvoicesNeedingReviewResponse, formatProductPriceHistoryResponse, formatPLN } from './assistantResponseFormatter.js'
 
 const sampleDashboard = {
   hasEnoughData: true,
@@ -284,6 +284,52 @@ describe('formatInvoicesNeedingReviewResponse', () => {
 
   it('obsługuje brak danych', () => {
     const text = formatInvoicesNeedingReviewResponse({ hasEnoughData: false })
+    expect(typeof text).toBe('string')
+    expect(text.length).toBeGreaterThan(5)
+  })
+})
+
+const samplePriceHistory = {
+  hasEnoughData: true,
+  summaryText: null,
+  productQuery: 'Domestos',
+  matchedProductName: 'Domestos 1L',
+  kpis: {
+    purchaseCount: 3,
+    firstPrice: 8.5,
+    lastPrice: 10.2,
+    minPrice: 8.2,
+    maxPrice: 10.2,
+    avgPrice: 9.3,
+    diffPLN: 1.7,
+    diffPct: 20.0,
+    lastSupplier: 'ABC Sp. z o.o.',
+  },
+}
+
+describe('formatProductPriceHistoryResponse', () => {
+  it('zawiera nazwę produktu', () => {
+    const text = formatProductPriceHistoryResponse(samplePriceHistory)
+    expect(text).toContain('Domestos')
+  })
+
+  it('zawiera PLN', () => {
+    const text = formatProductPriceHistoryResponse(samplePriceHistory)
+    expect(text).toContain('zł')
+  })
+
+  it('zawiera procent jeśli są minimum dwa zakupy', () => {
+    const text = formatProductPriceHistoryResponse(samplePriceHistory)
+    expect(text).toMatch(/%/)
+  })
+
+  it('obsługuje brak nazwy produktu', () => {
+    const text = formatProductPriceHistoryResponse({ productQuery: null })
+    expect(text).toMatch(/Podaj nazwę/i)
+  })
+
+  it('obsługuje brak historii', () => {
+    const text = formatProductPriceHistoryResponse({ productQuery: 'Kret', hasEnoughData: false })
     expect(typeof text).toBe('string')
     expect(text.length).toBeGreaterThan(5)
   })
