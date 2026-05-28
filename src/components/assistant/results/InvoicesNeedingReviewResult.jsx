@@ -3,6 +3,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { formatDatePL } from '../../../utils/assistantFormatters'
 
 const REVIEW_INVOICE_COLS = [
@@ -54,6 +55,8 @@ export default function InvoicesNeedingReviewResult({ review, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards cards={kpiCards} />
 
       {chartData.length > 0 && (
@@ -78,6 +81,8 @@ export default function InvoicesNeedingReviewResult({ review, text }) {
           columns={REVIEW_INVOICE_COLS}
           rows={makeReviewRows(criticalInvoices)}
           emptyMessage="Brak"
+          exportable
+          exportFilename="magzic-weryfikacja-krytyczne.csv"
         />
       )}
 
@@ -87,6 +92,8 @@ export default function InvoicesNeedingReviewResult({ review, text }) {
           columns={REVIEW_INVOICE_COLS}
           rows={makeReviewRows(invoicesToReview)}
           emptyMessage="Brak faktur do weryfikacji"
+          exportable
+          exportFilename="magzic-weryfikacja-faktury.csv"
         />
       )}
 
@@ -96,6 +103,8 @@ export default function InvoicesNeedingReviewResult({ review, text }) {
           columns={ISSUE_BREAKDOWN_COLS}
           rows={issueBreakdown}
           emptyMessage="Brak problemów"
+          exportable
+          exportFilename="magzic-weryfikacja-problemy.csv"
         />
       )}
     </div>

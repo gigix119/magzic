@@ -3,6 +3,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { fmtNum } from '../../../utils/assistantFormatters'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
@@ -80,6 +81,8 @@ export default function OrderRecommendationResult({ recommendations, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards cards={kpiCards} />
 
       {chartData.length > 0 && (
@@ -100,6 +103,8 @@ export default function OrderRecommendationResult({ recommendations, text }) {
           columns={ORDER_ITEM_COLS}
           rows={makeOrderItemRows(criticalItems)}
           emptyMessage="Brak"
+          exportable
+          exportFilename="magzic-zamowienie-krytyczne.csv"
         />
       )}
 
@@ -109,6 +114,8 @@ export default function OrderRecommendationResult({ recommendations, text }) {
           columns={ORDER_ITEM_COLS}
           rows={makeOrderItemRows(orderItems.filter(p => p.priority !== 'critical'))}
           emptyMessage="Brak"
+          exportable
+          exportFilename="magzic-zamowienie-lista.csv"
         />
       )}
 
@@ -118,6 +125,8 @@ export default function OrderRecommendationResult({ recommendations, text }) {
           columns={ORDER_SUPPLIER_COLS}
           rows={supplierRows}
           emptyMessage="Brak dostawców"
+          exportable
+          exportFilename="magzic-zamowienie-dostawcy.csv"
         />
       )}
 
@@ -127,6 +136,8 @@ export default function OrderRecommendationResult({ recommendations, text }) {
           columns={ORDER_WATCH_COLS}
           rows={makeStockRows(watchList)}
           emptyMessage="Brak"
+          exportable
+          exportFilename="magzic-zamowienie-obserwuj.csv"
         />
       )}
     </div>

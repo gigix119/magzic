@@ -3,6 +3,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { fmtPct } from '../../../utils/assistantFormatters'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
@@ -44,6 +45,8 @@ export default function PriceChangesResult({ priceChanges, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards cards={kpiCards} />
 
       {anomalies.length > 0 && (
@@ -52,6 +55,8 @@ export default function PriceChangesResult({ priceChanges, text }) {
           columns={PRICE_CHANGE_COLS}
           rows={makeRows(anomalies)}
           emptyMessage="Brak anomalii"
+          exportable
+          exportFilename="magzic-ceny-anomalie.csv"
         />
       )}
 
@@ -61,6 +66,8 @@ export default function PriceChangesResult({ priceChanges, text }) {
           columns={PRICE_CHANGE_COLS}
           rows={makeRows(increases.slice(0, 10))}
           emptyMessage="Brak wzrostów"
+          exportable
+          exportFilename="magzic-ceny-wzrosty.csv"
         />
       )}
 
@@ -70,6 +77,8 @@ export default function PriceChangesResult({ priceChanges, text }) {
           columns={PRICE_CHANGE_COLS}
           rows={makeRows(decreases.slice(0, 10))}
           emptyMessage="Brak spadków"
+          exportable
+          exportFilename="magzic-ceny-spadki.csv"
         />
       )}
 

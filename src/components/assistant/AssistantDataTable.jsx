@@ -1,11 +1,25 @@
-export default function AssistantDataTable({ title, columns, rows, emptyMessage }) {
+import { Download } from 'lucide-react'
+import { downloadCsv } from '../../utils/csvExport'
+
+export default function AssistantDataTable({ title, columns, rows, emptyMessage, exportable, exportFilename, exportLabel }) {
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
       <div
-        className="px-4 py-2.5"
+        className="px-4 py-2.5 flex items-center justify-between gap-2"
         style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}
       >
-        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{title}</p>
+        <div className="text-sm font-medium flex-1 min-w-0" style={{ color: 'var(--text)' }}>{title}</div>
+        {exportable && rows?.length > 0 && (
+          <button
+            onClick={() => downloadCsv(exportFilename ?? 'export.csv', rows, columns)}
+            className="flex-shrink-0 flex items-center gap-1 text-xs rounded-md px-2 py-0.5 transition-opacity hover:opacity-80 active:opacity-60"
+            style={{ background: 'var(--table-sub)', border: '1px solid var(--border)', color: 'var(--muted)' }}
+            title={exportLabel ?? 'Eksportuj CSV'}
+          >
+            <Download size={10} />
+            <span>CSV</span>
+          </button>
+        )}
       </div>
 
       {!rows?.length ? (

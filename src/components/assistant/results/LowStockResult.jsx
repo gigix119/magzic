@@ -3,6 +3,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { fmtNum } from '../../../utils/assistantFormatters'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
@@ -25,7 +26,7 @@ const STOCK_NEAR_COLS = [
   { key: 'magazyn',   label: 'Magazyn', hideOnMobile: true, maxWidth: 100 },
 ]
 
-export function makeStockRows(list) {
+function makeStockRows(list) {
   return list.map(p => ({
     ...p,
     stanFmt: fmtNum(p.stan),
@@ -56,6 +57,8 @@ export default function LowStockResult({ analysis, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards cards={kpiCards} />
 
       {chartData.length > 0 && (
@@ -76,6 +79,8 @@ export default function LowStockResult({ analysis, text }) {
           columns={STOCK_BELOW_COLS}
           rows={makeStockRows(criticalItems)}
           emptyMessage="Brak"
+          exportable
+          exportFilename="magzic-stany-krytyczne.csv"
         />
       )}
 
@@ -85,6 +90,8 @@ export default function LowStockResult({ analysis, text }) {
           columns={STOCK_BELOW_COLS}
           rows={makeStockRows(belowMinimum)}
           emptyMessage="Brak produktów poniżej minimum"
+          exportable
+          exportFilename="magzic-stany-ponizej-minimum.csv"
         />
       )}
 
@@ -94,6 +101,8 @@ export default function LowStockResult({ analysis, text }) {
           columns={STOCK_NEAR_COLS}
           rows={makeStockRows(nearMinimum)}
           emptyMessage="Brak"
+          exportable
+          exportFilename="magzic-stany-blisko-minimum.csv"
         />
       )}
     </div>

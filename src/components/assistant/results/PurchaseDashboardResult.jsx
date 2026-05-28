@@ -2,6 +2,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
 const SUPPLIER_COLS = [
@@ -41,6 +42,8 @@ export default function PurchaseDashboardResult({ dashboard, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards kpis={kpis} />
 
       {supplierRows.length > 0 && (
@@ -49,6 +52,8 @@ export default function PurchaseDashboardResult({ dashboard, text }) {
           columns={SUPPLIER_COLS}
           rows={supplierRows}
           emptyMessage="Brak dostawców"
+          exportable
+          exportFilename="magzic-dashboard-top-dostawcy.csv"
         />
       )}
 
@@ -58,6 +63,8 @@ export default function PurchaseDashboardResult({ dashboard, text }) {
           columns={PRODUCT_COLS}
           rows={productRows}
           emptyMessage="Brak pozycji faktur"
+          exportable
+          exportFilename="magzic-dashboard-top-produkty.csv"
         />
       )}
 

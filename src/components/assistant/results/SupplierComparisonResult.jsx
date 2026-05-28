@@ -3,6 +3,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
 const SUPPLIER_RANKING_COLS = [
@@ -98,6 +99,8 @@ export default function SupplierComparisonResult({ comparison, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards cards={kpiCards} />
 
       {chartData.length > 1 && (
@@ -119,6 +122,8 @@ export default function SupplierComparisonResult({ comparison, text }) {
           columns={SUPPLIER_RANKING_COLS}
           rows={rankingRows}
           emptyMessage="Brak danych do rankingu"
+          exportable
+          exportFilename="magzic-dostawcy-ranking.csv"
         />
       )}
 
@@ -128,6 +133,8 @@ export default function SupplierComparisonResult({ comparison, text }) {
           columns={COMPARABLE_PRODUCT_COLS}
           rows={comparableRows}
           emptyMessage="Brak produktów porównywalnych"
+          exportable
+          exportFilename="magzic-dostawcy-produkty-porownywalne.csv"
         />
       )}
 
@@ -137,6 +144,8 @@ export default function SupplierComparisonResult({ comparison, text }) {
           columns={SAVINGS_COLS}
           rows={savingsRows}
           emptyMessage="Brak okazji do oszczędności"
+          exportable
+          exportFilename="magzic-dostawcy-oszczednosci.csv"
         />
       )}
 
@@ -146,6 +155,8 @@ export default function SupplierComparisonResult({ comparison, text }) {
           columns={SPEND_BREAKDOWN_COLS}
           rows={spendRows}
           emptyMessage="Brak danych"
+          exportable
+          exportFilename="magzic-dostawcy-wydatki.csv"
         />
       )}
     </div>

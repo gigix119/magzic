@@ -3,6 +3,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { fmtNum, fmtPct, formatDatePL } from '../../../utils/assistantFormatters'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
@@ -31,25 +32,25 @@ const COMP_PRICE_COLS = [
   { key: 'priceDiffPctFmt',label: 'Δ%',       align: 'right', mono: true },
 ]
 
+const INFO_LABEL_STYLE = { color: 'var(--muted)', fontSize: 11, fontWeight: 500 }
+const INFO_CARD_STYLE = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 12px', minWidth: 0 }
+
+function InfoCard({ label, info, accentColor }) {
+  return (
+    <div style={INFO_CARD_STYLE}>
+      <p style={{ ...INFO_LABEL_STYLE, marginBottom: 6 }}>{label}</p>
+      <p className="font-semibold" style={{ color: 'var(--text)', fontSize: 13, wordBreak: 'break-all' }}>{info.numer}</p>
+      <p className="mt-1" style={{ color: 'var(--text-2)', fontSize: 11 }}>{formatDatePL(info.date)}</p>
+      <p style={{ color: 'var(--text-2)', fontSize: 11 }}>{info.contractor}</p>
+      <p className="mt-1.5" style={{ color: accentColor, fontSize: 12, fontFamily: 'DM Mono, monospace', fontWeight: 600 }}>
+        {formatPLN(info.brutto)}
+      </p>
+      <p style={{ color: 'var(--muted)', fontSize: 11 }}>brutto</p>
+    </div>
+  )
+}
+
 function InvoiceInfoBlock({ infoA, infoB }) {
-  const LABEL_STYLE = { color: 'var(--muted)', fontSize: 11, fontWeight: 500 }
-  const CARD_STYLE = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 12px', minWidth: 0 }
-
-  function InfoCard({ label, info, accentColor }) {
-    return (
-      <div style={CARD_STYLE}>
-        <p style={{ ...LABEL_STYLE, marginBottom: 6 }}>{label}</p>
-        <p className="font-semibold" style={{ color: 'var(--text)', fontSize: 13, wordBreak: 'break-all' }}>{info.numer}</p>
-        <p className="mt-1" style={{ color: 'var(--text-2)', fontSize: 11 }}>{formatDatePL(info.date)}</p>
-        <p style={{ color: 'var(--text-2)', fontSize: 11 }}>{info.contractor}</p>
-        <p className="mt-1.5" style={{ color: accentColor, fontSize: 12, fontFamily: 'DM Mono, monospace', fontWeight: 600 }}>
-          {formatPLN(info.brutto)}
-        </p>
-        <p style={{ color: 'var(--muted)', fontSize: 11 }}>brutto</p>
-      </div>
-    )
-  }
-
   return (
     <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
       <InfoCard label="Poprzednia faktura" info={infoA} accentColor="#6366f1" />
@@ -120,6 +121,8 @@ export default function CompareInvoicesResult({ comparison, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <InvoiceInfoBlock infoA={invoiceAInfo} infoB={invoiceBInfo} />
 
       <AssistantKpiCards cards={kpiCards} />
@@ -140,6 +143,8 @@ export default function CompareInvoicesResult({ comparison, text }) {
           columns={MATCHED_COLS}
           rows={matchedRows}
           emptyMessage="Brak dopasowanych pozycji"
+          exportable
+          exportFilename="magzic-faktury-dopasowane.csv"
         />
       )}
 
@@ -149,6 +154,8 @@ export default function CompareInvoicesResult({ comparison, text }) {
           columns={COMP_PRICE_COLS}
           rows={priceChangeRows}
           emptyMessage="Brak zmian cen"
+          exportable
+          exportFilename="magzic-faktury-zmiany-cen.csv"
         />
       )}
 
@@ -158,6 +165,8 @@ export default function CompareInvoicesResult({ comparison, text }) {
           columns={ONLY_COLS}
           rows={onlyBRows}
           emptyMessage="Brak nowych pozycji"
+          exportable
+          exportFilename="magzic-faktury-nowe-pozycje.csv"
         />
       )}
 
@@ -167,6 +176,8 @@ export default function CompareInvoicesResult({ comparison, text }) {
           columns={ONLY_COLS}
           rows={onlyARows}
           emptyMessage="Brak brakujących pozycji"
+          exportable
+          exportFilename="magzic-faktury-brakujace-pozycje.csv"
         />
       )}
     </div>

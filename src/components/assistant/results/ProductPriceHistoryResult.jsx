@@ -2,6 +2,7 @@ import AssistantKpiCards from '../AssistantKpiCards'
 import AssistantDataTable from '../AssistantDataTable'
 import AssistantChart from '../AssistantChart'
 import AssistantWarnings from '../AssistantWarnings'
+import AssistantResultActions from '../AssistantResultActions'
 import { fmtNum, formatDatePL } from '../../../utils/assistantFormatters'
 import { formatPLN } from '../../../utils/assistantResponseFormatter'
 
@@ -66,6 +67,8 @@ export default function ProductPriceHistoryResult({ history, text }) {
 
       <AssistantWarnings warnings={warnings} />
 
+      <AssistantResultActions summaryText={text} />
+
       <AssistantKpiCards cards={kpiCards} />
 
       {chartData.length > 1 && (
@@ -86,6 +89,8 @@ export default function ProductPriceHistoryResult({ history, text }) {
           columns={PRICE_HISTORY_COLS}
           rows={historyRows}
           emptyMessage="Brak historii zakupów"
+          exportable
+          exportFilename="magzic-historia-ceny-zakupy.csv"
         />
       )}
 
@@ -95,6 +100,8 @@ export default function ProductPriceHistoryResult({ history, text }) {
           columns={PRICE_SUPPLIER_COLS}
           rows={supplierRows}
           emptyMessage="Brak dostawców"
+          exportable
+          exportFilename="magzic-historia-ceny-dostawcy.csv"
         />
       )}
     </div>
