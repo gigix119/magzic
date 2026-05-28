@@ -12,16 +12,36 @@ const KEYS = {
 
 const MAX_TRAINING_EXAMPLES = 500
 
+// In-memory fallback used when localStorage is unavailable (e.g. Node/test environment)
+const _mem = Object.create(null)
+
+function _getLS() {
+  try { return typeof localStorage !== 'undefined' ? localStorage : null } catch { return null }
+}
+
 function getStore(key) {
-  try { return JSON.parse(localStorage.getItem(key) || '{}') } catch { return {} }
+  try {
+    const ls = _getLS()
+    const raw = ls ? ls.getItem(key) : (_mem[key] ?? null)
+    return JSON.parse(raw || '{}')
+  } catch { return {} }
 }
 
 function getStoreArray(key) {
-  try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] }
+  try {
+    const ls = _getLS()
+    const raw = ls ? ls.getItem(key) : (_mem[key] ?? null)
+    return JSON.parse(raw || '[]')
+  } catch { return [] }
 }
 
 function saveStore(key, data) {
-  try { localStorage.setItem(key, JSON.stringify(data)) } catch { /* quota */ }
+  try {
+    const ls = _getLS()
+    const val = JSON.stringify(data)
+    if (ls) ls.setItem(key, val)
+    else _mem[key] = val
+  } catch { /* quota */ }
 }
 
 // ── Product aliases ───────────────────────────────────────────────────
@@ -235,7 +255,11 @@ export function importInvoiceLearningData(jsonString) {
 
 export function clearInvoiceLearningData() {
   for (const key of Object.values(KEYS)) {
-    try { localStorage.removeItem(key) } catch { /* ignore */ }
+    try {
+      const ls = _getLS()
+      if (ls) ls.removeItem(key)
+      else delete _mem[key]
+    } catch { /* ignore */ }
   }
 }
 
