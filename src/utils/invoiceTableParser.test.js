@@ -427,3 +427,188 @@ describe('detectInvoiceStructure: multi-line products', () => {
     expect(result.pozycje.every(p => !/numer\s+rachunk/i.test(p.nazwa || ''))).toBe(true)
   })
 })
+
+// ── No hard limit: 20-product invoice ────────────────────────────────────────
+// Proves the parser has NO limit on item count (not 4, not 6, not 10).
+// Mix of: single-line products, multi-line products (name+price split),
+// and stop words (RAZEM, DO ZAPŁATY, Numer rachunku) that must be excluded.
+
+describe('no product count limit — 20 products', () => {
+  // Re-use IKEA header (generic enough)
+  const HDR = IKEA_HEADER_ONELINE
+
+  // Single-line product helper
+  function sl(lp, name, unit, qty, cena, total, vat, yOffset = 0) {
+    const y = 800 - lp * 18 - yOffset
+    return mkLine(y,
+      [15, String(lp)], [60, name],
+      [300, unit], [350, String(qty)],
+      [400, cena], [460, total],
+      [520, `${vat}%`],
+      [580, String(Math.round(parseFloat(total.replace(',', '.')) * vat / 100 * 100) / 100)],
+      [640, String((parseFloat(total.replace(',', '.')) * (1 + vat / 100)).toFixed(2))],
+    )
+  }
+
+  // Multi-line product (name on one line, prices on next)
+  function ml(lp, name, unit, qty, cena, total, vat) {
+    const y = 800 - lp * 18
+    const nameLine = mkLine(y, [15, String(lp)], [60, name], [300, unit])
+    const priceLine = mkLine(y - 8,
+      [350, String(qty)], [400, cena], [460, total],
+      [520, `${vat}%`],
+      [580, String(Math.round(parseFloat(total.replace(',', '.')) * vat / 100 * 100) / 100)],
+    )
+    return [nameLine, priceLine]
+  }
+
+  // Products 1–20: mix of single-line (LP 1-7, 9-14, 16-20) and multi-line (LP 8, 15)
+  const p1  = sl(1,  'Cement portlandzki 25kg',      'szt.',  10, '18,50', '185,00', 23)
+  const p2  = sl(2,  'Farba lateksowa biała 10L',     'szt.',   5, '42,00', '210,00', 23)
+  const p3  = sl(3,  'Śruba M6x20 ocynkowana',        'opak.', 20,  '3,99',  '79,80', 23)
+  const p4  = sl(4,  'Kołek rozporowy 8mm',           'opak.', 15,  '5,50',  '82,50', 23)
+  const p5  = sl(5,  'Listwa przypodłogowa dąb 2.5m', 'mb',    30,  '6,20', '186,00',  8)
+  const p6  = sl(6,  'Folia budowlana 10m',           'szt.',   8, '15,00', '120,00', 23)
+  const p7  = sl(7,  'Uszczelka gumowa 10mm',         'mb',   100,  '0,85',  '85,00', 23)
+  const p8  = ml(8,  'Klej montażowy Bostik',         'szt.',   6, '12,99',  '77,94', 23)  // multi-line
+  const p9  = sl(9,  'Pianka montażowa 750ml',        'szt.',  12,  '8,99', '107,88', 23)
+  const p10 = sl(10, 'Taśma izolacyjna czarna 20m',   'szt.',  25,  '2,49',  '62,25', 23)
+  const p11 = sl(11, 'Rura PVC fi50 2m',              'szt.',   4, '19,90',  '79,60', 23)
+  const p12 = sl(12, 'Kolanko PVC 90st fi50',         'szt.',   8,  '4,50',  '36,00', 23)
+  const p13 = sl(13, 'Uszczelka syfon fi40',          'opak.', 10,  '1,20',  '12,00', 23)
+  const p14 = sl(14, 'Silikon sanitarny biały',       'szt.',   3, '14,99',  '44,97', 23)
+  const p15 = ml(15, 'Narożnik wewnętrzny PVC',       'opak.',  5,  '6,50',  '32,50',  8)  // multi-line
+  const p16 = sl(16, 'Kratka wentylacyjna 110x110',   'szt.',   2, '22,00',  '44,00', 23)
+  const p17 = sl(17, 'Worek na gruz 100L',            'szt.',  50,  '1,50',  '75,00', 23)
+  const p18 = sl(18, 'Tarcza szlifierska 125mm',      'szt.',   4,  '9,99',  '39,96', 23)
+  const p19 = sl(19, 'Rękawice robocze rozm. L',      'para',  10,  '3,50',  '35,00', 23)
+  const p20 = sl(20, 'Kask ochronny budowlany',       'szt.',   2, '89,00', '178,00', 23)
+
+  // Footer lines that MUST NOT appear as products
+  const RAZEM_LINE = mkLine(420, [15, 'RAZEM'], [460, '1798,15'], [640, '2211,73'])
+  const NETTO_LINE = mkLine(408, [15, 'Razem'], [60, 'netto:'], [460, '1798,15'])
+  const VAT_LINE   = mkLine(396, [15, 'VAT'], [60, '23%:'], [460, '413,58'])
+  const ZAPLATA    = mkLine(384, [15, 'DO'], [30, 'ZAPŁATY:'], [460, '2211,73'])
+  const KONTO_LINE = mkLine(372, [15, 'Numer'], [40, 'rachunku:'], [60, '12'], [80, '3456'], [100, '7890'])
+
+  // All lines (multi-line products are flat arrays, single-line are single objects)
+  const allProductLines = [
+    p1, p2, p3, p4, p5, p6, p7,
+    ...p8,   // multi-line [nameLine, priceLine]
+    p9, p10, p11, p12, p13, p14,
+    ...p15,  // multi-line [nameLine, priceLine]
+    p16, p17, p18, p19, p20,
+    RAZEM_LINE, NETTO_LINE, VAT_LINE, ZAPLATA, KONTO_LINE,
+  ]
+
+  const layout = {
+    pages: [{ pageNum: 1, height: 1200, lines: [HDR, ...allProductLines] }],
+    fullText: [HDR, ...allProductLines].map(l => l.text).join('\n'),
+  }
+
+  function parseVia20() {
+    const candidates = findTableCandidates(layout)
+    const best = chooseBestTableCandidate(candidates)
+    if (!best) return []
+    const colMap = adaptColMap(best.columnMap || {})
+    if (Object.keys(colMap).length < 2) return []
+    return parseTableRows(best.rows, colMap)
+  }
+
+  it('returns exactly 20 products — no 4/6/10 limit', () => {
+    const items = parseVia20()
+    expect(items.length).toBe(20)
+  })
+
+  it('LP 1 (first product) is parsed correctly', () => {
+    const items = parseVia20()
+    const p = items.find(i => i.nazwa?.includes('Cement'))
+    expect(p).toBeDefined()
+    expect(p.ilosc).toBe(10)
+    expect(p.cenaNetto).toBeCloseTo(18.50)
+  })
+
+  it('LP 10 (middle product) is parsed correctly', () => {
+    const items = parseVia20()
+    const p = items.find(i => i.nazwa?.includes('Taśma'))
+    expect(p).toBeDefined()
+    expect(p.ilosc).toBe(25)
+    expect(p.cenaNetto).toBeCloseTo(2.49)
+  })
+
+  it('LP 20 (last product) is parsed correctly', () => {
+    const items = parseVia20()
+    const p = items.find(i => i.nazwa?.includes('Kask'))
+    expect(p).toBeDefined()
+    expect(p.ilosc).toBe(2)
+    expect(p.cenaNetto).toBeCloseTo(89.00)
+  })
+
+  it('LP 8 (multi-line product) is parsed correctly', () => {
+    const items = parseVia20()
+    const p = items.find(i => i.nazwa?.includes('Klej'))
+    expect(p).toBeDefined()
+    expect(p.ilosc).toBe(6)
+    expect(p.cenaNetto).toBeCloseTo(12.99)
+  })
+
+  it('LP 15 (multi-line product) is parsed correctly', () => {
+    const items = parseVia20()
+    const p = items.find(i => i.nazwa?.includes('Narożnik'))
+    expect(p).toBeDefined()
+    expect(p.ilosc).toBe(5)
+    expect(p.cenaNetto).toBeCloseTo(6.50)
+  })
+
+  it('all 20 product names are present', () => {
+    const items = parseVia20()
+    const names = items.map(i => i.nazwa || '')
+    expect(names.some(n => n.includes('Cement'))).toBe(true)
+    expect(names.some(n => n.includes('Farba'))).toBe(true)
+    expect(names.some(n => n.includes('Śruba'))).toBe(true)
+    expect(names.some(n => n.includes('Kołek'))).toBe(true)
+    expect(names.some(n => n.includes('Listwa'))).toBe(true)
+    expect(names.some(n => n.includes('Folia'))).toBe(true)
+    expect(names.some(n => n.includes('Uszczelka gumowa'))).toBe(true)
+    expect(names.some(n => n.includes('Klej'))).toBe(true)
+    expect(names.some(n => n.includes('Pianka'))).toBe(true)
+    expect(names.some(n => n.includes('Taśma'))).toBe(true)
+    expect(names.some(n => n.includes('Rura'))).toBe(true)
+    expect(names.some(n => n.includes('Kolanko'))).toBe(true)
+    expect(names.some(n => n.includes('Uszczelka syfon'))).toBe(true)
+    expect(names.some(n => n.includes('Silikon'))).toBe(true)
+    expect(names.some(n => n.includes('Narożnik'))).toBe(true)
+    expect(names.some(n => n.includes('Kratka'))).toBe(true)
+    expect(names.some(n => n.includes('Worek'))).toBe(true)
+    expect(names.some(n => n.includes('Tarcza'))).toBe(true)
+    expect(names.some(n => n.includes('Rękawice'))).toBe(true)
+    expect(names.some(n => n.includes('Kask'))).toBe(true)
+  })
+
+  it('RAZEM / Razem netto are NOT products', () => {
+    const items = parseVia20()
+    expect(items.every(i => !/^razem/i.test(i.nazwa || ''))).toBe(true)
+  })
+
+  it('DO ZAPŁATY is NOT a product', () => {
+    const items = parseVia20()
+    expect(items.every(i => !/do\s*zap[łl]at/i.test(i.nazwa || ''))).toBe(true)
+  })
+
+  it('Numer rachunku is NOT a product', () => {
+    const items = parseVia20()
+    expect(items.every(i => !/numer\s+rachunk/i.test(i.nazwa || ''))).toBe(true)
+  })
+
+  it('VAT line is NOT a product', () => {
+    const items = parseVia20()
+    expect(items.every(i => !/^vat\s*\d/i.test(i.nazwa || ''))).toBe(true)
+  })
+
+  it('confirms no limit: parser stops at table end, not at item count', () => {
+    // If there were a limit of N, items.length would be ≤ N
+    const items = parseVia20()
+    expect(items.length).toBeGreaterThan(10)  // definitely more than "4/6/10" limits
+    expect(items.length).toBe(20)
+  })
+})
