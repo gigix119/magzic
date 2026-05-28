@@ -580,7 +580,7 @@ function _isPriceContinuation(line) {
   if (!afterFirstWord) return false
   // First token after the leading number must be a digit/price, not a product name
   const firstTokenAfter = (afterFirstWord.match(/^(\S+)/) || [])[1] || ''
-  return /^[\d,.]/.test(firstTokenAfter) && !/[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}/.test(firstTokenAfter)
+  return /^[\d,.]/.test(firstTokenAfter) && !/\p{L}{2,}/u.test(firstTokenAfter)
 }
 
 // Extract numeric values from a price region (after the unit).
@@ -634,7 +634,7 @@ function _parseSegment(seg) {
   }
   name = name.replace(/\s+/g, ' ').trim()
   if (!name || name.length < 2) return null
-  if (!/[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}/.test(name)) return null
+  if (!/\p{L}{2,}/u.test(name)) return null
   // Reject names that are just a unit token (e.g. "lm", "szt", "cm")
   if (_UNIT_TOKEN_LP.test(name) && name.replace(/\.$/, '').length <= 4) return null
 
@@ -672,7 +672,7 @@ export function parseInvoiceItemsLP(rawText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (_isTableEndLP(line) && tableStartLine !== -1) { tableEndLine = i; break }
-    if (tableStartLine === -1 && /^1\s+[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2}/.test(line)) {
+    if (tableStartLine === -1 && /^1\s+\p{L}{2}/u.test(line)) {
       tableStartLine = i
     }
   }
@@ -703,7 +703,7 @@ export function parseInvoiceItemsLP(rawText) {
   //   2. Unit-start check: rejects "200 szt." or "100 cm" where the word after
   //      the number is a measurement unit rather than a product name.
   const tableText = joinedLines.join(' ')
-  const LP_SPLIT_RE = /(?:^|\s)(\d{1,4})\s+(?=[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2})/g
+  const LP_SPLIT_RE = /(?:^|\s)(\d{1,4})\s+(?=\p{L}{2})/gu
   const rawPositions = []
   let m
   while ((m = LP_SPLIT_RE.exec(tableText)) !== null) {

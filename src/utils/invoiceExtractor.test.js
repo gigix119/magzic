@@ -690,6 +690,39 @@ Razem brutto 154,35
     assert(!names.some(n => n.includes('uszkodzony')), `K03: broken LP2 not in items`)
   })
 
+  it('L: parseInvoiceItemsLP — product names starting with Polish letters', () => {
+    const text = [
+      'Faktura FV/099/2026',
+      '',
+      'Lp. Nazwa produktu Jm. Ilość Cena netto Wart. netto VAT',
+      '',
+      '1 Żarówka LED E27 806 lm szt. 4 18,99 zł 75,96 zł 23% 17,47 zł 93,43 zł',
+      '2 Śruba 4x40 do drewna op. 2 12,50 zł 25,00 zł 23% 5,75 zł 30,75 zł',
+      '3 Łącznik PVC 32 mm szt. 5 4,20 zł 21,00 zł 23% 4,83 zł 25,83 zł',
+      '4 Ćwierćwałek dębowy szt. 3 8,90 zł 26,70 zł 23% 6,14 zł 32,84 zł',
+      '5 Źródło zasilania 12V szt. 1 45,00 zł 45,00 zł 23% 10,35 zł 55,35 zł',
+      'RAZEM 194,66 zł 44,77 zł 239,43 zł',
+    ].join('\n')
+
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length === 5, `L01: 5 items with Polish-first names (got ${items.length})`)
+
+    // L02–L06: all Polish-first names detected correctly
+    assert(items[0].rawName.startsWith('Żarówka'), `L02: item[0] Żarówka (got ${items[0].rawName})`)
+    assert(items[1].rawName.startsWith('Śruba'), `L03: item[1] Śruba (got ${items[1].rawName})`)
+    assert(items[2].rawName.startsWith('Łącznik'), `L04: item[2] Łącznik (got ${items[2].rawName})`)
+    assert(items[3].rawName.startsWith('Ćwierćwałek'), `L05: item[3] Ćwierćwałek (got ${items[3].rawName})`)
+    assert(items[4].rawName.startsWith('Źródło'), `L06: item[4] Źródło (got ${items[4].rawName})`)
+
+    // L07–L09: quantities and prices correct (numbers in names don't confuse parser)
+    assert(items[0].ilosc === 4, `L07: Żarówka qty=4 (got ${items[0].ilosc})`)
+    assert(Math.abs(items[0].cenaNetto - 18.99) < 0.01, `L08: Żarówka price=18.99 (got ${items[0].cenaNetto})`)
+    assert(items[1].ilosc === 2, `L09: Śruba qty=2 (got ${items[1].ilosc})`)
+
+    // L10: "806 lm" inside Żarówka name must NOT create a false LP 806
+    assert(items.length === 5, `L10: "806 lm" not treated as LP 806 — still 5 items`)
+  })
+
 })
 
 // ═══════════════════════════════════════════════════════════════
