@@ -1,0 +1,106 @@
+export const ASSISTANT_COMMANDS = [
+  {
+    intent: 'purchase_dashboard',
+    title: 'Dashboard zakupów',
+    description: 'Podsumowanie faktur zakupowych, dostawców, produktów i trendu zakupów.',
+    badge: 'Zakupy',
+    examples: [
+      'Pokaż dashboard zakupów',
+      'Ile wydaliśmy w tym miesiącu?',
+      'Podsumuj zakupy',
+    ],
+    requiresProductQuery: false,
+  },
+  {
+    intent: 'latest_price_changes',
+    title: 'Zmiany cen',
+    description: 'Które produkty najbardziej podrożały lub staniały w ostatnim czasie.',
+    badge: 'Ceny',
+    examples: [
+      'Co najbardziej podrożało?',
+      'Zmiany cen w ostatnim miesiącu',
+      'Co staniało?',
+    ],
+    requiresProductQuery: false,
+  },
+  {
+    intent: 'compare_invoices',
+    title: 'Porównanie faktur',
+    description: 'Zestawienie dwóch ostatnich faktur pozycja po pozycji — różnice cen i nowe produkty.',
+    badge: 'Faktury',
+    examples: [
+      'Porównaj dwie ostatnie faktury',
+      'Zestawienie faktur',
+      'Co się zmieniło między fakturami?',
+    ],
+    requiresProductQuery: false,
+  },
+  {
+    intent: 'low_stock',
+    title: 'Niskie stany magazynowe',
+    description: 'Towary poniżej minimum magazynowego lub bliskie wyczerpania.',
+    badge: 'Magazyn',
+    examples: [
+      'Pokaż niskie stany',
+      'Co się kończy w magazynie?',
+      'Towary z niskim stanem',
+    ],
+    requiresProductQuery: false,
+  },
+  {
+    intent: 'order_recommendation',
+    title: 'Rekomendacja zamówienia',
+    description: 'Lista towarów do zamówienia na podstawie stanów magazynowych i historii zakupów.',
+    badge: 'Magazyn',
+    examples: [
+      'Co powinienem zamówić?',
+      'Co kupić?',
+      'Rekomendacje zakupowe',
+    ],
+    requiresProductQuery: false,
+  },
+  {
+    intent: 'invoices_needing_review',
+    title: 'Faktury do weryfikacji',
+    description: 'Faktury z problemami: brak towaru, podwójne pozycje, brak ceny lub błędy krytyczne.',
+    badge: 'Faktury',
+    examples: [
+      'Pokaż faktury do weryfikacji',
+      'Które faktury trzeba sprawdzić?',
+      'Faktury do zatwierdzenia',
+    ],
+    requiresProductQuery: false,
+  },
+  {
+    intent: 'product_price_history',
+    title: 'Historia ceny produktu',
+    description: 'Wykres cen wybranego produktu w czasie — wszystkie zakupy, dostawcy, trendy.',
+    badge: 'Ceny',
+    examples: [
+      'Historia ceny Domestos',
+      'Wykres ceny rękawic',
+      'Ile kosztował papier toaletowy?',
+    ],
+    requiresProductQuery: true,
+  },
+  {
+    intent: 'compare_suppliers',
+    title: 'Porównanie dostawców',
+    description: 'Ranking dostawców według indeksu cenowego, oszczędności i wydatków.',
+    badge: 'Dostawcy',
+    examples: [
+      'Porównaj dostawców',
+      'Który dostawca jest najtańszy?',
+      'Gdzie najtaniej kupujemy?',
+    ],
+    requiresProductQuery: false,
+  },
+]
+
+export const BADGE_COLORS = {
+  Zakupy:   { bg: 'rgba(59,130,246,0.10)',  color: '#3b82f6' },
+  Ceny:     { bg: 'rgba(245,158,11,0.10)',  color: '#d97706' },
+  Magazyn:  { bg: 'rgba(34,197,94,0.10)',   color: '#16a34a' },
+  Faktury:  { bg: 'rgba(139,92,246,0.10)',  color: '#7c3aed' },
+  Dostawcy: { bg: 'rgba(20,184,166,0.10)',  color: '#0d9488' },
+}

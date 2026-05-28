@@ -1,20 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, MessageCircle } from 'lucide-react'
+import { Send, MessageCircle, HelpCircle, X } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent } from '../../utils/assistantIntentParser'
 import { runAssistantIntent } from '../../utils/assistantHandlers'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
+import AssistantCommandHelp from './AssistantCommandHelp'
 
 const QUICK_PROMPTS = [
-  'Pokaż dashboard zakupów z ostatniego miesiąca',
-  'Porównaj dwie ostatnie faktury',
+  'Pokaż dashboard zakupów',
   'Co najbardziej podrożało?',
-  'Pokaż faktury do weryfikacji',
-  'Porównaj dostawców',
-  'Historia ceny Domestos',
-  'Pokaż towary z niskim stanem',
+  'Porównaj dwie ostatnie faktury',
+  'Pokaż niskie stany',
   'Co powinienem zamówić?',
+  'Pokaż faktury do weryfikacji',
+  'Historia ceny Domestos',
+  'Porównaj dostawców',
 ]
 
 let msgCounter = 0
@@ -25,6 +26,7 @@ export default function AssistantChat() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -37,6 +39,7 @@ export default function AssistantChat() {
     const trimmed = text.trim()
     if (!trimmed) return
 
+    setShowHelp(false)
     const userMsg = { id: nextId(), role: 'user', text: trimmed }
     setMessages(prev => [...prev, userMsg])
     setInput('')
@@ -85,7 +88,7 @@ export default function AssistantChat() {
         style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}
       >
         <MessageCircle size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="font-semibold" style={{ fontSize: 14, color: 'var(--text)' }}>
             Asystent Magzic
           </h2>
@@ -93,6 +96,20 @@ export default function AssistantChat() {
             Zapytaj o faktury, ceny, dostawców, magazyn i anomalie zakupowe
           </p>
         </div>
+        <button
+          onClick={() => setShowHelp(v => !v)}
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 transition-opacity hover:opacity-80"
+          style={{
+            background: showHelp ? 'rgba(59,130,246,0.08)' : 'var(--table-sub)',
+            border: `1px solid ${showHelp ? 'rgba(59,130,246,0.25)' : 'var(--border)'}`,
+            color: showHelp ? '#3b82f6' : 'var(--muted)',
+          }}
+          title={showHelp ? 'Ukryj pomoc' : 'Co mogę zapytać?'}
+        >
+          {showHelp
+            ? <><X size={12} /><span className="hidden sm:inline">Ukryj</span></>
+            : <><HelpCircle size={12} /><span>Co mogę zapytać?</span></>}
+        </button>
       </div>
 
       {/* Quick prompts */}
@@ -110,13 +127,19 @@ export default function AssistantChat() {
               background: 'var(--card)',
               color: 'var(--text-2)',
               border: '1px solid var(--border)',
-              whiteSpace: 'nowrap',
             }}
           >
             {prompt}
           </button>
         ))}
       </div>
+
+      {/* Help panel */}
+      {showHelp && (
+        <AssistantCommandHelp
+          onExampleClick={text => sendMessage(text)}
+        />
+      )}
 
       {/* Messages */}
       <div
@@ -190,7 +213,7 @@ export default function AssistantChat() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
-          placeholder="Wpisz pytanie… (Enter = wyślij, Shift+Enter = nowa linia)"
+          placeholder="Zapytaj np. 'co powinienem zamówić?' albo 'historia ceny Domestos'..."
           className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-60"
           style={{
             background: 'var(--input-bg)',
