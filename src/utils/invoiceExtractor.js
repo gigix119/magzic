@@ -10,6 +10,27 @@ import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 import { detectKsefComarchDocument, parseKsefComarchItems, isKsefMetadataLine } from './invoiceKsefComarchParser.js'
 import { recoverAmountsForItem } from './invoiceAmountRecovery.js'
 
+// detectColumnBoundaries (invoiceTableDetector) returns { LP: {x, rightBound}, NAZWA: {x,…}, … }
+// parseInvoiceLineData / assignToColumn expects { lp: x, nazwa: x, … } (lowercase camelCase, numbers)
+const _COL_KEY_MAP = {
+  LP: 'lp', NAZWA: 'nazwa', ILOSC: 'ilosc', JEDNOSTKA: 'jednostka',
+  CENA_NETTO: 'cenaNetto', WARTOSC_NETTO: 'wartoscNetto',
+  VAT: 'vat', KWOTA_VAT: 'kwotaVat', WARTOSC_BRUTTO: 'wartoscBrutto',
+  CENA_BRUTTO: 'cenaBrutto', KOD: 'indeks', RABAT: 'rabat',
+}
+
+function adaptColMap(raw) {
+  if (!raw) return {}
+  const out = {}
+  for (const [k, v] of Object.entries(raw)) {
+    const nk = _COL_KEY_MAP[k]
+    if (!nk) continue
+    const x = (v !== null && typeof v === 'object') ? v.x : v
+    if (typeof x === 'number' && isFinite(x)) out[nk] = x
+  }
+  return out
+}
+
 pdfjs.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
@@ -249,10 +270,36 @@ export async function extractFromFile(file) {
 
       if (best) {
         result.debug.tableSelected = { page: best.pageNum, score: best.headerScore, rows: best.rowCount }
-        const colMap = supplierColumnMap || best.columnMap || {}
+
+        // Adapt column map format: { LP: {x,rightBound},… } → { lp: x,… }
+        const adapted = adaptColMap(best.columnMap)
+        const colMap = supplierColumnMap || (Object.keys(adapted).length > 1 ? adapted : {})
         result.debug.columnMap = colMap
 
+        // Merge continuation rows: products split across multiple PDF lines.
+        // A continuation row has no letter content near the name column (no product name items).
+        const nomeX = colMap.nazwa
+        const mergedRows = []
         for (const row of best.rows) {
+          const items = row.items || []
+          const isContinuation = nomeX !== undefined && items.length > 0 &&
+            !items.some(it =>
+              it.x >= nomeX - 30 && it.x <= nomeX + 130 &&
+              /[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}/.test(it.text)
+            )
+          if (isContinuation && mergedRows.length > 0) {
+            const prev = mergedRows[mergedRows.length - 1]
+            mergedRows[mergedRows.length - 1] = {
+              ...prev,
+              items: [...(prev.items || []), ...items],
+              text: ((prev.text || '') + ' ' + (row.text || '')).trim(),
+            }
+          } else {
+            mergedRows.push({ ...row, items: [...items] })
+          }
+        }
+
+        for (const row of mergedRows) {
           try {
             const parsed = parseInvoiceLineData(row.items || [], colMap)
             if (parsed && parsed.nazwa && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0)) {

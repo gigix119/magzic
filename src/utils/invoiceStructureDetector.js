@@ -214,7 +214,8 @@ export function detectInvoiceStructure(pdfLayout) {
   }
 
   const pozycje = []
-  let pendingNazwa = null  // for multi-line product names
+  let pendingNazwa = null     // for multi-line product names (existing: appends to last pushed item)
+  let pendingLineItems = null  // for products where price follows on the next line (new)
 
   if (tableHeaderIdx >= 0) {
     for (let i = tableHeaderIdx + 1; i < allLines.length; i++) {
@@ -222,27 +223,35 @@ export function detectInvoiceStructure(pdfLayout) {
       const text = lineText(line)
       if (!text || text.length < 3) continue
       if (isTableEnd(line)) break
-      // Skip repeated headers
       if (isTableHeader(line)) continue
 
       const hasPrices = hasPricelikeNumber(line)
 
-      // Multi-line name continuation: text only in nama column range, no prices
-      if (!hasPrices && pendingNazwa !== null) {
-        const allText = line.items.map(i => i.text).join(' ').trim()
-        // Only continues name if items are in the left portion of the page
-        const avgX = line.items.length > 0
-          ? line.items.reduce((s, it) => s + it.x, 0) / line.items.length
-          : 999
-        if (avgX < 300 && allText.length > 2) {
-          pozycje[pozycje.length - 1].nazwa += ' ' + allText
-          continue
+      if (!hasPrices) {
+        // Multi-line name continuation: append text to the last complete product's name
+        if (pendingNazwa !== null) {
+          const allText = line.items.map(i => i.text).join(' ').trim()
+          const avgX = line.items.length > 0
+            ? line.items.reduce((s, it) => s + it.x, 0) / line.items.length
+            : 999
+          if (avgX < 300 && allText.length > 2) {
+            pozycje[pozycje.length - 1].nazwa += ' ' + allText
+            pendingLineItems = null
+            continue
+          }
         }
+        // Accumulate no-price lines: price might follow on the next line
+        pendingLineItems = pendingLineItems
+          ? [...pendingLineItems, ...line.items]
+          : line.items.slice()
+        continue
       }
 
-      if (!hasPrices) continue
+      // Line has prices — parse, merging any accumulated name-only items
+      const parseItems = pendingLineItems ? [...pendingLineItems, ...line.items] : line.items
+      const parsed = parseInvoiceLineData(parseItems, colMap)
+      pendingLineItems = null
 
-      const parsed = parseInvoiceLineData(line.items, colMap)
       if (parsed && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0) && parsed.nazwa) {
         pozycje.push(parsed)
         pendingNazwa = parsed.nazwa

@@ -59,13 +59,34 @@ export function detectTableHeader(line) {
 
 export function detectColumnBoundaries(items) {
   const map = {}
+  const claimedItems = new Set()
 
+  // Pass 1: exact matches only — prevents short keywords (e.g. 'netto', 'vat') from
+  // stealing column positions claimed by longer exact matches ('cena netto', 'stawka vat').
   for (const item of (items || [])) {
     const normalized = normHeader(item.text || item.str || '')
     for (const [col, keywords] of Object.entries(COL_KEYWORDS)) {
       if (map[col]) continue
       for (const kw of keywords) {
-        if (normalized === normHeader(kw) || normalized.includes(normHeader(kw))) {
+        if (normalized === normHeader(kw)) {
+          map[col] = { x: item.x, text: item.text || item.str }
+          claimedItems.add(item)
+          break
+        }
+      }
+    }
+  }
+
+  // Pass 2: substring / partial matches for columns not yet found,
+  // skipping items already claimed by an exact match.
+  for (const item of (items || [])) {
+    if (claimedItems.has(item)) continue
+    const normalized = normHeader(item.text || item.str || '')
+    for (const [col, keywords] of Object.entries(COL_KEYWORDS)) {
+      if (map[col]) continue
+      for (const kw of keywords) {
+        const nkw = normHeader(kw)
+        if (normalized.includes(nkw)) {
           map[col] = { x: item.x, text: item.text || item.str }
           break
         }
