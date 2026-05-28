@@ -323,7 +323,17 @@ export async function extractFromFile(file) {
       }
     }
 
-    // 7. Final regex fallback
+    // 7. LP-anchored text fallback — handles split headers, multi-line products, concatenated rows
+    if (!pozycje.length) {
+      try {
+        pozycje = parseInvoiceItemsLP(layout.fullText)
+        result.debug.lpParserUsed = pozycje.length > 0
+      } catch (e) {
+        result.debug.lpParserError = String(e)
+      }
+    }
+
+    // 7.5. Final regex fallback
     if (!pozycje.length) {
       pozycje = parseInvoiceItems(layout.fullText)
     }
@@ -535,6 +545,186 @@ export function parseInvoiceItems(text) {
         items.push(item)
       }
     }
+  }
+
+  return items
+}
+
+// ── LP-anchored text parser ───────────────────────────────────────────────────
+// Handles split headers, multi-line products, and concatenated invoice rows.
+// Works on raw text only — no pdfjs layout required.
+//
+// Key rule: a new product starts with LP_number followed by a word with LETTERS.
+// "2 249,00 zł..." is NOT a new product — no letters after the leading number.
+
+const _TABLE_END_LP = /^(razem|do\s*zap[łl]at|p[łl]atno[śs][ćc]|termin|numer\s+rachunk|konto:|uwagi|wystawił|s[łl]owni|podsumowanie|podstawa\s+op)/i
+const _UNIT_TOKEN = /\b(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|kg|g|ml|godz\.?|h|usł\.?|usl\.?|para|rolka|zest\.?|pcs|pc)\b/i
+
+function _isTableEndLP(line) {
+  return _TABLE_END_LP.test(line.trim().toLowerCase())
+}
+
+// True when a line starts with a number but has no product-name letters after it —
+// it's a price-continuation of the previous item, not a new LP.
+// e.g. "2 249,00 zł 498,00 zł 23% 114,54 zł 612,54 zł" → continuation of LP 1 (BILLY)
+function _isPriceContinuation(line) {
+  const firstWord = (line.match(/^(\S+)/) || [])[1] || ''
+  if (!/^\d/.test(firstWord)) return false  // doesn't start with a digit
+  const afterFirstWord = line.slice(firstWord.length).trim()
+  if (!afterFirstWord) return false
+  // First token after the leading number must be a digit/price, not a product name
+  const firstTokenAfter = (afterFirstWord.match(/^(\S+)/) || [])[1] || ''
+  return /^[\d,.]/.test(firstTokenAfter) && !/[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}/.test(firstTokenAfter)
+}
+
+// Extract numeric values from a price region (after the unit).
+// Each whitespace-separated token is parsed independently so "2 249,00" → [2, 249.00]
+// (not 2249.00), which is correct for the qty + unitPrice context.
+function _extractAmounts(text) {
+  const nums = []
+  const clean = text
+    .replace(/\bzł\b|\bPLN\b/gi, ' ')
+    .replace(/\b\d{1,2}\s*%/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  for (const tok of clean.split(' ')) {
+    if (!tok) continue
+    const stripped = tok.replace(/[^\d,.-]/g, '')
+    if (!stripped) continue
+    const v = normalizePolishNumber(stripped)
+    if (!isNaN(v) && v > 0) nums.push(v)
+  }
+  return nums
+}
+
+// Parse one product segment (isolated by LP split) into an item.
+function _parseSegment(seg) {
+  const { text } = seg
+  if (!text || text.length < 3) return null
+  if (_isTableEndLP(text)) return null
+  if (isForbiddenAsInvoiceItem(text.slice(0, 80), {})) return null
+
+  // VAT rate
+  const vatMatch = text.match(/\b(\d{1,2})\s*%/)
+  const vat = vatMatch ? parseInt(vatMatch[1]) : 23
+  if (vat > 100) return null
+
+  // Unit (first occurrence of a known unit token)
+  const unitMatch = text.match(_UNIT_TOKEN)
+  const unit = unitMatch ? unitMatch[1].toLowerCase().replace(/\.$/, '') : 'szt'
+
+  // Product name = text between the LP number and the unit token
+  const withoutLP = text.replace(/^\d{1,3}\s+/, '')
+  let name = withoutLP
+  if (unitMatch) {
+    const uIdx = withoutLP.indexOf(unitMatch[0])
+    if (uIdx > 0) name = withoutLP.slice(0, uIdx).trim()
+    else name = withoutLP.split(/\s+/).slice(0, 3).join(' ')  // fallback: first 3 words
+  } else {
+    // No unit — take text before first decimal price
+    const pIdx = withoutLP.search(/\b\d+[,.]\d{2}\b/)
+    if (pIdx > 0) name = withoutLP.slice(0, pIdx).trim()
+  }
+  name = name.replace(/\s+/g, ' ').trim()
+  if (!name || name.length < 2) return null
+  if (!/[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}/.test(name)) return null
+
+  // Amounts — everything after the unit
+  const uPos = unitMatch ? (text.indexOf(unitMatch[0]) + unitMatch[0].length) : text.indexOf(name) + name.length
+  const afterUnit = text.slice(uPos)
+  const nums = _extractAmounts(afterUnit)
+  if (nums.length < 2) return null
+
+  const qty = nums[0]
+  const unitPriceNet = nums[1]
+  const totalNet = nums[2] ?? Math.round(qty * unitPriceNet * 100) / 100
+  if (qty <= 0 || unitPriceNet <= 0) return null
+
+  return makeItem({
+    rawName: name,
+    ilosc: qty,
+    jednostka: unit,
+    cenaNetto: unitPriceNet,
+    wartoscNetto: totalNet,
+    vat,
+    confidence: 0.75,
+  })
+}
+
+export function parseInvoiceItemsLP(rawText) {
+  if (!rawText || rawText.length < 10) return []
+
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 1)
+
+  // Find table region: first line that is "1 <NAME_WITH_LETTERS>" starts the table
+  let tableStartLine = -1
+  let tableEndLine = lines.length
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (_isTableEndLP(line) && tableStartLine !== -1) { tableEndLine = i; break }
+    if (tableStartLine === -1 && /^1\s+[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2}/.test(line)) {
+      tableStartLine = i
+    }
+  }
+
+  if (tableStartLine === -1) return []
+
+  // Build joined lines:
+  // - price-continuation lines are appended to the previous line
+  // - all other lines stand on their own (each may start a new LP)
+  // NOTE: do NOT run isForbiddenAsInvoiceItem here — concatenated table lines
+  // (LEDARE+TJENA+VARDAGEN in one line) are >120 chars and would be falsely filtered.
+  // _parseSegment handles filtering on individual segments (first 80 chars) instead.
+  const joinedLines = []
+  for (let i = tableStartLine; i < tableEndLine; i++) {
+    const line = lines[i]
+    if (_isTableEndLP(line)) break
+    if (_isPriceContinuation(line) && joinedLines.length > 0) {
+      joinedLines[joinedLines.length - 1] += ' ' + line
+    } else {
+      joinedLines.push(line)
+    }
+  }
+
+  // Flatten to one string and split on every "N LETTERS" boundary.
+  // Use \d{1,2} (LP 1–99) to avoid matching 3-digit product spec numbers like
+  // "806" in "E27 806 lm" which would create spurious LP splits inside names.
+  const tableText = joinedLines.join(' ')
+  const LP_SPLIT_RE = /(?:^|\s)(\d{1,2})\s+(?=[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2})/g
+  const rawPositions = []
+  let m
+  while ((m = LP_SPLIT_RE.exec(tableText)) !== null) {
+    rawPositions.push({ pos: m.index === 0 ? 0 : m.index + 1, lp: parseInt(m[1]) })
+  }
+  if (rawPositions.length === 0) return []
+
+  // Keep only sequential LP numbers (1, 2, 3, …) to discard spurious matches like
+  // "31 cl" inside "VARDAGEN szklanka 31 cl szt." which is not a real LP boundary.
+  const positions = []
+  let expectedLp = -1
+  for (const p of rawPositions) {
+    if (expectedLp === -1) {
+      positions.push(p)
+      expectedLp = p.lp
+    } else if (p.lp === expectedLp + 1) {
+      positions.push(p)
+      expectedLp = p.lp
+    }
+    // else: skip non-sequential match
+  }
+  if (positions.length === 0) return []
+
+  const items = []
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i].pos
+    const end = positions[i + 1]?.pos ?? tableText.length
+    const segText = tableText.slice(start, end).trim()
+    if (!segText || segText.length < 3) continue
+    try {
+      const item = _parseSegment({ lp: positions[i].lp, text: segText })
+      if (item) items.push(item)
+    } catch { /* single-segment failure doesn't block others */ }
   }
 
   return items

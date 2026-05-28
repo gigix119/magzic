@@ -3,7 +3,7 @@
 
 import { describe, it } from 'vitest'
 import { normalizePolishNumber, normalizeDate, extractWithPatterns, normalizeVatRate } from './polishInvoicePatterns.js'
-import { parseInvoiceItems } from './invoiceExtractor.js'
+import { parseInvoiceItems, parseInvoiceItemsLP } from './invoiceExtractor.js'
 import { detectColumnMap } from './invoiceLineParser.js'
 import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
@@ -520,6 +520,57 @@ Razem brutto 154,35
 
     const unrelated = advancedSimilarity('Wkręt do drewna 4x40mm', { nazwa: 'Żarówka LED E27 9W' })
     assert(unrelated.score < 0.5, `F32: niezwiązane produkty → score < 0.5 (got ${unrelated.score})`)
+  })
+
+  it('G: parseInvoiceItemsLP — IKEA split+concatenated', () => {
+    const ikeaText = [
+      'FAKTURA VAT',
+      'Sprzedawca: IKEA Retail Sp. z o.o.',
+      '',
+      'Lp. Nazwa Jedn. Ilość Cena netto Wartość netto VAT Kwota VAT Wartość brutto',
+      '',
+      '1 BILLY regał biały 80x28x202 cm szt.',
+      '2 249,00 zł 498,00 zł 23% 114,54 zł 612,54 zł',
+      '2 LEDARE żarówka LED E27 806 lm szt. 12 18,99 zł 227,88 zł 23% 52,41 zł 280,29 zł 3 TJENA pudełko z pokrywką 32x35x32 cm szt. 6 24,99 zł 149,94 zł 23% 34,49 zł 184,43 zł 4 VARDAGEN szklanka 31 cl szt. 8 7,59 zł 60,72 zł 23% 13,97 zł 74,69 zł',
+      'RAZEM 936,54 zł 215,41 zł 1151,95 zł',
+      'DO ZAPŁATY 1151,95 zł',
+      'Numer rachunku: 12 3456 7890 1234 5678 9012 3456',
+      'Płatność: przelew 7 dni',
+    ].join('\n')
+
+    const items = parseInvoiceItemsLP(ikeaText)
+
+    assert(items.length === 4, `G01: IKEA LP parser returns 4 items (got ${items.length})`)
+
+    // G02: BILLY — split continuation "2 249,00 zł..." must NOT become qty=2249
+    const billy = items[0]
+    assert(billy.ilosc === 2, `G02: BILLY qty=2 not ${billy.ilosc}`)
+    assert(Math.abs(billy.cenaNetto - 249) < 0.01, `G03: BILLY unitPriceNet=249 not ${billy.cenaNetto}`)
+    assert(Math.abs(billy.wartoscNetto - 498) < 0.01, `G04: BILLY totalNet=498 not ${billy.wartoscNetto}`)
+
+    // G05: LEDARE — from concatenated line
+    const ledare = items[1]
+    assert(ledare.rawName.startsWith('LEDARE'), `G05: item[1] name starts LEDARE (got ${ledare.rawName})`)
+    assert(ledare.ilosc === 12, `G06: LEDARE qty=12 not ${ledare.ilosc}`)
+    assert(Math.abs(ledare.cenaNetto - 18.99) < 0.01, `G07: LEDARE price=18.99 not ${ledare.cenaNetto}`)
+
+    // G08: TJENA
+    const tjena = items[2]
+    assert(tjena.rawName.startsWith('TJENA'), `G08: item[2] name starts TJENA (got ${tjena.rawName})`)
+    assert(tjena.ilosc === 6, `G09: TJENA qty=6 not ${tjena.ilosc}`)
+    assert(Math.abs(tjena.cenaNetto - 24.99) < 0.01, `G10: TJENA price=24.99 not ${tjena.cenaNetto}`)
+
+    // G11: VARDAGEN — "31 cl" inside name must not create spurious LP 31 split
+    const vardagen = items[3]
+    assert(vardagen.rawName.startsWith('VARDAGEN'), `G11: item[3] name starts VARDAGEN (got ${vardagen.rawName})`)
+    assert(vardagen.ilosc === 8, `G12: VARDAGEN qty=8 not ${vardagen.ilosc}`)
+    assert(Math.abs(vardagen.cenaNetto - 7.59) < 0.01, `G13: VARDAGEN price=7.59 not ${vardagen.cenaNetto}`)
+
+    // G14: stop lines must not appear as items
+    const names = items.map(i => i.rawName.toLowerCase())
+    assert(!names.some(n => n.includes('razem')), 'G14: RAZEM not in items')
+    assert(!names.some(n => n.includes('zapłaty') || n.includes('zaplaty')), 'G15: DO ZAPŁATY not in items')
+    assert(!names.some(n => n.includes('numer rachunku')), 'G16: Numer rachunku not in items')
   })
 
 })
