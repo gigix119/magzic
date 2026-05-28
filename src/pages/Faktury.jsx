@@ -548,11 +548,11 @@ export default function Faktury() {
 
       // Update the item in nExtractedItems
       setNExtractedItems(items => items.map((item, i) => i === nCreateProductFor
-        ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: 1.0 }
+        ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: null, matchingSource: 'manual_created_from_invoice' }
         : item
       ))
       setTowary(prev => [...prev, created])
-      addToast(`Towar „${created.nazwa}" utworzony i przypisany do pozycji`, 'success')
+      addToast(`Utworzono towar i przypisano go do pozycji. Magazyn zwiększy się dopiero po zatwierdzeniu faktury.`, 'success')
       setNCreateProductFor(null)
     } catch (err) {
       addToast(`Błąd tworzenia towaru: ${err.message}`, 'error')
@@ -1509,10 +1509,16 @@ export default function Faktury() {
                 const v = nExtractionResult.validation
                 const isError = v.suggestedAction === 'manual_required'
                 const isWarn = v.suggestedAction === 'review_required'
-                const bg = isError ? '#1a0000' : isWarn ? '#1a1200' : '#001a00'
-                const fg = isError ? '#f87171' : isWarn ? '#fbbf24' : '#86efac'
-                const border = isError ? '#7f1d1d' : isWarn ? '#78350f' : '#166534'
-                const label = isError ? '⚠ Wymagane ręczne uzupełnienie' : isWarn ? '⚡ Weryfikacja zalecana' : '✓ Dane odczytane'
+                const hasContractorIssue = !!nContractorNipWarning ||
+                  (!nContractorValue?.existingId && !nContractorValue?.candidate)
+                const effectiveIsWarn = isWarn || (!isError && hasContractorIssue)
+                const bg = isError ? '#1a0000' : effectiveIsWarn ? '#1a1200' : '#001a00'
+                const fg = isError ? '#f87171' : effectiveIsWarn ? '#fbbf24' : '#86efac'
+                const border = isError ? '#7f1d1d' : effectiveIsWarn ? '#78350f' : '#166534'
+                const label = isError ? '⚠ Wymagane ręczne uzupełnienie'
+                  : effectiveIsWarn && hasContractorIssue ? '⚡ Odczytano dane — sprawdź kontrahenta i NIP'
+                  : effectiveIsWarn ? '⚡ Weryfikacja zalecana'
+                  : '✓ Dane odczytane'
                 const msgs = [...v.errors.slice(0, 2), ...v.warnings.slice(0, 2)]
                 return (
                   <div className="rounded-lg px-4 py-3 mb-3 text-xs" style={{ background: bg, color: fg, border: `1px solid ${border}` }}>
@@ -1530,21 +1536,20 @@ export default function Faktury() {
               })()}
               {(() => {
                 const statuses = nExtractedItems.map(i => getAssignmentStatus(i, towary))
-                const readyCount = statuses.filter(s => isReadyToSave(s)).length
+                const inventoryReadyCount = statuses.filter(s => s === 'ready').length
                 const serviceCostCount = statuses.filter(s => s === 'service_cost').length
                 const reviewCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
-                const ignoredCount = statuses.filter(s => s === 'ignored').length
-                const draftableCount = reviewCount + (statuses.filter(s => s === 'service_cost').length - (isReadyToSave('service_cost') ? statuses.filter(s => s === 'service_cost').length : 0))
+                const skippedCount = nExtractedItems.filter(i => i.skipped).length
                 return (
                   <div className="mb-3">
                     <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
                       Znaleziono <strong>{nExtractedItems.length}</strong> pozycji —{' '}
-                      <span style={{ color: '#16a34a' }}>gotowe do magazynu: {readyCount}</span>
+                      <span style={{ color: '#16a34a' }}>gotowe do magazynu: {inventoryReadyCount}</span>
                       {reviewCount > 0 && <span style={{ color: '#d97706' }}>, do weryfikacji: {reviewCount}</span>}
-                      {serviceCostCount > 0 && <span style={{ color: '#7c3aed' }}>, koszty/usługi: {serviceCostCount}</span>}
-                      {ignoredCount > 0 && <span style={{ color: 'var(--muted)' }}>, odrzucone metadane: {ignoredCount}</span>}
+                      {serviceCostCount > 0 && <span style={{ color: '#7c3aed' }}>, usługi/koszty: {serviceCostCount}</span>}
+                      {skippedCount > 0 && <span style={{ color: 'var(--muted)' }}>, pominięte: {skippedCount}</span>}
                     </p>
-                    {(reviewCount > 0 || draftableCount > 0) && (
+                    {reviewCount > 0 && (
                       <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
                         Pozycje do weryfikacji możesz dodać do faktury jako robocze. Nie zwiększą stanów magazynowych, dopóki nie wybierzesz towaru i magazynu.
                       </p>
@@ -1567,8 +1572,16 @@ export default function Faktury() {
                       border: `1px solid var(--border)`, borderLeft: `3px solid ${borderColor}`,
                       opacity: item.skipped ? 0.4 : 1,
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{item.rawName}</span>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                        <div>
+                          <span style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{item.rawName}</span>
+                          {item.matchingSource === 'manual_created_from_invoice' && (
+                            <span style={{ display: 'inline-block', marginLeft: 4, background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '0px 4px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
+                          )}
+                          {item.matchingSource === 'manual_selected' && item.matchedProductId && (
+                            <span style={{ display: 'inline-block', marginLeft: 4, background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>ręcznie</span>
+                          )}
+                        </div>
                         {!item.skipped && (
                           <span style={{ background: statusCfg.bg, color: statusCfg.color, borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
                             {statusCfg.short}
@@ -1580,7 +1593,7 @@ export default function Faktury() {
                         onChange={e => {
                           const val = e.target.value || null
                           setNExtractedItems(items => items.map((it, i) => i === idx
-                            ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0 }
+                            ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0, matchingSource: val ? 'manual_selected' : null }
                             : it
                           ))
                         }}
@@ -1612,19 +1625,19 @@ export default function Faktury() {
                         {!item.skipped && item.itemType !== 'service_item' && (
                           <button type="button" onClick={() => markItemAsService(idx)}
                             style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                            Usługa
+                            Oznacz jako usługę
                           </button>
                         )}
                         {!item.skipped && item.itemType === 'service_item' && (
                           <button type="button" onClick={() => markItemAsInventory(idx)}
                             style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                            Towar
+                            Zmień na towar
                           </button>
                         )}
                         {!item.skipped && !item.matchedProductId && item.itemType !== 'service_item' && (
                           <button type="button" onClick={() => openCreateProductFor(idx)}
                             style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                            + Towar
+                            Utwórz towar
                           </button>
                         )}
                         <button type="button" onClick={() => toggleSkipExtracted(idx)}
@@ -1688,6 +1701,12 @@ export default function Faktury() {
                               {(item.itemType === 'unknown' || !item.itemType) && (
                                 <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>Sprawdź</span>
                               )}
+                              {item.matchingSource === 'manual_created_from_invoice' && (
+                                <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
+                              )}
+                              {item.matchingSource === 'manual_selected' && item.matchedProductId && (
+                                <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>wybrano ręcznie</span>
+                              )}
                               {item.shouldAffectInventory === true && (
                                 <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>↑ Magazyn</span>
                               )}
@@ -1735,7 +1754,7 @@ export default function Faktury() {
                               onChange={e => {
                                 const val = e.target.value || null
                                 setNExtractedItems(items => items.map((it, i) => i === idx
-                                  ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0 }
+                                  ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0, matchingSource: val ? 'manual_selected' : null }
                                   : it
                                 ))
                               }}
@@ -1751,7 +1770,7 @@ export default function Faktury() {
                                 Sugestia: <button
                                   type="button"
                                   onClick={() => setNExtractedItems(items => items.map((it, i) => i === idx
-                                    ? { ...it, matchedProductId: item._suggestedProductId, matchedProductNazwa: item._suggestedProductNazwa, matchScore: 1.0 }
+                                    ? { ...it, matchedProductId: item._suggestedProductId, matchedProductNazwa: item._suggestedProductNazwa, matchScore: 1.0, matchingSource: 'manual_selected' }
                                     : it
                                   ))}
                                   style={{ color: '#d97706', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, padding: 0 }}
@@ -1768,7 +1787,7 @@ export default function Faktury() {
                                     key={c.id}
                                     type="button"
                                     onClick={() => setNExtractedItems(items => items.map((it, i) => i === idx
-                                      ? { ...it, matchedProductId: c.id, matchedProductNazwa: c.nazwa, matchScore: c.score }
+                                      ? { ...it, matchedProductId: c.id, matchedProductNazwa: c.nazwa, matchScore: c.score, matchingSource: 'manual_selected' }
                                       : it
                                     ))}
                                     title={`Pewność modelu: ${Math.round(c.score * 100)}%`}
@@ -1812,7 +1831,11 @@ export default function Faktury() {
                             )}
                           </td>
                           <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
-                            {item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
+                            {item.matchingSource === 'manual_created_from_invoice'
+                              ? <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
+                              : item.matchingSource === 'manual_selected'
+                              ? <span style={{ background: '#f3f4f6', color: '#374151', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>ręcznie</span>
+                              : item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
                           </td>
                           <td className="px-2 py-2">
                             <div className="flex flex-wrap gap-1 items-start justify-end" style={{ minWidth: 120 }}>
@@ -1824,7 +1847,7 @@ export default function Faktury() {
                                   className="text-xs px-2 py-0.5 rounded"
                                   style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}
                                 >
-                                  Usługa
+                                  Oznacz jako usługę
                                 </button>
                               )}
                               {!item.skipped && item.itemType === 'service_item' && (
@@ -1835,7 +1858,7 @@ export default function Faktury() {
                                   className="text-xs px-2 py-0.5 rounded"
                                   style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}
                                 >
-                                  Towar
+                                  Zmień na towar
                                 </button>
                               )}
                               {!item.skipped && !item.matchedProductId && item.itemType !== 'service_item' && (
@@ -1846,7 +1869,7 @@ export default function Faktury() {
                                   className="text-xs px-2 py-0.5 rounded"
                                   style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap' }}
                                 >
-                                  + Towar
+                                  Utwórz towar
                                 </button>
                               )}
                               <button
@@ -1927,7 +1950,7 @@ export default function Faktury() {
                         >
                           {readyCount === 0
                             ? 'Zapisz fakturę roboczą z pozycjami do weryfikacji'
-                            : `Zapisz ${draftCount} do weryfikacji`}
+                            : `Zapisz ${draftCount} pozycji do weryfikacji`}
                         </button>
                       )}
                       <button
@@ -1942,10 +1965,10 @@ export default function Faktury() {
                         }}
                       >
                         {readyCount === 0
-                          ? 'Brak pozycji gotowych do magazynu'
+                          ? 'Brak gotowych pozycji'
                           : allReady
-                          ? 'Dodaj wszystkie pozycje →'
-                          : `Dodaj ${readyCount} gotowych pozycji →`}
+                          ? 'Dodaj wszystkie pozycje do faktury →'
+                          : `Dodaj ${readyCount} pozycji do faktury →`}
                       </button>
                     </>
                   )
@@ -1957,12 +1980,22 @@ export default function Faktury() {
                 return (
                   <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
                     <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-                      <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>Nowy towar</p>
+                      <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>Utwórz towar z pozycji faktury</p>
                       {creatingFor?.rawName && (
-                        <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 12 }}>
-                          z pozycji: <em>{creatingFor.rawName}</em>
+                        <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
+                          Pozycja: <em>{creatingFor.rawName}</em>
                         </p>
                       )}
+                      {(creatingFor?.quantity > 0 || creatingFor?.unitPriceNet > 0) && (
+                        <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+                          {creatingFor.quantity > 0 ? `${creatingFor.quantity} ${creatingFor.jednostka || 'szt'}` : ''}
+                          {creatingFor.quantity > 0 && creatingFor.unitPriceNet > 0 ? ' · ' : ''}
+                          {creatingFor.unitPriceNet > 0 ? `${creatingFor.unitPriceNet} zł/szt` : ''}
+                        </p>
+                      )}
+                      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#1e3a8a' }}>
+                        Tworzysz nowy towar na podstawie pozycji z faktury. Towar zostanie przypisany do tej pozycji, ale <strong>magazyn zwiększy się dopiero po zatwierdzeniu faktury</strong>.
+                      </div>
                       {nNewProductDupeWarning && (
                         <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#92400e' }}>
                           <p style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Znaleziono podobne towary w bazie:</p>

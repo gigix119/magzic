@@ -296,6 +296,7 @@ export function preparePositionsForInventoryImpact(positions, towary = []) {
   const warnings = []
 
   for (const pos of (positions || [])) {
+    if (pos.skipped) continue
     if (pos.shouldAffectInventory === false) continue
     if (pos._isDraft) continue
 
