@@ -557,8 +557,14 @@ export function parseInvoiceItems(text) {
 // Key rule: a new product starts with LP_number followed by a word with LETTERS.
 // "2 249,00 zł..." is NOT a new product — no letters after the leading number.
 
-const _TABLE_END_LP = /^(razem|do\s*zap[łl]at|p[łl]atno[śs][ćc]|termin|numer\s+rachunk|konto:|uwagi|wystawił|s[łl]owni|podsumowanie|podstawa\s+op)/i
+const _TABLE_END_LP = /^(razem|do\s*zap[łl]at|p[łl]atno[śs][ćc]|termin|numer\s+rachunk|konto:|uwagi|wystawił|odebra[łl]|podpis|s[łl]owni|podsumowanie|podstawa\s+op|suma\b|vat\s*\d)/i
+// Invoice units used as the actual "product unit" column in Polish invoices.
+// Used for unit extraction inside _parseSegment.
 const _UNIT_TOKEN = /\b(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|kg|g|ml|godz\.?|h|usł\.?|usl\.?|para|rolka|zest\.?|pcs|pc)\b/i
+// Broader set that also includes measurement specs appearing inside product names
+// (e.g. "806 lm", "32 mm", "31 cl"). Used only for the LP false-positive guard
+// in the sequential filter — prevents "100 mm" from being accepted as LP 100.
+const _UNIT_TOKEN_LP = /\b(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|mm|cm|dm|km|lm|cl|dl|kg|g|mg|ml|godz\.?|h|kw|kva|usł\.?|usl\.?|para|rolka|zest\.?|pcs|pc)\b/i
 
 function _isTableEndLP(line) {
   return _TABLE_END_LP.test(line.trim().toLowerCase())
@@ -613,8 +619,9 @@ function _parseSegment(seg) {
   const unitMatch = text.match(_UNIT_TOKEN)
   const unit = unitMatch ? unitMatch[1].toLowerCase().replace(/\.$/, '') : 'szt'
 
-  // Product name = text between the LP number and the unit token
-  const withoutLP = text.replace(/^\d{1,3}\s+/, '')
+  // Product name = text between the LP number and the unit token.
+  // Strip up to 4-digit LP prefix to support LP 100+.
+  const withoutLP = text.replace(/^\d{1,4}\s+/, '')
   let name = withoutLP
   if (unitMatch) {
     const uIdx = withoutLP.indexOf(unitMatch[0])
@@ -628,6 +635,8 @@ function _parseSegment(seg) {
   name = name.replace(/\s+/g, ' ').trim()
   if (!name || name.length < 2) return null
   if (!/[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}/.test(name)) return null
+  // Reject names that are just a unit token (e.g. "lm", "szt", "cm")
+  if (_UNIT_TOKEN_LP.test(name) && name.replace(/\.$/, '').length <= 4) return null
 
   // Amounts — everything after the unit
   const uPos = unitMatch ? (text.indexOf(unitMatch[0]) + unitMatch[0].length) : text.indexOf(name) + name.length
@@ -687,11 +696,14 @@ export function parseInvoiceItemsLP(rawText) {
     }
   }
 
-  // Flatten to one string and split on every "N LETTERS" boundary.
-  // Use \d{1,2} (LP 1–99) to avoid matching 3-digit product spec numbers like
-  // "806" in "E27 806 lm" which would create spurious LP splits inside names.
+  // Flatten to one string and split on "N LETTERS" boundaries (LP candidates).
+  // Use \d{1,4} to support LP 1–9999; spurious matches are eliminated by:
+  //   1. Sequential filter (LP = prev+1): rejects numbers embedded in names
+  //      that aren't the next expected item, e.g. "806 lm" when LP 3 is expected.
+  //   2. Unit-start check: rejects "200 szt." or "100 cm" where the word after
+  //      the number is a measurement unit rather than a product name.
   const tableText = joinedLines.join(' ')
-  const LP_SPLIT_RE = /(?:^|\s)(\d{1,2})\s+(?=[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2})/g
+  const LP_SPLIT_RE = /(?:^|\s)(\d{1,4})\s+(?=[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2})/g
   const rawPositions = []
   let m
   while ((m = LP_SPLIT_RE.exec(tableText)) !== null) {
@@ -699,8 +711,9 @@ export function parseInvoiceItemsLP(rawText) {
   }
   if (rawPositions.length === 0) return []
 
-  // Keep only sequential LP numbers (1, 2, 3, …) to discard spurious matches like
-  // "31 cl" inside "VARDAGEN szklanka 31 cl szt." which is not a real LP boundary.
+  // Keep only sequential LP positions. When a candidate LP matches the expected
+  // next number but its first word is a unit token ("200 szt.", "100 cm") it's
+  // treated as a quantity/measurement inside the current item, not a new LP.
   const positions = []
   let expectedLp = -1
   for (const p of rawPositions) {
@@ -708,10 +721,17 @@ export function parseInvoiceItemsLP(rawText) {
       positions.push(p)
       expectedLp = p.lp
     } else if (p.lp === expectedLp + 1) {
-      positions.push(p)
-      expectedLp = p.lp
+      // Extra guard: first word after LP must not be a measurement unit token
+      // (uses broad set so "100 mm", "200 szt.", "5 cm" are all rejected as LP).
+      const afterLP = tableText.slice(p.pos + String(p.lp).length).trimStart()
+      const firstWord = (afterLP.match(/^(\S+)/) || [])[1] || ''
+      if (!_UNIT_TOKEN_LP.test(firstWord)) {
+        positions.push(p)
+        expectedLp = p.lp
+      }
+      // else: LP followed by unit → quantity inside current item, not a new LP
     }
-    // else: skip non-sequential match
+    // else: non-sequential → spurious number inside a product name, skip
   }
   if (positions.length === 0) return []
 

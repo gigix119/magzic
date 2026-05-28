@@ -573,6 +573,123 @@ Razem brutto 154,35
     assert(!names.some(n => n.includes('numer rachunku')), 'G16: Numer rachunku not in items')
   })
 
+  it('H: parseInvoiceItemsLP — simple one-line-per-item invoice', () => {
+    const text = [
+      'Faktura FV/001/2026',
+      '',
+      'Lp. Nazwa Jedn. Ilość Cena netto Wartość netto VAT',
+      '',
+      '1 Bateria AA blister szt. 3 5,99 zł 17,97 zł 23% 4,13 zł 22,10 zł',
+      '2 Żarówka LED E27 szt. 10 8,99 zł 89,90 zł 23% 20,68 zł 110,58 zł',
+      '3 Kabel USB 1m szt. 2 12,50 zł 25,00 zł 23% 5,75 zł 30,75 zł',
+      'RAZEM 132,87 zł 30,56 zł 163,43 zł',
+    ].join('\n')
+
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length === 3, `H01: simple invoice returns 3 items (got ${items.length})`)
+    assert(items[0].rawName.toLowerCase().includes('bateria'), `H02: item[0] Bateria (got ${items[0].rawName})`)
+    assert(items[1].rawName.toLowerCase().includes('żarówka'), `H03: item[1] Żarówka (got ${items[1].rawName})`)
+    assert(items[2].rawName.toLowerCase().includes('kabel'), `H04: item[2] Kabel (got ${items[2].rawName})`)
+    assert(items[0].ilosc === 3, `H05: Bateria qty=3 (got ${items[0].ilosc})`)
+    assert(Math.abs(items[0].cenaNetto - 5.99) < 0.01, `H06: Bateria price=5.99 (got ${items[0].cenaNetto})`)
+    assert(items[2].ilosc === 2, `H07: Kabel qty=2 (got ${items[2].ilosc})`)
+    assert(Math.abs(items[2].cenaNetto - 12.50) < 0.01, `H08: Kabel price=12.50 (got ${items[2].cenaNetto})`)
+  })
+
+  it('I: parseInvoiceItemsLP — numbers in product names (OBI/Castorama-like)', () => {
+    const text = [
+      'Faktura zakupu',
+      '',
+      'Lp. Nazwa produktu Jm. Ilość Cena netto Wart. netto VAT',
+      '',
+      '1 Wkręt 4x40 do drewna szt. 200 0,15 zł 30,00 zł 23% 6,90 zł 36,90 zł',
+      '2 Żarówka LED E27 806 lm szt. 5 12,99 zł 64,95 zł 23% 14,94 zł 79,89 zł',
+      '3 Rura PVC 32 mm szt. 3 8,50 zł 25,50 zł 23% 5,87 zł 31,37 zł',
+      '4 Farba biała 10 l op. 2 45,00 zł 90,00 zł 23% 20,70 zł 110,70 zł',
+      '5 Taśma malarska 48 mm op. 4 7,99 zł 31,96 zł 23% 7,35 zł 39,31 zł',
+      '6 Przewód 230V 3x1,5 mb 10 3,50 zł 35,00 zł 23% 8,05 zł 43,05 zł',
+      'RAZEM 277,41 zł 63,81 zł 341,22 zł',
+    ].join('\n')
+
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length === 6, `I01: OBI/Castorama 6 items (got ${items.length})`)
+
+    // I02–I07: numbers in names do NOT create false LP splits
+    assert(items[0].rawName.toLowerCase().includes('wkręt'), `I02: item[0] Wkręt (got ${items[0].rawName})`)
+    assert(items[1].rawName.toLowerCase().includes('żarówka'), `I03: item[1] Żarówka (got ${items[1].rawName})`)
+    assert(items[2].rawName.toLowerCase().includes('rura'), `I04: item[2] Rura (got ${items[2].rawName})`)
+    assert(items[3].rawName.toLowerCase().includes('farba'), `I05: item[3] Farba (got ${items[3].rawName})`)
+    assert(items[4].rawName.toLowerCase().includes('taśma'), `I06: item[4] Taśma (got ${items[4].rawName})`)
+    assert(items[5].rawName.toLowerCase().includes('przewód'), `I07: item[5] Przewód (got ${items[5].rawName})`)
+
+    // I08–I10: quantities not confused with spec numbers
+    assert(items[0].ilosc === 200, `I08: Wkręt qty=200 not ${items[0].ilosc}`)
+    assert(items[1].ilosc === 5, `I09: Żarówka qty=5 not ${items[1].ilosc}`)
+    assert(items[5].ilosc === 10, `I10: Przewód qty=10 not ${items[5].ilosc}`)
+
+    // I11: price sanity
+    assert(Math.abs(items[1].cenaNetto - 12.99) < 0.01, `I11: Żarówka price=12.99 not ${items[1].cenaNetto}`)
+  })
+
+  it('J: parseInvoiceItemsLP — LP 100+ (105 items)', () => {
+    const lines = ['Faktura', '', 'Lp. Nazwa Jedn. Ilość Cena netto Wartość netto VAT', '']
+    for (let i = 1; i <= 105; i++) {
+      lines.push(`${i} Produkt nr ${i} szt. 1 10,00 zł 10,00 zł 23% 2,30 zł 12,30 zł`)
+    }
+    lines.push('RAZEM')
+    const text = lines.join('\n')
+
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length === 105, `J01: 105 items parsed (got ${items.length})`)
+    assert(items[0].rawName.includes('1'), `J02: first item has LP 1 in name`)
+    assert(items[99].ilosc === 1, `J03: LP 100 qty=1 (got ${items[99].ilosc})`)
+    assert(Math.abs(items[99].cenaNetto - 10) < 0.01, `J04: LP 100 price=10 (got ${items[99].cenaNetto})`)
+    assert(items[104].ilosc === 1, `J05: LP 105 qty=1 (got ${items[104].ilosc})`)
+  })
+
+  it('J2: parseInvoiceItemsLP — LP 100 not accepted when "100 mm" is inside LP 99', () => {
+    // Build a full 100-item invoice where LP 99 has "100 mm" inside its name.
+    // LP 100 is the next real item; "100 mm" must NOT be treated as LP 100.
+    const lines = ['Faktura', '', 'Lp. Nazwa', '']
+    for (let i = 1; i <= 98; i++) {
+      lines.push(`${i} Produkt ${i} szt. 1 10,00 zł 10,00 zł 23% 2,30 zł 12,30 zł`)
+    }
+    lines.push('99 Rura 100 mm szt. 5 8,50 zł 42,50 zł 23% 9,78 zł 52,28 zł')
+    lines.push('100 Cement worek 25 kg szt. 10 15,00 zł 150,00 zł 23% 34,50 zł 184,50 zł')
+    lines.push('RAZEM')
+
+    const items = parseInvoiceItemsLP(lines.join('\n'))
+    assert(items.length === 100, `J2-01: 100 items (got ${items.length})`)
+    const lp99 = items[98]
+    const lp100 = items[99]
+    assert(lp99?.rawName?.toLowerCase().includes('rura'), `J2-02: LP99 is Rura (got ${lp99?.rawName})`)
+    assert(lp99?.ilosc === 5, `J2-03: LP99 qty=5 (got ${lp99?.ilosc})`)
+    assert(lp100?.rawName?.toLowerCase().includes('cement'), `J2-04: LP100 is Cement, not "100 mm" (got ${lp100?.rawName})`)
+    assert(lp100?.ilosc === 10, `J2-05: LP100 qty=10 (got ${lp100?.ilosc})`)
+  })
+
+  it('K: parseInvoiceItemsLP — one bad/incomplete row does not block others', () => {
+    // LP 2 has a proper name (so the LP regex finds it and sequential filter accepts it)
+    // but has no prices — _parseSegment returns null for it.
+    // LP 1 and LP 3 must still appear in the result.
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Jedn. Ilość Cena',
+      '',
+      '1 Produkt jeden szt. 2 10,00 zł 20,00 zł 23% 4,60 zł 24,60 zł',
+      '2 Produkt dwa uszkodzony wiersz bez cen',
+      '3 Produkt trzy szt. 1 15,00 zł 15,00 zł 23% 3,45 zł 18,45 zł',
+      'RAZEM',
+    ].join('\n')
+
+    const items = parseInvoiceItemsLP(text)
+    const names = items.map(i => i.rawName.toLowerCase())
+    assert(names.some(n => n.includes('jeden')), `K01: LP1 "Produkt jeden" present`)
+    assert(names.some(n => n.includes('trzy')), `K02: LP3 "Produkt trzy" present`)
+    assert(!names.some(n => n.includes('uszkodzony')), `K03: broken LP2 not in items`)
+  })
+
 })
 
 // ═══════════════════════════════════════════════════════════════
