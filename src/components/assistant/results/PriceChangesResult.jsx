@@ -40,14 +40,26 @@ export default function PriceChangesResult({ priceChanges, text }) {
   }
 
   return (
-    <div className="space-y-3" style={{ maxWidth: '100%', overflow: 'hidden' }}>
-      <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{text}</p>
+    <div className="space-y-4" style={{ maxWidth: '100%', overflow: 'hidden' }}>
+      {text && <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{text}</p>}
 
       <AssistantWarnings warnings={warnings} />
 
       <AssistantResultActions summaryText={text} />
 
       <AssistantKpiCards cards={kpiCards} />
+
+      {chartData.length > 0 && (
+        <AssistantChart
+          data={chartData}
+          dataKey="diffPct"
+          xAxisKey="name"
+          title="Zmiany cen (%) — top produkty"
+          getBarColor={getBarColor}
+          tooltipSuffix="%"
+          tooltipDecimals={1}
+        />
+      )}
 
       {anomalies.length > 0 && (
         <AssistantDataTable
@@ -79,18 +91,6 @@ export default function PriceChangesResult({ priceChanges, text }) {
           emptyMessage="Brak spadków"
           exportable
           exportFilename="magzic-ceny-spadki.csv"
-        />
-      )}
-
-      {chartData.length > 0 && (
-        <AssistantChart
-          data={chartData}
-          dataKey="diffPct"
-          xAxisKey="name"
-          title="Zmiany cen (%) — top produkty"
-          getBarColor={getBarColor}
-          tooltipSuffix="%"
-          tooltipDecimals={1}
         />
       )}
     </div>

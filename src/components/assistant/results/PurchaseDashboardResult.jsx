@@ -37,14 +37,22 @@ export default function PurchaseDashboardResult({ dashboard, text }) {
   }))
 
   return (
-    <div className="space-y-3" style={{ maxWidth: '100%', overflow: 'hidden' }}>
-      <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{text}</p>
+    <div className="space-y-4" style={{ maxWidth: '100%', overflow: 'hidden' }}>
+      {text && <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{text}</p>}
 
       <AssistantWarnings warnings={warnings} />
 
       <AssistantResultActions summaryText={text} />
 
       <AssistantKpiCards kpis={kpis} />
+
+      {(purchasesOverTime ?? []).length > 0 && (
+        <AssistantChart
+          data={purchasesOverTime}
+          dataKey={chartDataKey}
+          title={chartTitle}
+        />
+      )}
 
       {supplierRows.length > 0 && (
         <AssistantDataTable
@@ -65,14 +73,6 @@ export default function PurchaseDashboardResult({ dashboard, text }) {
           emptyMessage="Brak pozycji faktur"
           exportable
           exportFilename="magzic-dashboard-top-produkty.csv"
-        />
-      )}
-
-      {(purchasesOverTime ?? []).length > 0 && (
-        <AssistantChart
-          data={purchasesOverTime}
-          dataKey={chartDataKey}
-          title={chartTitle}
         />
       )}
     </div>

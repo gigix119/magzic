@@ -76,8 +76,8 @@ export default function OrderRecommendationResult({ recommendations, text }) {
   }))
 
   return (
-    <div className="space-y-3" style={{ maxWidth: '100%', overflow: 'hidden' }}>
-      <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{text}</p>
+    <div className="space-y-4" style={{ maxWidth: '100%', overflow: 'hidden' }}>
+      {text && <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{text}</p>}
 
       <AssistantWarnings warnings={warnings} />
 
