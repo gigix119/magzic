@@ -134,8 +134,8 @@ export function detectInvoiceStructure(pdfLayout) {
   let nabywca = { nazwa: '', nip: '', adres: '' }
 
   // ── Label-based detection (highest priority) ─────────────────────────
-  const SELLER_LABEL = /^(sprzedawca|sprzedający|sprzedajacy|wystawca|wystawiający|wystawiajacy|vendor|supplier|dostawca|seller|from)\s*[:;]?\s*$/i
-  const BUYER_LABEL  = /^(nabywca|odbiorca|buyer|customer|płatnik|platnik|nabywca faktury|zamawiający|zamawiajacy)\s*[:;]?\s*$/i
+  const SELLER_LABEL = /^(sprzedawca|sprzedaj[aą]cy|wystawca|wystawiaj[aą]cy|dostawca|nadawca|od|dane\s+sprzedawcy|dane\s+wystawcy|vendor|supplier|issuer|seller|from|bill\s+from)\s*[:;]?\s*$/i
+  const BUYER_LABEL  = /^(nabywca|odbiorca|buyer|customer|p[łl]atnik|nabywca faktury|zamawiaj[aą]cy|ship\s+to|bill\s+to|dane\s+nabywcy|dane\s+odbiorcy)\s*[:;]?\s*$/i
 
   function findNipAfterLabel(startIdx, range) {
     for (let j = startIdx; j < Math.min(allLines.length, startIdx + range); j++) {
@@ -145,12 +145,37 @@ export function detectInvoiceStructure(pdfLayout) {
     return -1
   }
 
+  // Direct company name extraction from lines after a seller label (even if no NIP follows)
+  function extractCompanyAfterLabel(allLines, labelIdx) {
+    const LINE_FORBIDDEN_RE = /\b(NIP|REGON|BDO|tel\.|telefon|www\.|http|e-mail|@)\b/i
+    let nazwa = ''
+    let nip = ''
+    let adres = ''
+    for (let i = labelIdx + 1; i < Math.min(allLines.length, labelIdx + 6); i++) {
+      const t = lineText(allLines[i]).trim()
+      if (!t || t.length < 3) continue
+      if (BUYER_LABEL.test(t)) break
+      if (SELLER_LABEL.test(t) && i > labelIdx + 1) break
+      const extracted = extractNip(t)
+      if (extracted && !nip) { nip = extracted; continue }
+      if (LINE_FORBIDDEN_RE.test(t) || /^\d{26}$/.test(t.replace(/\s/g, ''))) continue
+      if (!nazwa && t.length >= 3 && !/^\d/.test(t) && !/^(faktura|numer|data|do\s+zap[łl]aty|razem)/i.test(t)) {
+        nazwa = t
+      } else if (!adres && /\d/.test(t) && t.length > 5) {
+        adres = t
+      }
+    }
+    return { nazwa, nip, adres }
+  }
+
   let sellerNipIdx = -1
   let buyerNipIdx  = -1
+  let sellerLabelIdx = -1
 
   for (let i = 0; i < Math.min(allLines.length, 60); i++) {
     const text = lineText(allLines[i]).trim()
     if (sellerNipIdx === -1 && SELLER_LABEL.test(text)) {
+      sellerLabelIdx = i
       const idx = findNipAfterLabel(i + 1, 10)
       if (idx !== -1) sellerNipIdx = idx
     }
@@ -163,6 +188,9 @@ export function detectInvoiceStructure(pdfLayout) {
   // Use labels if found, otherwise positional
   if (sellerNipIdx !== -1) {
     sprzedawca = extractCompanyBlock(allLines, sellerNipIdx)
+  } else if (sellerLabelIdx !== -1) {
+    // Seller label found but no NIP — extract name directly from lines after label
+    sprzedawca = extractCompanyAfterLabel(allLines, sellerLabelIdx)
   } else if (allNipIdxs.length >= 1) {
     sprzedawca = extractCompanyBlock(allLines, allNipIdxs[0])
   }

@@ -9,6 +9,7 @@ import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 import { detectKsefComarchDocument, parseKsefComarchItems, isKsefMetadataLine } from './invoiceKsefComarchParser.js'
 import { recoverAmountsForItem } from './invoiceAmountRecovery.js'
+import { detectSupplierFromLines } from './invoiceSupplierDetector.js'
 
 pdfjs.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
@@ -165,6 +166,31 @@ export async function extractFromFile(file) {
     result.fields.sprzedawca_nip = result.fields.kontrahent_nip
     result.fields.sprzedawca_nazwa = result.fields.kontrahent_nazwa
     result.fields.sprzedawca_adres = structure.sprzedawca?.adres || null
+
+    // Fallback: text-based supplier detection when structure detector found nothing
+    if (!result.fields.kontrahent_nazwa) {
+      try {
+        const lines = layout.fullText.split('\n')
+        const detected = detectSupplierFromLines(lines)
+        if (detected.confidence !== 'none' && detected.nazwa) {
+          result.fields.kontrahent_nazwa = detected.nazwa
+          result.fields.sprzedawca_nazwa = detected.nazwa
+          if (!result.fields.kontrahent_nip && detected.nip) {
+            result.fields.kontrahent_nip = detected.nip
+            result.fields.sprzedawca_nip = detected.nip
+          }
+          if (detected.confidence === 'low') {
+            result.warnings.push('Nie udało się pewnie wykryć nazwy sprzedawcy — sprawdź kontrahenta ręcznie.')
+          }
+          result.debug.supplierDetectorUsed = true
+          result.debug.supplierDetectorScore = detected.score
+          result.debug.supplierDetectorSource = detected.source
+        }
+      } catch (e) {
+        result.debug.supplierDetectorError = String(e)
+      }
+    }
+
     // 0–1 confidence for contractor identification (NIP present + name present)
     const _cNip = result.fields.kontrahent_nip
     const _cNazwa = result.fields.kontrahent_nazwa

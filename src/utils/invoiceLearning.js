@@ -8,6 +8,7 @@ const KEYS = {
   supplierMappings: 'magzic_supplier_item_mappings',
   typicalPrices: 'magzic_typical_prices',
   trainingExamples: 'magzic_invoice_training_examples',
+  supplierContractorMappings: 'magzic_supplier_contractor_mappings',
 }
 
 const MAX_TRAINING_EXAMPLES = 500
@@ -77,6 +78,41 @@ export function getSupplierItemMapping(supplierNip, rawName) {
     const mappings = getStore(KEYS.supplierMappings)
     return mappings[supplierNip]?.[rawName.toLowerCase().trim()] || null
   } catch { return null }
+}
+
+// ── Supplier → Contractor mappings ───────────────────────────────────
+// Remembers which contractor was manually chosen for a given detected supplier name/NIP.
+// This allows future invoices from the same supplier to be matched automatically.
+
+export function rememberSupplierContractorMapping(detectedName, nip, contractorId, canonicalName) {
+  if (!contractorId) return
+  const mappings = getStore(KEYS.supplierContractorMappings)
+  if (nip) {
+    const n = String(nip).replace(/\D/g, '')
+    if (n.length >= 8) {
+      mappings[`nip:${n}`] = { contractorId, canonicalName: canonicalName || null, addedAt: new Date().toISOString() }
+    }
+  }
+  if (detectedName && detectedName.trim().length >= 3) {
+    mappings[`name:${detectedName.toLowerCase().trim()}`] = { contractorId, canonicalName: canonicalName || null, addedAt: new Date().toISOString() }
+  }
+  saveStore(KEYS.supplierContractorMappings, mappings)
+}
+
+export function findSupplierContractorMapping(detectedName, nip) {
+  const mappings = getStore(KEYS.supplierContractorMappings)
+  if (nip) {
+    const n = String(nip).replace(/\D/g, '')
+    if (n.length >= 8) {
+      const byNip = mappings[`nip:${n}`]
+      if (byNip?.contractorId) return { ...byNip, source: 'learned_supplier_mapping', matchedBy: 'nip' }
+    }
+  }
+  if (detectedName && detectedName.trim().length >= 3) {
+    const byName = mappings[`name:${detectedName.toLowerCase().trim()}`]
+    if (byName?.contractorId) return { ...byName, source: 'learned_supplier_mapping', matchedBy: 'name' }
+  }
+  return null
 }
 
 // ── Typical prices ────────────────────────────────────────────────────

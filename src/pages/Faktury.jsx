@@ -15,7 +15,7 @@ import InvoiceUploader from '../components/InvoiceUploader'
 import { zatwierdźFakturę, cofnijDoRoboczej } from '../utils/magazyn'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
-import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping } from '../utils/invoiceLearning'
+import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping, rememberSupplierContractorMapping, findSupplierContractorMapping } from '../utils/invoiceLearning'
 import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
 import { calculateInvoiceQualityMetrics, getQualityBadge, shouldRequireManualReview, getQualityWarnings } from '../utils/invoiceQualityMetrics'
 import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
@@ -761,11 +761,22 @@ export default function Faktury() {
         if (pdfCandidate) {
           const { valid: contractorValid, nipOk, warnings: contractorWarnings } = validateContractorFromPdf(pdfCandidate)
 
-          if (!contractorValid) {
+          if (!nipOk && nipOk !== null) setNContractorNipWarning(`NIP ${pdfCandidate.nip} — niepoprawna suma kontrolna`)
+
+          // Check learned mapping from previous manual selections (highest priority after NIP validation)
+          const learnedMapping = findSupplierContractorMapping(pdfCandidate.nazwa, pdfCandidate.nip)
+          const learnedContractor = learnedMapping ? kontrahenci.find(k => k.id === learnedMapping.contractorId) : null
+
+          if (learnedContractor) {
+            handleContractorChange({ existingId: learnedContractor.id, candidate: null, matchStatus: 'learned_history' })
+            addToast(`Dopasowano kontrahenta z historii: ${learnedContractor.nazwa}`, 'info')
+            if (contractorWarnings.length > 0 && nipOk === false) {
+              addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
+            }
+          } else if (!contractorValid) {
             // Generic name — require manual selection
             addToast('Nie udało się pewnie odczytać nazwy kontrahenta — wybierz ręcznie.', 'warning')
           } else {
-            if (!nipOk && nipOk !== null) setNContractorNipWarning(`NIP ${pdfCandidate.nip} — niepoprawna suma kontrolna`)
             if (contractorWarnings.length > 0 && nipOk === false) {
               addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
             }
@@ -977,6 +988,16 @@ export default function Faktury() {
         setNSaving(false)
         return
       }
+
+      // Remember contractor mapping for future automatic matching
+      try {
+        const resolvedContractor = kontrahenci.find(k => k.id === fakturaKontrahentId)
+        const detectedName = extractedResult?.fields?.kontrahent_nazwa || nContractorValue?.candidate?.nazwa
+        const detectedNip = extractedResult?.fields?.kontrahent_nip
+        if (fakturaKontrahentId && (detectedName || detectedNip)) {
+          rememberSupplierContractorMapping(detectedName, detectedNip, fakturaKontrahentId, resolvedContractor?.nazwa)
+        }
+      } catch { /* non-critical */ }
 
       // 1. Upload file to storage
       let plik_url = null
@@ -1444,12 +1465,13 @@ export default function Faktury() {
                     <div>
                       <div style={{ color: '#64748b' }}>Kontrahent</div>
                       <div style={{ fontWeight: 500,
-                        color: nContractorValue?.matchStatus === 'matched_nip' || nContractorValue?.matchStatus === 'matched_name' ? '#16a34a'
+                        color: nContractorValue?.matchStatus === 'matched_nip' || nContractorValue?.matchStatus === 'matched_name' || nContractorValue?.matchStatus === 'learned_history' ? '#16a34a'
                           : nContractorValue?.matchStatus === 'new_from_pdf' ? '#1d4ed8'
                           : nContractorValue?.matchStatus === 'low_confidence' ? '#d97706'
                           : '#d97706' }}>
                         {nContractorValue?.matchStatus === 'matched_nip' ? '✓ NIP'
                           : nContractorValue?.matchStatus === 'matched_name' ? '✓ Nazwa'
+                          : nContractorValue?.matchStatus === 'learned_history' ? '♻ Z historii'
                           : nContractorValue?.matchStatus === 'low_confidence' ? '⚠ Sprawdź'
                           : nContractorValue?.matchStatus === 'new_from_pdf' ? '+ Nowy (PDF)'
                           : nContractorValue?.matchStatus === 'new_manual' ? '+ Nowy'
@@ -2140,6 +2162,7 @@ export default function Faktury() {
                     {qualityMetrics.warningsCount > 0 && <span style={{ color: '#d97706' }}>· ⚠ {qualityMetrics.warningsCount} ostrzeżeń</span>}
                     {nContractorValue?.matchStatus === 'matched_nip' && <span style={{ color: '#16a34a' }}>· ✓ Kontrahent (NIP)</span>}
                     {nContractorValue?.matchStatus === 'matched_name' && <span style={{ color: '#16a34a' }}>· ✓ Kontrahent</span>}
+                    {nContractorValue?.matchStatus === 'learned_history' && <span style={{ color: '#16a34a' }}>· ♻ Kontrahent (historia)</span>}
                     {nContractorValue?.matchStatus === 'low_confidence' && <span style={{ color: '#d97706' }}>· ⚠ Sprawdź kontrahenta</span>}
                     {nContractorValue?.matchStatus === 'new_from_pdf' && <span style={{ color: '#1d4ed8' }}>· + Nowy kontrahent (PDF)</span>}
                   </div>
