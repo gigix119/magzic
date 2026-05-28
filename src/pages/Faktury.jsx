@@ -756,55 +756,64 @@ export default function Faktury() {
         if (result.fields.data_zakupu) setNForm(f => ({ ...f, data_zakupu: result.fields.data_zakupu }))
 
         // Contractor detection & matching from loaded list (no extra network call)
-        const pdfCandidate = prepareContractorFromInvoice(result)
+        // Entire block is wrapped in try-catch — contractor detection must never block invoice import
         setNContractorNipWarning(null)
-        if (pdfCandidate) {
-          const { valid: contractorValid, nipOk, warnings: contractorWarnings } = validateContractorFromPdf(pdfCandidate)
+        try {
+          const pdfCandidate = prepareContractorFromInvoice(result)
+          if (pdfCandidate) {
+            const { valid: contractorValid, nipOk, warnings: contractorWarnings } = validateContractorFromPdf(pdfCandidate)
 
-          if (!nipOk && nipOk !== null) setNContractorNipWarning(`NIP ${pdfCandidate.nip} — niepoprawna suma kontrolna`)
+            if (!nipOk && nipOk !== null) setNContractorNipWarning(`NIP ${pdfCandidate.nip} — niepoprawna suma kontrolna`)
 
-          // Check learned mapping from previous manual selections (highest priority after NIP validation)
-          const learnedMapping = findSupplierContractorMapping(pdfCandidate.nazwa, pdfCandidate.nip)
-          const learnedContractor = learnedMapping ? kontrahenci.find(k => k.id === learnedMapping.contractorId) : null
+            // Check learned mapping from previous manual selections (highest priority after NIP validation)
+            const learnedMapping = findSupplierContractorMapping(pdfCandidate.nazwa, pdfCandidate.nip)
+            const learnedContractor = learnedMapping ? kontrahenci.find(k => k.id === learnedMapping.contractorId) : null
 
-          if (learnedContractor) {
-            handleContractorChange({ existingId: learnedContractor.id, candidate: null, matchStatus: 'learned_history' })
-            addToast(`Dopasowano kontrahenta z historii: ${learnedContractor.nazwa}`, 'info')
-            if (contractorWarnings.length > 0 && nipOk === false) {
-              addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
-            }
-          } else if (!contractorValid) {
-            // Generic name — require manual selection
-            addToast('Nie udało się pewnie odczytać nazwy kontrahenta — wybierz ręcznie.', 'warning')
-          } else {
-            if (contractorWarnings.length > 0 && nipOk === false) {
-              addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
-            }
-
-            const matchResult = findMatchingContractor(pdfCandidate, kontrahenci)
-            if (matchResult.match) {
-              const byNip = matchResult.matchedBy === 'nip'
-              const isLow = matchResult.confidence === 'low' || matchResult.confidence === 'fuzzy'
-              const status = byNip ? 'matched_nip' : isLow ? 'low_confidence' : 'matched_name'
-              handleContractorChange({ existingId: matchResult.match.id, candidate: null, matchStatus: status })
-              if (byNip && nipOk !== false) {
-                addToast(`Dopasowano kontrahenta po NIP: ${matchResult.match.nazwa}`, 'success')
-              } else if (isLow) {
-                addToast(`Słabe dopasowanie kontrahenta: „${matchResult.match.nazwa}" — sprawdź ręcznie.`, 'warning')
-              } else {
-                addToast(`Dopasowano kontrahenta po nazwie: ${matchResult.match.nazwa} — sprawdź NIP.`, 'warning')
+            if (learnedContractor) {
+              handleContractorChange({ existingId: learnedContractor.id, candidate: null, matchStatus: 'learned_history' })
+              addToast(`Dopasowano kontrahenta z historii: ${learnedContractor.nazwa}`, 'info')
+              if (contractorWarnings.length > 0 && nipOk === false) {
+                addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
               }
-            } else if (matchResult.suggestions?.length > 0) {
-              // Ambiguous — multiple candidates, let user pick
-              handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
-              const hint = pdfCandidate.nazwa || pdfCandidate.nip
-              addToast(`Znaleziono kilka możliwych kontrahentów dla: ${hint} — wybierz ręcznie.`, 'warning')
+            } else if (!contractorValid) {
+              // Generic name — require manual selection
+              addToast('Nie udało się pewnie odczytać nazwy kontrahenta — wybierz ręcznie.', 'warning')
             } else {
-              handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
-              const hint = pdfCandidate.nazwa || pdfCandidate.nip
-              addToast(`Wykryto kontrahenta z PDF: ${hint}. Zostanie utworzony przy zapisie.`, 'info')
+              if (contractorWarnings.length > 0 && nipOk === false) {
+                addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
+              }
+
+              const matchResult = findMatchingContractor(pdfCandidate, kontrahenci)
+              if (matchResult.match) {
+                const byNip = matchResult.matchedBy === 'nip'
+                const isLow = matchResult.confidence === 'low' || matchResult.confidence === 'fuzzy'
+                const status = byNip ? 'matched_nip' : isLow ? 'low_confidence' : 'matched_name'
+                handleContractorChange({ existingId: matchResult.match.id, candidate: null, matchStatus: status })
+                if (byNip && nipOk !== false) {
+                  addToast(`Dopasowano kontrahenta po NIP: ${matchResult.match.nazwa}`, 'success')
+                } else if (isLow) {
+                  addToast(`Słabe dopasowanie kontrahenta: „${matchResult.match.nazwa}" — sprawdź ręcznie.`, 'warning')
+                } else {
+                  addToast(`Dopasowano kontrahenta po nazwie: ${matchResult.match.nazwa} — sprawdź NIP.`, 'warning')
+                }
+              } else if (matchResult.suggestions?.length > 0) {
+                // Ambiguous — multiple candidates, let user pick
+                handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
+                const hint = pdfCandidate.nazwa || pdfCandidate.nip
+                addToast(`Znaleziono kilka możliwych kontrahentów dla: ${hint} — wybierz ręcznie.`, 'warning')
+              } else {
+                handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
+                const hint = pdfCandidate.nazwa || pdfCandidate.nip
+                addToast(`Wykryto kontrahenta z PDF: ${hint}. Zostanie utworzony przy zapisie.`, 'info')
+              }
             }
+          } else {
+            // No contractor detected — user must pick manually, invoice extraction continues
+            addToast('Nie udało się pewnie odczytać kontrahenta — wybierz ręcznie.', 'warning')
           }
+        } catch (contractorErr) {
+          console.warn('[Faktury] contractor detection failed (non-critical):', contractorErr?.message)
+          addToast('Nie udało się odczytać kontrahenta — wybierz ręcznie.', 'warning')
         }
 
         setNAiCount(1)

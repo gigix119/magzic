@@ -86,31 +86,39 @@ export function getSupplierItemMapping(supplierNip, rawName) {
 
 export function rememberSupplierContractorMapping(detectedName, nip, contractorId, canonicalName) {
   if (!contractorId) return
-  const mappings = getStore(KEYS.supplierContractorMappings)
-  if (nip) {
-    const n = String(nip).replace(/\D/g, '')
-    if (n.length >= 8) {
-      mappings[`nip:${n}`] = { contractorId, canonicalName: canonicalName || null, addedAt: new Date().toISOString() }
+  try {
+    const mappings = getStore(KEYS.supplierContractorMappings)
+    if (nip) {
+      const n = String(nip).replace(/\D/g, '')
+      if (n.length >= 8) {
+        mappings[`nip:${n}`] = { contractorId, canonicalName: canonicalName || null, addedAt: new Date().toISOString() }
+      }
     }
+    if (detectedName && typeof detectedName === 'string' && detectedName.trim().length >= 3) {
+      mappings[`name:${detectedName.toLowerCase().trim()}`] = { contractorId, canonicalName: canonicalName || null, addedAt: new Date().toISOString() }
+    }
+    saveStore(KEYS.supplierContractorMappings, mappings)
+  } catch (e) {
+    console.warn('[invoiceLearning] rememberSupplierContractorMapping failed:', e?.message)
   }
-  if (detectedName && detectedName.trim().length >= 3) {
-    mappings[`name:${detectedName.toLowerCase().trim()}`] = { contractorId, canonicalName: canonicalName || null, addedAt: new Date().toISOString() }
-  }
-  saveStore(KEYS.supplierContractorMappings, mappings)
 }
 
 export function findSupplierContractorMapping(detectedName, nip) {
-  const mappings = getStore(KEYS.supplierContractorMappings)
-  if (nip) {
-    const n = String(nip).replace(/\D/g, '')
-    if (n.length >= 8) {
-      const byNip = mappings[`nip:${n}`]
-      if (byNip?.contractorId) return { ...byNip, source: 'learned_supplier_mapping', matchedBy: 'nip' }
+  try {
+    const mappings = getStore(KEYS.supplierContractorMappings)
+    if (nip) {
+      const n = String(nip).replace(/\D/g, '')
+      if (n.length >= 8) {
+        const byNip = mappings[`nip:${n}`]
+        if (byNip?.contractorId) return { ...byNip, source: 'learned_supplier_mapping', matchedBy: 'nip' }
+      }
     }
-  }
-  if (detectedName && detectedName.trim().length >= 3) {
-    const byName = mappings[`name:${detectedName.toLowerCase().trim()}`]
-    if (byName?.contractorId) return { ...byName, source: 'learned_supplier_mapping', matchedBy: 'name' }
+    if (detectedName && typeof detectedName === 'string' && detectedName.trim().length >= 3) {
+      const byName = mappings[`name:${detectedName.toLowerCase().trim()}`]
+      if (byName?.contractorId) return { ...byName, source: 'learned_supplier_mapping', matchedBy: 'name' }
+    }
+  } catch (e) {
+    console.warn('[invoiceLearning] findSupplierContractorMapping failed:', e?.message)
   }
   return null
 }

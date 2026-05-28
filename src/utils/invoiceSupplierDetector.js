@@ -4,9 +4,9 @@
 const SELLER_LABEL_SET = new Set([
   'sprzedawca', 'sprzedający', 'sprzedajacy',
   'wystawca', 'wystawiający', 'wystawiajacy',
-  'dostawca', 'nadawca', 'od',
+  'dostawca', 'nadawca',
   'dane sprzedawcy', 'dane wystawcy',
-  'seller', 'supplier', 'issuer', 'vendor', 'from', 'bill from',
+  'seller', 'supplier', 'issuer', 'vendor', 'bill from',
 ])
 
 const BUYER_LABEL_SET = new Set([

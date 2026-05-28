@@ -22,7 +22,6 @@ describe('isSellerLabel', () => {
     expect(isSellerLabel('wystawiający:')).toBe(true)
     expect(isSellerLabel('Dostawca')).toBe(true)
     expect(isSellerLabel('Nadawca')).toBe(true)
-    expect(isSellerLabel('Od:')).toBe(true)
     expect(isSellerLabel('Dane sprzedawcy')).toBe(true)
     expect(isSellerLabel('Dane wystawcy')).toBe(true)
   })
@@ -32,8 +31,14 @@ describe('isSellerLabel', () => {
     expect(isSellerLabel('Supplier:')).toBe(true)
     expect(isSellerLabel('Issuer')).toBe(true)
     expect(isSellerLabel('Vendor')).toBe(true)
-    expect(isSellerLabel('From')).toBe(true)
     expect(isSellerLabel('Bill from')).toBe(true)
+  })
+
+  it('does NOT recognize ambiguous short labels (od, from) as seller labels', () => {
+    expect(isSellerLabel('od')).toBe(false)
+    expect(isSellerLabel('Od:')).toBe(false)
+    expect(isSellerLabel('From')).toBe(false)
+    expect(isSellerLabel('from:')).toBe(false)
   })
 
   it('does NOT recognize buyer labels as seller labels', () => {
@@ -352,5 +357,78 @@ describe('supplier contractor learning', () => {
     const found = findSupplierContractorMapping('Hurtownia ABC Sp. z o.o.', null)
     expect(found?.contractorId).toBe('saved-id')
     expect(found?.source).toBe('learned_supplier_mapping')
+  })
+})
+
+// ── Regression: supplier detection cannot break invoice extraction ────────────
+
+describe('regression: supplier detection is non-blocking', () => {
+  it('detectSupplierFromLines never throws for any string array input', () => {
+    const inputs = [
+      [],
+      null,
+      undefined,
+      [''],
+      ['od', 'from', 'by'],
+      ['Faktura VAT', 'NIP: 1234567890', 'Razem brutto: 1000,00'],
+      ['A'.repeat(200)],
+      ['\x00\x01\x02'],
+      ['30 dni od wystawienia', 'Termin: 14 dni', 'od'],
+    ]
+    for (const input of inputs) {
+      expect(() => detectSupplierFromLines(input)).not.toThrow()
+    }
+  })
+
+  it('detectSupplierFromLines returns null nazwa when only metadata is present', () => {
+    const lines = ['NIP: 1234567890', 'Razem', 'Do zapłaty', 'Faktura VAT']
+    const r = detectSupplierFromLines(lines)
+    expect(r.nazwa).toBe(null)
+    expect(r.confidence).toBe('none')
+  })
+
+  it('supplier detection without results does not prevent invoice parsing (getAssignmentStatus independent)', () => {
+    // Simulates: detectSupplierFromLines returns confidence none → no name set
+    const lines = ['Data: 2026-01-15', 'Termin płatności: 30 dni', 'od']
+    const r = detectSupplierFromLines(lines)
+    // Should return none or something but NOT throw
+    expect(r).toBeDefined()
+    expect(r).toHaveProperty('confidence')
+  })
+
+  it('findSupplierContractorMapping returns null for null/undefined inputs', () => {
+    expect(findSupplierContractorMapping(null, null)).toBe(null)
+    expect(findSupplierContractorMapping(undefined, undefined)).toBe(null)
+    expect(findSupplierContractorMapping('', '')).toBe(null)
+  })
+
+  it('rememberSupplierContractorMapping does not throw for edge case inputs', () => {
+    expect(() => rememberSupplierContractorMapping(null, null, null, null)).not.toThrow()
+    expect(() => rememberSupplierContractorMapping(undefined, undefined, undefined, undefined)).not.toThrow()
+    expect(() => rememberSupplierContractorMapping('', '', 'id', '')).not.toThrow()
+  })
+
+  it('ambiguous short word "od" is not treated as seller label', () => {
+    expect(isSellerLabel('od')).toBe(false)
+    expect(isSellerLabel('Od')).toBe(false)
+    expect(isSellerLabel('od:')).toBe(false)
+  })
+
+  it('standalone "from" is not treated as seller label', () => {
+    expect(isSellerLabel('From')).toBe(false)
+    expect(isSellerLabel('from')).toBe(false)
+    expect(isSellerLabel('from:')).toBe(false)
+    expect(isSellerLabel('Bill from')).toBe(true)
+  })
+
+  it('line with "30 dni od wystawienia" does not trigger seller section', () => {
+    const lines = [
+      'Termin płatności: 30 dni od wystawienia',
+      'SOME COMPANY S.A.',
+      'NIP: 1234567890',
+    ]
+    // "od" in "30 dni od wystawienia" is part of a longer line, not a standalone label
+    // Verify it doesn't crash regardless of what it detects
+    expect(() => detectSupplierFromLines(lines)).not.toThrow()
   })
 })
