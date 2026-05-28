@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Filter } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { supabase } from '../../supabase'
 import { formatDate, timeAgo } from '../../utils/adminHelpers'
 
@@ -60,6 +60,7 @@ export default function BackendActivity() {
     }
   }, [page, typeFilter, moduleFilter, dateFrom, dateTo])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)

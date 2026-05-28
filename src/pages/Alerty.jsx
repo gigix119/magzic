@@ -155,6 +155,7 @@ export default function Alerty() {
     addToast('Wszystkie alerty oznaczone jako przeczytane', 'success')
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData(); fetchPriceAlerts() }, [workspaceId])
 
   function validate() {

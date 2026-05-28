@@ -51,6 +51,7 @@ export default function BackendAudit() {
     }
   }, [page, actionFilter, dateFrom, dateTo])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)

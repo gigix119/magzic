@@ -1,11 +1,11 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Users, Activity, ShieldCheck, AlertTriangle, ScrollText,
-  UserCheck, UserX, Calendar, Clock, RefreshCw, TrendingUp,
+  UserCheck, UserX, Calendar, Clock, TrendingUp,
 } from 'lucide-react'
 import { supabase } from '../../supabase'
-import { trackEvent, trackAdminAudit, formatDate, timeAgo, ROLE_LABELS, STATUS_LABELS } from '../../utils/adminHelpers'
+import { trackEvent, trackAdminAudit, timeAgo, ROLE_LABELS, STATUS_LABELS } from '../../utils/adminHelpers'
 
 const ROLE_COLORS = { owner: '#7c3aed', admin: '#3b82f6', user: '#6b7280' }
 const STATUS_COLORS = { active: '#16a34a', blocked: '#ef4444', pending: '#d97706' }

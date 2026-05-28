@@ -20,10 +20,6 @@ export default function BackendPermissions() {
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
-
   async function loadUsers() {
     const { data } = await supabase
       .from('profiles')
@@ -32,6 +28,11 @@ export default function BackendPermissions() {
     setUsers(data ?? [])
     setLoading(false)
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadUsers()
+  }, [])
 
   async function loadPermissions(userId) {
     const { data } = await supabase

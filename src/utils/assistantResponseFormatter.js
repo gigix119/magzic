@@ -38,7 +38,7 @@ export function formatInvoiceComparisonResponse(comparison) {
     return 'Nie mam jeszcze dwóch faktur zakupowych do porównania w tym workspace.'
   }
 
-  const { kpis, invoiceAInfo, invoiceBInfo, priceChanges = [] } = comparison
+  const { kpis, invoiceBInfo, priceChanges = [] } = comparison
   const parts = []
 
   const diffAbs = Math.abs(kpis.diffBrutto)

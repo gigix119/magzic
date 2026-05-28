@@ -32,4 +32,5 @@ export function WorkspaceProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkspace = () => useContext(WorkspaceContext)

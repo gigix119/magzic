@@ -119,6 +119,7 @@ export default function Magazyny() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMagazyny()
     const handler = () => loadMagazyny()
     window.addEventListener('inventory-updated', handler)

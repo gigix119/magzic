@@ -98,6 +98,7 @@ export default function Towary() {
     setLoading(false)
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData() }, [pokazZarchiwizowane, workspaceId])
 
   useEffect(() => {
@@ -127,6 +128,7 @@ export default function Towary() {
       .limit(200)
     if (period !== 'all') {
       const days = period === '7d' ? 7 : period === '30d' ? 30 : 90
+      // eslint-disable-next-line react-hooks/purity
       const dateFrom = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
       query = query.gte('faktury.data_zakupu', dateFrom)
     }

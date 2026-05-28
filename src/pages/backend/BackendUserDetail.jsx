@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Lock, Unlock, Mail, Shield, ShieldOff,
-  CheckSquare, Square, Clock, AlertTriangle,
+  ArrowLeft, Lock, Unlock, Mail, ShieldOff,
+  CheckSquare, Square, Clock,
 } from 'lucide-react'
 import { supabase } from '../../supabase'
 import {
-  trackAdminAudit, trackEvent, formatDate, timeAgo,
+  trackAdminAudit, formatDate, timeAgo,
   ROLE_LABELS, STATUS_LABELS, MODULES,
 } from '../../utils/adminHelpers'
 import { useToast } from '../../context/ToastContext'
@@ -41,17 +41,13 @@ export default function BackendUserDetail() {
   const { addToast } = useToast()
 
   const [profile, setProfile]       = useState(null)
-  const [permissions, setPerms]     = useState([])
+  const [, setPerms]                 = useState([])
   const [activity, setActivity]     = useState([])
   const [auditLog, setAuditLog]     = useState([])
   const [loading, setLoading]       = useState(true)
   const [tab, setTab]               = useState('activity')
   const [saving, setSaving]         = useState(false)
   const [localPerms, setLocalPerms] = useState({})
-
-  useEffect(() => {
-    loadAll()
-  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadAll() {
     setLoading(true)
@@ -96,6 +92,11 @@ export default function BackendUserDetail() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadAll()
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleBlock() {
     if (!profile) return

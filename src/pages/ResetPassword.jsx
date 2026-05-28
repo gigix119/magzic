@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Warehouse, Loader2, CheckCircle2, Eye, EyeOff, XCircle, Check, X } from 'lucide-react'
 import { supabase } from '../supabase'
 import { trackEvent } from '../utils/adminHelpers'
@@ -29,7 +29,6 @@ function strength(password) {
 }
 
 export default function ResetPassword() {
-  const navigate = useNavigate()
   // 'checking' → waiting for Supabase to process recovery token
   // 'ready'    → token valid, show form
   // 'invalid'  → no token or expired

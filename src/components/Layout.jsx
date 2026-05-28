@@ -57,7 +57,7 @@ export default function Layout() {
     if (match) {
       trackEvent({ eventType: 'page_view', moduleKey: match.module, action: match.action })
     }
-  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location.pathname])
 
   useEffect(() => {
     async function fetchAlertCount() {

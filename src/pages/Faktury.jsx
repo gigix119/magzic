@@ -54,12 +54,6 @@ const emptyFak = {
 }
 const emptyPoz = { towar_id: '', ilosc: '', cena_netto: '', vat_procent: 23, magazyn_id: '' }
 
-const AI_TYP_MAP = {
-  'faktura': 'zakup', 'faktura vat': 'zakup', 'faktura zakupu': 'zakup', 'zakup': 'zakup',
-  'faktura sprzedaży': 'sprzedaz', 'sprzedaż': 'sprzedaz', 'sprzedaz': 'sprzedaz',
-  'wz': 'wz', 'dokument wz': 'wz',
-  'paragon': 'paragon', 'paragon fiskalny': 'paragon',
-}
 
 let _posKey = 0
 function mkPos(defaults = {}) {
@@ -180,6 +174,7 @@ export default function Faktury() {
     setLoading(false)
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData() }, [workspaceId])
 
   function totalNetto(fakId) {
@@ -1043,6 +1038,7 @@ export default function Faktury() {
         let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
         // Fallback: if raw_name column does not exist yet (migration not run), retry without it
         if (pozInsertErr?.code === '42703') {
+          // eslint-disable-next-line no-unused-vars
           const { raw_name: _rn, ...payloadWithoutRawName } = insertPayload
           ;({ error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([payloadWithoutRawName]))
         }

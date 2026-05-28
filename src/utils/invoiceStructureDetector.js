@@ -3,7 +3,6 @@ import { normalizePolishNumber, normalizeDate } from './polishInvoicePatterns.js
 
 const TABLE_HEADER_KEYWORDS = ['lp', 'l.p.', 'nazwa', 'towar', 'ilość', 'ilosc', 'cena', 'wartość', 'netto', 'brutto', 'vat', 'jm', 'j.m.', 'stawka', 'produkt']
 const TABLE_END_KEYWORDS = ['razem', 'suma', 'podsumowanie', 'ogółem', 'łącznie', 'do zapłaty', 'razem brutto', 'razem netto']
-const INVOICE_NUM_PREFIXES = /\b(FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ|MM|ZW|RW)\b/i
 
 function lineText(line) {
   return line.items.map(i => i.text).join(' ').trim()
@@ -42,13 +41,13 @@ function hasPricelikeNumber(line) {
 
 function extractNip(text) {
   // Match "NIP: XXXXXXXXXX" or "NIP XXXXXXXXXX"
-  const labeled = text.match(/(?:NIP|N\.I\.P\.)[:\s]*([\d\s\-]{10,15})/i)
+  const labeled = text.match(/(?:NIP|N\.I\.P\.)[:\s]*([\d\s-]{10,15})/i)
   if (labeled) {
     const clean = labeled[1].replace(/\D/g, '')
     if (clean.length === 10) return clean
   }
   // Raw 10-digit (with possible separators)
-  const raw = text.match(/\b(\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})\b/)
+  const raw = text.match(/\b(\d{3}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2})\b/)
   if (raw) {
     const clean = raw[1].replace(/\D/g, '')
     if (clean.length === 10) return clean
@@ -95,7 +94,7 @@ export function detectInvoiceStructure(pdfLayout) {
   for (const line of headerLines) {
     const text = lineText(line)
     // Try prefix-based match first
-    const prefixMatch = text.match(/\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ)[\s/\-]?\d{1,6}[\w/\-.]*)/i)
+    const prefixMatch = text.match(/\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ)[\s/-]?\d{1,6}[\w/.-]*)/i)
     if (prefixMatch) { numer = prefixMatch[1].trim(); break }
     // Labeled match
     const labelMatch = text.match(/(?:faktura(?:\s*vat)?|nr\s+faktury|numer\s+faktury|nr|numer)[:\s#]+([A-Z0-9][\w/\-.]{2,25})/i)
@@ -105,8 +104,8 @@ export function detectInvoiceStructure(pdfLayout) {
   let dataWystawienia = null
   for (const line of headerLines) {
     const text = lineText(line)
-    const labeled = text.match(/(?:data\s+(?:wystawienia|sprzedaży|sprzedazy|zakupu|wystawie[nń]ia))[:\s]+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i)
-      || text.match(/data[:\s]+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i)
+    const labeled = text.match(/(?:data\s+(?:wystawienia|sprzedaży|sprzedazy|zakupu|wystawie[nń]ia))[:\s]+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i)
+      || text.match(/data[:\s]+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i)
     if (labeled) { dataWystawienia = normalizeDate(labeled[1]); break }
     const iso = text.match(/(\d{4}-\d{2}-\d{2})/)
     if (iso) { dataWystawienia = iso[1]; break }

@@ -529,7 +529,6 @@ export async function runInvoiceParserSelfTest() {
 
   // Test 42: date not treated as price
   const cands42 = extractMonetaryCandidates('data: 2026-05-23')
-  const hasYear = cands42.some(c => c.value === 2026)
   check('recovery: year "2026" from date → filtered in chooseBestAmountCandidate',
     chooseBestAmountCandidate(
       cands42.filter(c => c.value === 2026).map(c => ({ ...c, distFromItem: 0 }))

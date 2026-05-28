@@ -213,7 +213,7 @@ export function buildLowStockAnalysis({
   // Summary text
   const fmtPLN = v => safeNum(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł'
 
-  let summaryText = ''
+  let summaryText
   if (belowMinimum.length === 0) {
     summaryText = 'Nie znalazłem produktów poniżej minimum magazynowego.'
     if (nearMinimum.length > 0) {

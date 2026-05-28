@@ -26,7 +26,7 @@ export function normalizeNip(nip) {
   if (nip === null || nip === undefined || nip === '') return null
   const result = String(nip)
     .replace(/^PL/i, '')
-    .replace(/[\s\-\.]/g, '')
+    .replace(/[\s.-]/g, '')
     .replace(/\D/g, '')
     .trim()
   return result.length >= 8 ? result : null

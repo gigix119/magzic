@@ -98,19 +98,6 @@ function TabOverview() {
   const [lsConfig, setLsConfig] = useState(null)
   const [lsStats, setLsStats]   = useState(null)
 
-  useEffect(() => {
-    // Load localStorage stats
-    try {
-      setLsConfig(getInvoiceModelConfig())
-      const corrStats = getCorrectionStats()
-      const trainingEx = getInvoiceTrainingExamples()
-      setLsStats({ corrStats, trainingCount: (trainingEx ?? []).length })
-    } catch { /* ignore */ }
-
-    // Load Supabase stats
-    loadDbStats()
-  }, [])
-
   async function loadDbStats() {
     try {
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -130,6 +117,20 @@ function TabOverview() {
       setDbStats({ logsTotal, logs24h, correctionsTotal, queuePending, runsTotal })
     } catch { /* ignore */ }
   }
+
+  useEffect(() => {
+    // Load localStorage stats
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLsConfig(getInvoiceModelConfig())
+      const corrStats = getCorrectionStats()
+      const trainingEx = getInvoiceTrainingExamples()
+      setLsStats({ corrStats, trainingCount: (trainingEx ?? []).length })
+    } catch { /* ignore */ }
+
+    // Load Supabase stats
+    loadDbStats()
+  }, [])
 
   const mode = lsConfig?.mode ?? 'off'
   const modeMeta = MODE_META[mode] ?? MODE_META.off
@@ -224,6 +225,7 @@ function TabLogs() {
     setLoading(false)
   }, [page, statusFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -342,6 +344,7 @@ function TabCorrections() {
     setLoading(false)
   }, [page, statusFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   async function updateStatus(id, newStatus) {
@@ -499,6 +502,7 @@ function TabQueue() {
     setLoading(false)
   }, [statusFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   async function resolve(id, newStatus) {
@@ -587,6 +591,7 @@ function TabConfig() {
   const [config, setConfig] = useState(null)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setConfig(getInvoiceModelConfig()) } catch { /* ignore */ }
   }, [])
 

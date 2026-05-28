@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Warehouse, Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 
-const SPECIAL_RE = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/
+const SPECIAL_RE = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/
 
 const inputStyle = (hasError) => ({
   width: '100%', padding: '10px 14px', fontSize: 14,

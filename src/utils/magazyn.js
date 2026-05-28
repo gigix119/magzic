@@ -2,7 +2,6 @@ import { supabase } from '../supabase'
 import { refreshInventory } from './events'
 
 const DEV = import.meta.env.DEV
-const NULL_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
 
 // ── Stan helpers ───────────────────────────────────────────────
 

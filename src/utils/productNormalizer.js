@@ -36,7 +36,7 @@ function extractTechParams(name) {
 export function normalizeProductName(name) {
   if (!name) return ''
   const normalized = normDiacritics(name)
-    .replace(/[.,;:!?()\[\]{}"']/g, ' ')
+    .replace(/[.,;:!?()[\]{}"']/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 
@@ -93,7 +93,7 @@ export function advancedSimilarity(rawName, product, aliasLookup = null) {
     return { score: 1.0, confidenceLabel: 'strong', reasons: ['exact match'], warnings: [] }
   }
 
-  let baseScore = 0
+  let baseScore
 
   if (na.includes(nb) || nb.includes(na)) {
     baseScore = 0.85

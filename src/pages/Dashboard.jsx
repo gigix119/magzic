@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext'
 import Spinner from '../components/Spinner'
@@ -94,6 +94,7 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!workspaceId) { setLoading(false); return }
 
     async function fetchAll() {

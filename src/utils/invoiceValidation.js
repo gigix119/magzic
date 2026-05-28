@@ -68,7 +68,7 @@ export function validateTotals(items, fields) {
   return warnings
 }
 
-export function calculateConfidence(result, documentType) {
+export function calculateConfidence(result) {
   let score = 0
   let maxScore = 95
 

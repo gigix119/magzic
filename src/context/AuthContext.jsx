@@ -86,7 +86,7 @@ export function AuthProvider({ children }) {
     })
 
     return () => subscription.unsubscribe()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // Update last_seen_at every 5 minutes while logged in
   useEffect(() => {
@@ -94,7 +94,7 @@ export function AuthProvider({ children }) {
     updateLastSeen(user.id)
     const interval = setInterval(() => updateLastSeen(user.id), 5 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user])
 
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password })
@@ -134,4 +134,5 @@ export function AuthProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext)

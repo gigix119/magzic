@@ -8,12 +8,12 @@ export function normalizePolishNumber(str) {
   if (/^\d+[,.-]{1,2}$/.test(s)) return parseFloat(s.replace(/[,.-]+$/, ''))
 
   // Remove currency symbols and non-breaking spaces
-  const clean = s.replace(/[zł$€£ ]/g, '').trim()
+  const clean = s.replace(/[zł$€£\u00A0]/g, '').trim()
   if (!clean) return NaN
 
   // "2 071,54" — space/NBSP as thousands separator, comma as decimal
-  if (/^\d{1,3}[\s ]\d{3},\d{1,2}$/.test(clean)) {
-    return parseFloat(clean.replace(/[\s ]/g, '').replace(',', '.'))
+  if (/^\d{1,3}[\s\u00A0]\d{3},\d{1,2}$/.test(clean)) {
+    return parseFloat(clean.replace(/[\s\u00A0]/g, '').replace(',', '.'))
   }
 
   // "1.234,56" — dot thousands, comma decimal
@@ -28,11 +28,11 @@ export function normalizePolishNumber(str) {
 
   // Only comma: decimal separator (1234,56)
   if (clean.includes(',')) {
-    return parseFloat(clean.replace(/[\s ]/g, '').replace(',', '.'))
+    return parseFloat(clean.replace(/[\s\u00A0]/g, '').replace(',', '.'))
   }
 
   // Plain integer or float with spaces as thousands
-  return parseFloat(clean.replace(/[\s ]/g, '')) || NaN
+  return parseFloat(clean.replace(/[\s\u00A0]/g, '')) || NaN
 }
 
 export function normalizeDate(dateStr) {
@@ -41,14 +41,14 @@ export function normalizeDate(dateStr) {
   // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
   // DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
-  const m = s.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})$/)
+  const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/)
   if (m) {
     const [, d, mo, y] = m
     const year = y.length === 2 ? '20' + y : y
     return `${year}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
   }
   // YYYY.MM.DD or YYYY/MM/DD
-  const m2 = s.match(/^(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})$/)
+  const m2 = s.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/)
   if (m2) {
     const [, y, mo, d] = m2
     return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
@@ -70,7 +70,7 @@ const NUMER_PATTERNS = [
   // YYYY/PREFIX/NNN — year-first ERP format; must appear before the prefix-only pattern below
   /\b(\d{4}\/(?:FV|FA|FS|FZ|FP|FVS|FVAT|VAT|WZ|PZ|RK)\/[\w/\-.]{1,20})\b/i,
   // Common Polish invoice prefixes: FV, FVS, FA, FP, FS, FZ, VAT, RK, WZ, PZ, FVAT, INV
-  /\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ|MM|ZW|RW|EINV|INV|FINV)[\s/\-]?\d{1,6}[\w/\-./]*)/i,
+  /\b((?:FV|FVS|FVAT|FP|FA|FS|FZ|VAT|RK|WZ|PZ|MM|ZW|RW|EINV|INV|FINV)[\s/-]?\d{1,6}[\w/.-]*)/i,
   // After keyword "faktura", "nr faktury", "numer faktury" etc.
   /(?:faktura\s*(?:vat|zakupu|sprzedaży)?|nr\s+faktury|numer\s+faktury|nr|numer)[:\s#]+([A-Z0-9][\w/\-.]{2,25})/i,
   // After "rachunek", "paragon"
@@ -79,10 +79,10 @@ const NUMER_PATTERNS = [
 
 const DATA_PATTERNS = [
   // Labeled date fields
-  /(?:data\s+(?:wystawienia|sprzedaży|sprzedazy|zakupu|dokumentu|wystawie[nń]ia))[:\s]+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i,
-  /(?:data)[:\s]+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i,
+  /(?:data\s+(?:wystawienia|sprzedaży|sprzedazy|zakupu|dokumentu|wystawie[nń]ia))[:\s]+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i,
+  /(?:data)[:\s]+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i,
   // "z dnia DD.MM.YYYY" — very common in Polish invoice preamble
-  /(?:z\s+dnia)[:\s]*(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})/i,
+  /(?:z\s+dnia)[:\s]*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i,
   // ISO date
   /(\d{4}-\d{2}-\d{2})/,
   // DD.MM.YYYY (standalone)
@@ -119,7 +119,7 @@ export function extractWithPatterns(text) {
   // Extract NIPs: first = sprzedawca, second = nabywca
   // Handles both plain digits and PL-prefixed formats (NIP: PL1234567890)
   const nipMatches = []
-  const nipPat = /(?:NIP|N\.I\.P\.)[:\s]*(?:PL\s*)?([\d\s\-]{10,15})/gi
+  const nipPat = /(?:NIP|N\.I\.P\.)[:\s]*(?:PL\s*)?([\d\s-]{10,15})/gi
   let nipM
   while ((nipM = nipPat.exec(text)) !== null) {
     const clean = nipM[1].replace(/\D/g, '')
@@ -127,7 +127,7 @@ export function extractWithPatterns(text) {
   }
   // Fallback: look for raw 10-digit sequences
   if (nipMatches.length === 0) {
-    const rawPat = /\b(\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})\b/g
+    const rawPat = /\b(\d{3}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2})\b/g
     let rm
     while ((rm = rawPat.exec(text)) !== null) {
       const clean = rm[1].replace(/\D/g, '')

@@ -230,7 +230,7 @@ export async function extractFromFile(file) {
             if (parsed && parsed.nazwa && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0)) {
               pozycje.push(makeItem({ ...parsed, rawName: parsed.nazwa }))
             }
-          } catch (e) {
+          } catch {
             result.debug.rowParseErrors = (result.debug.rowParseErrors || 0) + 1
           }
         }
