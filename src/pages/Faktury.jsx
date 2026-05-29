@@ -13,7 +13,7 @@ import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
 import { zatwierdźFakturę, cofnijDoRoboczej } from '../utils/magazyn'
-import { safeDeleteInvoice } from '../utils/invoiceDeleteLogic'
+import { safeDeleteInvoice, countInvoiceMovements, deleteInvoiceWithInventoryRollback } from '../utils/invoiceDeleteLogic'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping, rememberSupplierContractorMapping, findSupplierContractorMapping } from '../utils/invoiceLearning'
@@ -139,6 +139,13 @@ export default function Faktury() {
   const [nNewProductDupeWarning, setNNewProductDupeWarning] = useState(null)
   const [nContractorNipWarning, setNContractorNipWarning] = useState(null)
 
+  // ── Cofnij-i-usuń modal ───────────────────────────────────────
+  const [showCofnijDeleteModal, setShowCofnijDeleteModal] = useState(false)
+  const [cofnijDeleteFak, setCofnijDeleteFak] = useState(null)
+  const [cofnijDeleteRuchyCount, setCofnijDeleteRuchyCount] = useState(0)
+  const [cofnijDeleteConfirmed, setCofnijDeleteConfirmed] = useState(false)
+  const [cofnijDeleting, setCofnijDeleting] = useState(false)
+
   // ── Edit position modal (existing invoice) ────────────────────
   const [showEditPozModal, setShowEditPozModal] = useState(false)
   const [editPozTarget, setEditPozTarget] = useState(null)
@@ -241,6 +248,20 @@ export default function Faktury() {
   }
 
   async function handleDeleteFak(fak) {
+    // Check for linked warehouse movements before deciding on delete path
+    const { count, error: checkErr } = await countInvoiceMovements(fak.id, supabase)
+    if (checkErr) { addToast('Błąd sprawdzania ruchów magazynowych. Spróbuj ponownie.', 'error'); return }
+
+    if (count > 0) {
+      // Has movements → open the "Cofnij i usuń" modal instead of a plain toast
+      setCofnijDeleteFak(fak)
+      setCofnijDeleteRuchyCount(count)
+      setCofnijDeleteConfirmed(false)
+      setShowCofnijDeleteModal(true)
+      return
+    }
+
+    // No movements → simple safe delete with window.confirm
     if (!window.confirm(`Usunąć fakturę "${fak.numer}"? Usunie też wszystkie pozycje.`)) return
     const result = await safeDeleteInvoice(fak.id, supabase)
     if (!result.success) {
@@ -249,6 +270,28 @@ export default function Faktury() {
     } else {
       addToast('Faktura usunięta', 'success')
       fetchData()
+    }
+  }
+
+  async function doDeleteWithRollback() {
+    if (!cofnijDeleteFak || !cofnijDeleteConfirmed || cofnijDeleting) return
+    setCofnijDeleting(true)
+    const result = await deleteInvoiceWithInventoryRollback(cofnijDeleteFak.id, supabase, cofnijDoRoboczej)
+    setCofnijDeleting(false)
+    setShowCofnijDeleteModal(false)
+    setCofnijDeleteFak(null)
+    setCofnijDeleteConfirmed(false)
+
+    if (result.success) {
+      addToast('Faktura została cofnięta i usunięta.', 'success')
+      fetchData()
+    } else if (result.rolledBack) {
+      // Invoice is now 'robocza' (no more stock impact) but delete failed — reload to show new status
+      addToast(result.error, 'error')
+      fetchData()
+    } else {
+      // Cofnij itself failed — invoice unchanged
+      addToast(result.error, 'error')
     }
   }
 
@@ -2853,6 +2896,83 @@ export default function Faktury() {
           </Modal>
         )
       })()}
+
+      {/* ════════════════════════════════════════════════════════════
+          COFNIJ I USUŃ — MODAL POTWIERDZENIA
+          ════════════════════════════════════════════════════════════ */}
+      {showCofnijDeleteModal && cofnijDeleteFak && (
+        <Modal
+          title="Cofnij i usuń fakturę"
+          onClose={() => { setShowCofnijDeleteModal(false); setCofnijDeleteFak(null); setCofnijDeleteConfirmed(false) }}
+          maxWidth={480}
+        >
+          <div className="space-y-4">
+            {/* Warning banner */}
+            <div className="rounded-lg px-4 py-3 flex items-start gap-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
+              <AlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: 1 }} />
+              <p className="text-sm" style={{ color: '#92400e' }}>
+                Ta faktura wygenerowała ruchy magazynowe. Aby ją usunąć, system najpierw cofnie wpływ faktury na magazyn, a następnie usunie fakturę i jej pozycje.
+              </p>
+            </div>
+
+            {/* Invoice summary */}
+            <div className="rounded-lg px-4 py-3 space-y-1.5" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--text-2)' }}>Faktura</span>
+                <span className="font-medium" style={{ color: 'var(--text)' }}>{cofnijDeleteFak.numer}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--text-2)' }}>Pozycje</span>
+                <span className="font-medium" style={{ color: 'var(--text)' }}>{(pozycje[cofnijDeleteFak.id] || []).length} szt.</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--text-2)' }}>Ruchy magazynowe</span>
+                <span className="font-medium" style={{ color: '#d97706' }}>{cofnijDeleteRuchyCount} szt.</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--text-2)' }}>Wpływ na stany</span>
+                <span className="font-medium" style={{ color: '#dc2626' }}>zostanie odwrócony</span>
+              </div>
+            </div>
+
+            {/* Confirmation checkbox */}
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cofnijDeleteConfirmed}
+                onChange={e => setCofnijDeleteConfirmed(e.target.checked)}
+                className="mt-0.5 flex-shrink-0"
+                style={{ width: 16, height: 16, accentColor: '#dc2626' }}
+              />
+              <span className="text-sm" style={{ color: 'var(--text)' }}>
+                Rozumiem, że system cofnie wpływ tej faktury na magazyn i dopiero potem ją usunie.
+              </span>
+            </label>
+
+            {/* Action buttons */}
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => { setShowCofnijDeleteModal(false); setCofnijDeleteFak(null); setCofnijDeleteConfirmed(false) }}
+                className="flex-1 rounded-lg py-2 text-sm font-medium"
+                style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                disabled={cofnijDeleting}
+              >
+                Anuluj
+              </button>
+              <button
+                type="button"
+                onClick={doDeleteWithRollback}
+                className="flex-1 rounded-lg py-2 text-sm font-semibold text-white flex items-center justify-center gap-2"
+                style={{ background: cofnijDeleteConfirmed && !cofnijDeleting ? '#dc2626' : '#9ca3af', cursor: cofnijDeleteConfirmed && !cofnijDeleting ? 'pointer' : 'not-allowed' }}
+                disabled={!cofnijDeleteConfirmed || cofnijDeleting}
+              >
+                {cofnijDeleting ? <><Spinner size={14} /> Cofanie i usuwanie...</> : <><Trash2 size={14} /> Cofnij i usuń</>}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* ════════════════════════════════════════════════════════════
           ZATWIERDZENIE — MODAL POTWIERDZENIA

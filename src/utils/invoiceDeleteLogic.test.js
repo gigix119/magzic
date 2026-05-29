@@ -1,12 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   countInvoiceMovements,
   checkInvoiceDeletable,
   safeDeleteInvoice,
+  deleteInvoiceWithInventoryRollback,
 } from './invoiceDeleteLogic'
 
 // ── Supabase mock factory ─────────────────────────────────────────────────────
 // Builds a minimal fake Supabase client that returns whatever we specify.
+
+// ── cofnijFn mock helpers ─────────────────────────────────────────────────────
+
+function makeCofnijFn(result = { success: true }) {
+  return vi.fn().mockResolvedValue(result)
+}
 
 function makeSupabase({ movementsCount = 0, movementsError = null, pozDeleteError = null, fakturaDeleteError = null } = {}) {
   const from = (table) => {
@@ -169,5 +176,86 @@ describe('safeDeleteInvoice', () => {
 
     await safeDeleteInvoice(FAKTURA_ID, sb)
     expect(ruchyDeleteCalled).toBe(false)
+  })
+})
+
+// ── deleteInvoiceWithInventoryRollback ────────────────────────────────────────
+
+describe('deleteInvoiceWithInventoryRollback', () => {
+  it('succeeds: cofnij clears movements, then delete proceeds', async () => {
+    // cofnij sets movements=0 (simulated by returning count=0 after call)
+    const sb = makeSupabase({ movementsCount: 0 })
+    const cofnijFn = makeCofnijFn({ success: true })
+
+    const result = await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sb, cofnijFn)
+
+    expect(result.success).toBe(true)
+    expect(result.rolledBack).toBe(true)
+    expect(cofnijFn).toHaveBeenCalledWith(FAKTURA_ID)
+  })
+
+  it('blocks delete and does NOT call delete when cofnij fails', async () => {
+    const sb = makeSupabase({ movementsCount: 3 })
+    const cofnijFn = makeCofnijFn({ success: false, error: 'stan ujemny' })
+
+    let fakturaDeleteCalled = false
+    const sbWithSpy = {
+      from: (table) => {
+        if (table === 'ruchy_magazynowe') {
+          return { select: () => ({ eq: () => Promise.resolve({ count: 3, error: null }) }) }
+        }
+        if (table === 'faktury') {
+          return { delete: () => { fakturaDeleteCalled = true; return { eq: () => Promise.resolve({ error: null }) } } }
+        }
+        return sb.from(table)
+      },
+    }
+
+    const result = await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sbWithSpy, cofnijFn)
+
+    expect(result.success).toBe(false)
+    expect(result.rolledBack).toBe(false)
+    expect(result.error).toContain('cofnąć ruchów')
+    expect(fakturaDeleteCalled).toBe(false)
+  })
+
+  it('reports rolledBack=true when cofnij succeeds but delete fails', async () => {
+    const sb = makeSupabase({ movementsCount: 0, fakturaDeleteError: 'some error' })
+    const cofnijFn = makeCofnijFn({ success: true })
+
+    const result = await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sb, cofnijFn)
+
+    expect(result.success).toBe(false)
+    expect(result.rolledBack).toBe(true)
+    expect(result.error).toContain('cofnięta do roboczej')
+    expect(result.error).toContain('nie udało się')
+  })
+
+  it('reports rolledBack=true when movements still exist after cofnij', async () => {
+    // Edge case: cofnij returns success but movements still counted (partial rollback)
+    const sb = makeSupabase({ movementsCount: 1 })
+    const cofnijFn = makeCofnijFn({ success: true })
+
+    const result = await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sb, cofnijFn)
+
+    expect(result.success).toBe(false)
+    expect(result.rolledBack).toBe(true)
+    expect(result.error).toContain('nadal ma')
+  })
+
+  it('error messages are user-friendly (no raw FK codes)', async () => {
+    const sb = makeSupabase({ movementsCount: 0, fakturaDeleteError: 'FK' })
+    const cofnijFn = makeCofnijFn({ success: true })
+
+    const result = await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sb, cofnijFn)
+    expect(result.error).not.toMatch(/23503|violates foreign key/)
+  })
+
+  it('calls cofnijFn exactly once', async () => {
+    const sb = makeSupabase({ movementsCount: 0 })
+    const cofnijFn = makeCofnijFn({ success: true })
+
+    await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sb, cofnijFn)
+    expect(cofnijFn).toHaveBeenCalledTimes(1)
   })
 })

@@ -3,7 +3,7 @@
  *
  * Business rules:
  *  - robocza/anulowana WITHOUT ruchy_magazynowe  → can delete (positions first, then invoice)
- *  - ANY invoice WITH ruchy_magazynowe            → blocked; user must cofnij first
+ *  - ANY invoice WITH ruchy_magazynowe            → must rollback inventory first, then delete
  *    (cofnijDoRoboczej deletes movements and reverts stock before setting status=robocza)
  *
  * Deliberately NOT adding ON DELETE CASCADE on ruchy_magazynowe.faktura_id — that would
@@ -92,4 +92,61 @@ export async function safeDeleteInvoice(fakturaId, supabaseClient) {
   }
 
   return { success: true }
+}
+
+/**
+ * Rolls back an invoice's inventory impact and then deletes it in one atomic flow.
+ *
+ * Steps:
+ *  1. Call cofnijFn (cofnijDoRoboczej) → reverts stock quantities and deletes ruchy_magazynowe.
+ *  2. Verify no movements remain (double-check before delete).
+ *  3. Call safeDeleteInvoice → deletes pozycje_faktury then faktury.
+ *
+ * @param {string} fakturaId
+ * @param {object} supabaseClient
+ * @param {Function} cofnijFn  - async (fakturaId) => { success, error? }
+ *                               Inject cofnijDoRoboczej from magazyn.js here.
+ * @returns {{ success: boolean, rolledBack: boolean, error?: string }}
+ *   rolledBack=false → cofnij failed, nothing changed
+ *   rolledBack=true  → cofnij succeeded; if success=false, invoice is now 'robocza' without movements
+ */
+export async function deleteInvoiceWithInventoryRollback(fakturaId, supabaseClient, cofnijFn) {
+  // Step 1: Roll back inventory (reverts quantities and deletes ruchy_magazynowe)
+  const cofnijResult = await cofnijFn(fakturaId)
+  if (!cofnijResult.success) {
+    return {
+      success: false,
+      rolledBack: false,
+      error:
+        'Nie udało się cofnąć ruchów magazynowych. Faktura nie została usunięta.' +
+        (cofnijResult.error ? ` (${cofnijResult.error})` : ''),
+    }
+  }
+
+  // Step 2: Verify movements are gone (safeguard against partial rollback)
+  const { count } = await countInvoiceMovements(fakturaId, supabaseClient)
+  if (count > 0) {
+    return {
+      success: false,
+      rolledBack: true,
+      error:
+        'Faktura została cofnięta, ale nadal ma powiązane ruchy magazynowe. ' +
+        'Odśwież stronę i spróbuj usunąć ręcznie.',
+    }
+  }
+
+  // Step 3: Safe delete — no movements remain, positions then invoice
+  const deleteResult = await safeDeleteInvoice(fakturaId, supabaseClient)
+  if (!deleteResult.success) {
+    return {
+      success: false,
+      rolledBack: true,
+      error:
+        'Faktura została cofnięta do roboczej, ale nie udało się jej usunąć. ' +
+        'Spróbuj usunąć ponownie.' +
+        (deleteResult.error ? ` (${deleteResult.error})` : ''),
+    }
+  }
+
+  return { success: true, rolledBack: true }
 }
