@@ -150,3 +150,58 @@ export async function deleteInvoiceWithInventoryRollback(fakturaId, supabaseClie
 
   return { success: true, rolledBack: true }
 }
+
+/**
+ * Handles deletion of a DRAFT ('robocza') invoice that has orphaned ruchy_magazynowe.
+ *
+ * This is an inconsistent state caused by a failed approval process:
+ *   zatwierdźFakturę updated stany_magazynowe + inserted ruchy,
+ *   but the final status update to 'zatwierdzona' failed.
+ *
+ * Decision: remove only the ruchy linked to this faktura_id without reverting
+ * stany_magazynowe. Reason: the stock quantities are already updated and reflect
+ * actual goods received; the ruchy are the FK blocker. If the user deletes the
+ * faktura, the inventory counts remain (goods in warehouse, faktura gone).
+ *
+ * Safety constraint: ONLY callable when faktura.status === 'robocza'.
+ * For 'zatwierdzona' invoices use deleteInvoiceWithInventoryRollback instead.
+ *
+ * @returns {{ success: boolean, error?: string }}
+ */
+export async function deleteDraftInvoiceWithOrphanMovements(fakturaId, supabaseClient) {
+  // Safety check: verify the invoice is still 'robocza' before touching anything
+  const { data: faktura, error: fakErr } = await supabaseClient
+    .from('faktury')
+    .select('id, status')
+    .eq('id', fakturaId)
+    .single()
+
+  if (fakErr || !faktura) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+  if (faktura.status !== 'robocza') {
+    return {
+      success: false,
+      error:
+        'Faktura nie jest w stanie roboczym — użyj opcji cofnięcia dla faktury zatwierdzonej.',
+    }
+  }
+
+  // Remove orphan ruchy_magazynowe that block the FK constraint
+  const { error: ruchyError } = await supabaseClient
+    .from('ruchy_magazynowe')
+    .delete()
+    .eq('faktura_id', fakturaId)
+
+  if (ruchyError) {
+    return {
+      success: false,
+      error:
+        'Nie udało się usunąć powiązanych ruchów magazynowych. Faktura nie została usunięta.' +
+        ` (${ruchyError.message})`,
+    }
+  }
+
+  // FK blocker is gone — safe delete proceeds (pozycje_faktury first, then faktury)
+  return safeDeleteInvoice(fakturaId, supabaseClient)
+}

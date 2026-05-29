@@ -13,7 +13,7 @@ import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
 import { zatwierdźFakturę, cofnijDoRoboczej } from '../utils/magazyn'
-import { safeDeleteInvoice, countInvoiceMovements, deleteInvoiceWithInventoryRollback } from '../utils/invoiceDeleteLogic'
+import { safeDeleteInvoice, countInvoiceMovements, deleteInvoiceWithInventoryRollback, deleteDraftInvoiceWithOrphanMovements } from '../utils/invoiceDeleteLogic'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping, rememberSupplierContractorMapping, findSupplierContractorMapping } from '../utils/invoiceLearning'
@@ -276,21 +276,38 @@ export default function Faktury() {
   async function doDeleteWithRollback() {
     if (!cofnijDeleteFak || !cofnijDeleteConfirmed || cofnijDeleting) return
     setCofnijDeleting(true)
-    const result = await deleteInvoiceWithInventoryRollback(cofnijDeleteFak.id, supabase, cofnijDoRoboczej)
+    const fakId = cofnijDeleteFak.id
+    const fakStatus = cofnijDeleteFak.status
+    const fakNumer = cofnijDeleteFak.numer
+
+    let result
+    if (fakStatus === 'robocza') {
+      // Inconsistent state: draft invoice with orphan movements — remove ruchy then delete
+      const draftResult = await deleteDraftInvoiceWithOrphanMovements(fakId, supabase)
+      result = { ...draftResult, rolledBack: false }
+    } else {
+      // Approved invoice: full inventory rollback then delete
+      result = await deleteInvoiceWithInventoryRollback(fakId, supabase, cofnijDoRoboczej)
+    }
+
     setCofnijDeleting(false)
     setShowCofnijDeleteModal(false)
     setCofnijDeleteFak(null)
     setCofnijDeleteConfirmed(false)
 
     if (result.success) {
-      addToast('Faktura została cofnięta i usunięta.', 'success')
+      addToast(
+        fakStatus === 'robocza'
+          ? `Faktura ${fakNumer} i powiązane ruchy magazynowe zostały usunięte.`
+          : `Faktura ${fakNumer} została cofnięta i usunięta.`,
+        'success'
+      )
       fetchData()
     } else if (result.rolledBack) {
-      // Invoice is now 'robocza' (no more stock impact) but delete failed — reload to show new status
+      // Applicable only for 'zatwierdzona' path: invoice is now 'robocza', reload
       addToast(result.error, 'error')
       fetchData()
     } else {
-      // Cofnij itself failed — invoice unchanged
       addToast(result.error, 'error')
     }
   }
@@ -2900,18 +2917,22 @@ export default function Faktury() {
       {/* ════════════════════════════════════════════════════════════
           COFNIJ I USUŃ — MODAL POTWIERDZENIA
           ════════════════════════════════════════════════════════════ */}
-      {showCofnijDeleteModal && cofnijDeleteFak && (
+      {showCofnijDeleteModal && cofnijDeleteFak && (() => {
+        const isDraft = cofnijDeleteFak.status === 'robocza'
+        return (
         <Modal
-          title="Cofnij i usuń fakturę"
+          title={isDraft ? 'Usuń fakturę z osierconymi ruchami' : 'Cofnij i usuń fakturę'}
           onClose={() => { setShowCofnijDeleteModal(false); setCofnijDeleteFak(null); setCofnijDeleteConfirmed(false) }}
           maxWidth={480}
         >
           <div className="space-y-4">
-            {/* Warning banner */}
+            {/* Warning banner — text differs by status */}
             <div className="rounded-lg px-4 py-3 flex items-start gap-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
               <AlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: 1 }} />
               <p className="text-sm" style={{ color: '#92400e' }}>
-                Ta faktura wygenerowała ruchy magazynowe. Aby ją usunąć, system najpierw cofnie wpływ faktury na magazyn, a następnie usunie fakturę i jej pozycje.
+                {isDraft
+                  ? 'Ta faktura jest robocza, ale ma powiązane ruchy magazynowe. To wygląda na niespójny stan po wcześniejszym przerwanym procesie zatwierdzania. System usunie powiązane ruchy techniczne tej faktury, a następnie usunie fakturę i jej pozycje.'
+                  : 'Ta faktura wygenerowała ruchy magazynowe. Aby ją usunąć, system najpierw cofnie wpływ faktury na magazyn, a następnie usunie fakturę i jej pozycje.'}
               </p>
             </div>
 
@@ -2922,6 +2943,10 @@ export default function Faktury() {
                 <span className="font-medium" style={{ color: 'var(--text)' }}>{cofnijDeleteFak.numer}</span>
               </div>
               <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--text-2)' }}>Status</span>
+                <span className="font-medium" style={{ color: isDraft ? '#d97706' : '#22c55e' }}>{isDraft ? 'Robocza' : 'Zatwierdzona'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span style={{ color: 'var(--text-2)' }}>Pozycje</span>
                 <span className="font-medium" style={{ color: 'var(--text)' }}>{(pozycje[cofnijDeleteFak.id] || []).length} szt.</span>
               </div>
@@ -2930,12 +2955,14 @@ export default function Faktury() {
                 <span className="font-medium" style={{ color: '#d97706' }}>{cofnijDeleteRuchyCount} szt.</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span style={{ color: 'var(--text-2)' }}>Wpływ na stany</span>
-                <span className="font-medium" style={{ color: '#dc2626' }}>zostanie odwrócony</span>
+                <span style={{ color: 'var(--text-2)' }}>{isDraft ? 'Stany magazynowe' : 'Wpływ na stany'}</span>
+                <span className="font-medium" style={{ color: isDraft ? 'var(--muted)' : '#dc2626' }}>
+                  {isDraft ? 'bez zmian (stany pozostają)' : 'zostanie odwrócony'}
+                </span>
               </div>
             </div>
 
-            {/* Confirmation checkbox */}
+            {/* Confirmation checkbox — text differs by status */}
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -2945,7 +2972,9 @@ export default function Faktury() {
                 style={{ width: 16, height: 16, accentColor: '#dc2626' }}
               />
               <span className="text-sm" style={{ color: 'var(--text)' }}>
-                Rozumiem, że system cofnie wpływ tej faktury na magazyn i dopiero potem ją usunie.
+                {isDraft
+                  ? 'Rozumiem, że system usunie powiązane ruchy tej roboczej faktury, aby odblokować usunięcie.'
+                  : 'Rozumiem, że system cofnie wpływ tej faktury na magazyn i dopiero potem ją usunie.'}
               </span>
             </label>
 
@@ -2972,7 +3001,8 @@ export default function Faktury() {
             </div>
           </div>
         </Modal>
-      )}
+        )
+      })()}
 
       {/* ════════════════════════════════════════════════════════════
           ZATWIERDZENIE — MODAL POTWIERDZENIA

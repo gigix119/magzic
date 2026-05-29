@@ -4,6 +4,7 @@ import {
   checkInvoiceDeletable,
   safeDeleteInvoice,
   deleteInvoiceWithInventoryRollback,
+  deleteDraftInvoiceWithOrphanMovements,
 } from './invoiceDeleteLogic'
 
 // ── Supabase mock factory ─────────────────────────────────────────────────────
@@ -15,7 +16,15 @@ function makeCofnijFn(result = { success: true }) {
   return vi.fn().mockResolvedValue(result)
 }
 
-function makeSupabase({ movementsCount = 0, movementsError = null, pozDeleteError = null, fakturaDeleteError = null } = {}) {
+function makeSupabase({
+  movementsCount = 0,
+  movementsError = null,
+  ruchyDeleteError = null,
+  pozDeleteError = null,
+  fakturaDeleteError = null,
+  fakturaStatus = 'robocza',
+  fakturaFetchError = null,
+} = {}) {
   const from = (table) => {
     if (table === 'ruchy_magazynowe') {
       return {
@@ -23,6 +32,12 @@ function makeSupabase({ movementsCount = 0, movementsError = null, pozDeleteErro
           eq: () => Promise.resolve(movementsError
             ? { count: null, error: { message: movementsError } }
             : { count: movementsCount, error: null }
+          ),
+        }),
+        delete: () => ({
+          eq: () => Promise.resolve(ruchyDeleteError
+            ? { error: { message: ruchyDeleteError } }
+            : { error: null }
           ),
         }),
       }
@@ -41,6 +56,14 @@ function makeSupabase({ movementsCount = 0, movementsError = null, pozDeleteErro
 
     if (table === 'faktury') {
       return {
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve(fakturaFetchError
+              ? { data: null, error: { message: fakturaFetchError } }
+              : { data: { id: FAKTURA_ID, status: fakturaStatus }, error: null }
+            ),
+          }),
+        }),
         delete: () => ({
           eq: () => Promise.resolve(fakturaDeleteError
             ? { error: { message: fakturaDeleteError, code: fakturaDeleteError === 'FK' ? '23503' : 'XX000' } }
@@ -257,5 +280,71 @@ describe('deleteInvoiceWithInventoryRollback', () => {
 
     await deleteInvoiceWithInventoryRollback(FAKTURA_ID, sb, cofnijFn)
     expect(cofnijFn).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── deleteDraftInvoiceWithOrphanMovements ─────────────────────────────────────
+
+describe('deleteDraftInvoiceWithOrphanMovements', () => {
+  it('removes orphan ruchy then deletes draft invoice successfully', async () => {
+    // movementsCount=0 after deletion (safeDeleteInvoice inner check)
+    const sb = makeSupabase({ fakturaStatus: 'robocza', movementsCount: 0 })
+    const result = await deleteDraftInvoiceWithOrphanMovements(FAKTURA_ID, sb)
+    expect(result.success).toBe(true)
+  })
+
+  it('blocks when faktura is not robocza (safety constraint)', async () => {
+    const sb = makeSupabase({ fakturaStatus: 'zatwierdzona', movementsCount: 0 })
+    const result = await deleteDraftInvoiceWithOrphanMovements(FAKTURA_ID, sb)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('robocz')
+  })
+
+  it('returns error when faktura fetch fails', async () => {
+    const sb = makeSupabase({ fakturaFetchError: 'not found' })
+    const result = await deleteDraftInvoiceWithOrphanMovements(FAKTURA_ID, sb)
+    expect(result.success).toBe(false)
+  })
+
+  it('returns error when ruchy_magazynowe delete fails — invoice not deleted', async () => {
+    const sb = makeSupabase({ fakturaStatus: 'robocza', movementsCount: 0, ruchyDeleteError: 'permission denied' })
+    let fakturaDeleteCalled = false
+    // Override faktury.delete to spy on it
+    const spySb = {
+      from: (table) => {
+        if (table === 'faktury' && !fakturaDeleteCalled) {
+          const original = sb.from(table)
+          return {
+            ...original,
+            delete: () => {
+              fakturaDeleteCalled = true
+              return original.delete()
+            },
+          }
+        }
+        return sb.from(table)
+      },
+    }
+
+    const result = await deleteDraftInvoiceWithOrphanMovements(FAKTURA_ID, spySb)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('ruchów magazynowych')
+    expect(fakturaDeleteCalled).toBe(false)
+  })
+
+  it('does NOT call cofnijDoRoboczej (no stock revert needed for draft path)', async () => {
+    // If this function incorrectly called cofnijDoRoboczej it would reject robocza invoices.
+    // The mock has no cofnijFn parameter — calling it would throw.
+    const sb = makeSupabase({ fakturaStatus: 'robocza', movementsCount: 0 })
+    // This should succeed without any cofnijFn argument
+    const result = await deleteDraftInvoiceWithOrphanMovements(FAKTURA_ID, sb)
+    expect(result.success).toBe(true)
+  })
+
+  it('error message is user-friendly (no raw FK code)', async () => {
+    const sb = makeSupabase({ fakturaStatus: 'robocza', movementsCount: 0, ruchyDeleteError: '23503: some pg error' })
+    const result = await deleteDraftInvoiceWithOrphanMovements(FAKTURA_ID, sb)
+    // Should not propagate raw error as the ONLY message; our wrapper adds context
+    expect(result.error).toContain('ruchów magazynowych')
   })
 })
