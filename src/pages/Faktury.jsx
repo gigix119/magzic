@@ -1054,7 +1054,7 @@ export default function Faktury() {
         }
 
         // Insert position (towar_id may be null for draft/service lines)
-        // raw_name: store PDF name for display in draft lines (requires rawname_migration.sql)
+        // raw_name / jednostka: optional columns — retry without them if schema is older
         const insertPayload = {
           faktura_id: fakData.id,
           towar_id: towarId || null,
@@ -1063,14 +1063,15 @@ export default function Faktury() {
           cena_netto: Number(poz.cena_netto) || 0,
           vat_procent: Number(poz.vat_procent) || 23,
           raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
+          jednostka: poz.jednostka || 'szt',
           ...wsData(),
         }
         let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
-        // Fallback: if raw_name column does not exist yet (migration not run), retry without it
+        // Fallback: if raw_name or jednostka column does not exist yet, retry without optional fields
         if (pozInsertErr?.code === '42703') {
           // eslint-disable-next-line no-unused-vars
-          const { raw_name: _rn, ...payloadWithoutRawName } = insertPayload
-          ;({ error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([payloadWithoutRawName]))
+          const { raw_name: _rn, jednostka: _jed, ...corePayload } = insertPayload
+          ;({ error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([corePayload]))
         }
         if (pozInsertErr) {
           console.error('Błąd zapisu pozycji:', pozInsertErr)
@@ -1291,7 +1292,7 @@ export default function Faktury() {
                               </td>
                               <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{p.ilosc}</td>
                               <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
-                                {(p.towary?.nazwa?.length >= 2 ? p.towary?.jednostka : null) || '—'}
+                                {p.jednostka || (p.towary?.nazwa?.length >= 2 ? p.towary?.jednostka : null) || '—'}
                               </td>
                               <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{Number(p.cena_netto).toFixed(2)} zł</td>
                               <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.vat_procent ?? 23}%</td>

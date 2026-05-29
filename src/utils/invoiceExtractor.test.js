@@ -3,7 +3,7 @@
 
 import { describe, it } from 'vitest'
 import { normalizePolishNumber, normalizeDate, extractWithPatterns, normalizeVatRate } from './polishInvoicePatterns.js'
-import { parseInvoiceItems, parseInvoiceItemsLP } from './invoiceExtractor.js'
+import { parseInvoiceItems, parseInvoiceItemsLP, normalizeInvoiceItemUnit } from './invoiceExtractor.js'
 import { detectColumnMap } from './invoiceLineParser.js'
 import { classifyDocument, classifyItem } from './invoiceDocumentClassifier.js'
 import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
@@ -721,6 +721,161 @@ Razem brutto 154,35
 
     // L10: "806 lm" inside Żarówka name must NOT create a false LP 806
     assert(items.length === 5, `L10: "806 lm" not treated as LP 806 — still 5 items`)
+  })
+
+  // ═══════════════════════════════════════════════════════════════
+  // M. Unit extraction — normalization, multi-unit rows, fallback
+  // ═══════════════════════════════════════════════════════════════
+
+  it('M1: IKEA-like — unit = szt, name keeps "80x28x202 cm"', () => {
+    const text = [
+      'Faktura VAT',
+      '',
+      'Lp. Nazwa Jedn. Ilość Cena netto',
+      '',
+      '1 BILLY regał biały 80x28x202 cm szt.',
+      '2 249,00 zł 498,00 zł 23% 114,54 zł 612,54 zł',
+      'RAZEM 498,00',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M1-01: at least 1 item (got ${items.length})`)
+    const billy = items[0]
+    assert(billy.unit === 'szt' || billy.jednostka === 'szt', `M1-02: BILLY unit=szt (got ${billy.unit ?? billy.jednostka})`)
+    assert(billy.rawName.toLowerCase().includes('billy'), `M1-03: BILLY rawName contains "billy" (got ${billy.rawName})`)
+    assert(!/^\d+$/.test(billy.rawName.trim()) && billy.rawName.length > 3, `M1-04: BILLY rawName is not just a number`)
+  })
+
+  it('M2: Chemia / baterie — unit = op, name contains "12 szt."', () => {
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Ilość Cena netto',
+      '',
+      '1 Baterie alkaliczne AA 12 szt. op. 3 18,90 23% 56,70 13,04 69,74',
+      'RAZEM 56,70',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M2-01: at least 1 item (got ${items.length})`)
+    const bat = items[0]
+    assert(bat.unit === 'op' || bat.jednostka === 'op', `M2-02: unit=op (got ${bat.unit ?? bat.jednostka})`)
+    assert(bat.rawName.toLowerCase().includes('baterie'), `M2-03: rawName contains "baterie" (got ${bat.rawName})`)
+    assert(bat.rawName.includes('szt'), `M2-04: rawName contains "szt." parameter (got ${bat.rawName})`)
+    assert(Math.abs(bat.ilosc - 3) < 0.01, `M2-05: qty=3 not ${bat.ilosc}`)
+    assert(Math.abs(bat.cenaNetto - 18.90) < 0.01, `M2-06: price=18.90 not ${bat.cenaNetto}`)
+  })
+
+  it('M3: Budowlanka — unit = op, name contains "200 szt."', () => {
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Ilość Cena netto',
+      '',
+      '1 Wkręt 4x40 200 szt. op. 2 12,50 23% 25,00 5,75 30,75',
+      'RAZEM',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M3-01: at least 1 item (got ${items.length})`)
+    const wkret = items[0]
+    assert(wkret.unit === 'op' || wkret.jednostka === 'op', `M3-02: unit=op (got ${wkret.unit ?? wkret.jednostka})`)
+    assert(wkret.rawName.toLowerCase().includes('wkręt') || wkret.rawName.toLowerCase().includes('wkret'), `M3-03: rawName contains "wkręt" (got ${wkret.rawName})`)
+    assert(wkret.rawName.includes('szt'), `M3-04: rawName contains "szt." parameter (got ${wkret.rawName})`)
+    assert(Math.abs(wkret.ilosc - 2) < 0.01, `M3-05: qty=2 not ${wkret.ilosc}`)
+  })
+
+  it('M4: Pojemność w nazwie — unit = szt, "750 ml" zostaje w nazwie', () => {
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Ilość Cena netto',
+      '',
+      '1 Domestos Original 750 ml szt. 6 8,49 23% 50,94 11,72 62,66',
+      'RAZEM',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M4-01: at least 1 item (got ${items.length})`)
+    const dom = items[0]
+    assert(dom.unit === 'szt' || dom.jednostka === 'szt', `M4-02: unit=szt (got ${dom.unit ?? dom.jednostka})`)
+    assert(dom.rawName.includes('750') || dom.rawName.toLowerCase().includes('ml'), `M4-03: "750 ml" stays in name (got ${dom.rawName})`)
+    assert(Math.abs(dom.ilosc - 6) < 0.01, `M4-04: qty=6 not ${dom.ilosc}`)
+    assert(Math.abs(dom.cenaNetto - 8.49) < 0.01, `M4-05: price=8.49 not ${dom.cenaNetto}`)
+  })
+
+  it('M5: Farba — unit = szt, "10 l" zostaje w nazwie', () => {
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Ilość Cena netto',
+      '',
+      '1 Farba biała matowa 10 l szt. 1 89,90 23% 89,90 20,68 110,58',
+      'RAZEM',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M5-01: at least 1 item (got ${items.length})`)
+    const farba = items[0]
+    assert(farba.unit === 'szt' || farba.jednostka === 'szt', `M5-02: unit=szt (got ${farba.unit ?? farba.jednostka})`)
+    assert(farba.rawName.toLowerCase().includes('farba'), `M5-03: rawName contains "farba" (got ${farba.rawName})`)
+    assert(Math.abs(farba.ilosc - 1) < 0.01, `M5-04: qty=1 not ${farba.ilosc}`)
+    assert(Math.abs(farba.cenaNetto - 89.90) < 0.01, `M5-05: price=89.90 not ${farba.cenaNetto}`)
+  })
+
+  it('M6: Usługa — unit = usl z usł., classifyItem zwraca service_item', () => {
+    // LP parser: usł. → unit 'usl'
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Ilość Cena netto',
+      '',
+      '1 Transport dostawy usł. 1 50,00 23% 50,00 11,50 61,50',
+      'RAZEM',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M6-01: at least 1 item (got ${items.length})`)
+    const transport = items[0]
+    assert(
+      transport.unit === 'usl' || transport.jednostka === 'usl',
+      `M6-02: unit=usl after normalizing usł. (got unit=${transport.unit} jednostka=${transport.jednostka})`
+    )
+
+    // classifyItem: "Usługa montażowa" with 'usl' unit → service_item
+    const srvItem = { rawName: 'Usługa montażowa', ilosc: 1, cenaNetto: 50.00, jednostka: 'usl' }
+    const { itemType, shouldAffectInventory } = classifyItem(srvItem, 'unknown')
+    assert(itemType === 'service_item', `M6-03: Usługa montażowa → service_item (got ${itemType})`)
+    assert(shouldAffectInventory === false, `M6-04: Usługa montażowa → shouldAffectInventory=false`)
+  })
+
+  it('M7: Brak jednostki — fallback szt + warning unit_inferred_default_szt', () => {
+    const text = [
+      'Faktura',
+      '',
+      'Lp. Nazwa Ilość Cena netto',
+      '',
+      '1 Produkt testowy 10,00 23% 20,00 4,60 24,60',
+      'RAZEM',
+    ].join('\n')
+    const items = parseInvoiceItemsLP(text)
+    assert(items.length >= 1, `M7-01: at least 1 item (got ${items.length})`)
+    const prod = items[0]
+    assert(prod.unit === 'szt' || prod.jednostka === 'szt', `M7-02: unit fallback=szt (got ${prod.unit ?? prod.jednostka})`)
+    const warnings = prod.warnings || []
+    assert(warnings.includes('unit_inferred_default_szt'), `M7-03: warning unit_inferred_default_szt present (got ${JSON.stringify(warnings)})`)
+  })
+
+  it('M8: normalizeInvoiceItemUnit — canonical mapping', () => {
+    assert(normalizeInvoiceItemUnit('szt.') === 'szt', 'M8-01: szt. → szt')
+    assert(normalizeInvoiceItemUnit('szt') === 'szt', 'M8-02: szt → szt')
+    assert(normalizeInvoiceItemUnit('opak.') === 'op', 'M8-03: opak. → op')
+    assert(normalizeInvoiceItemUnit('opak') === 'op', 'M8-04: opak → op')
+    assert(normalizeInvoiceItemUnit('op.') === 'op', 'M8-05: op. → op')
+    assert(normalizeInvoiceItemUnit('kpl.') === 'kpl', 'M8-06: kpl. → kpl')
+    assert(normalizeInvoiceItemUnit('m²') === 'm2', 'M8-07: m² → m2')
+    assert(normalizeInvoiceItemUnit('m³') === 'm3', 'M8-08: m³ → m3')
+    assert(normalizeInvoiceItemUnit('usł.') === 'usl', 'M8-09: usł. → usl')
+    assert(normalizeInvoiceItemUnit('usł') === 'usl', 'M8-10: usł → usl')
+    assert(normalizeInvoiceItemUnit('litr') === 'l', 'M8-11: litr → l')
+    assert(normalizeInvoiceItemUnit('litry') === 'l', 'M8-12: litry → l')
+    assert(normalizeInvoiceItemUnit('pary') === 'para', 'M8-13: pary → para')
+    assert(normalizeInvoiceItemUnit('rolki') === 'rolka', 'M8-14: rolki → rolka')
+    assert(normalizeInvoiceItemUnit(null) === null, 'M8-15: null → null')
   })
 
 })

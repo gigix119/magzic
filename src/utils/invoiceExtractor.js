@@ -68,24 +68,50 @@ function medianHeight(items) {
   return heights.length % 2 !== 0 ? heights[mid] : (heights[mid - 1] + heights[mid]) / 2
 }
 
+// Canonical unit normalization: maps all Polish/common variants to one canonical form.
+// Used by makeItem (all parse paths) and exported for tests/UI.
+export function normalizeInvoiceItemUnit(raw) {
+  if (!raw) return null
+  const u = String(raw).toLowerCase().trim()
+  const MAP = {
+    'szt.': 'szt', 'szt': 'szt',
+    'op.': 'op', 'op': 'op', 'opak.': 'op', 'opak': 'op',
+    'kpl.': 'kpl', 'kpl': 'kpl',
+    'm²': 'm2', 'm2': 'm2',
+    'm³': 'm3', 'm3': 'm3',
+    'mb': 'mb', 'm': 'm',
+    'usł.': 'usl', 'usł': 'usl', 'usl.': 'usl', 'usl': 'usl',
+    'litr': 'l', 'litry': 'l', 'l': 'l', 'ml': 'ml',
+    'kg': 'kg', 'g': 'g',
+    'para': 'para', 'pary': 'para',
+    'rolka': 'rolka', 'rolki': 'rolka',
+    'godz.': 'godz', 'godz': 'godz', 'h': 'h',
+    'zest.': 'zest', 'zest': 'zest',
+    'pcs': 'pcs', 'pc': 'pcs',
+  }
+  return MAP[u] ?? u.replace(/\.$/, '')
+}
+
 function makeItem(raw) {
   const ilosc = raw.ilosc ?? raw.quantity ?? 1
   const cenaNetto = raw.cenaNetto ?? raw.unitPriceNet ?? 0
   const wartoscNetto = raw.wartoscNetto ?? raw.totalNet ?? (ilosc * cenaNetto)
+  const rawUnit = raw.jednostka || raw.unit
+  const unit = rawUnit ? (normalizeInvoiceItemUnit(rawUnit) || rawUnit) : 'szt'
   return {
     rawName: raw.rawName || raw.nazwa || '',
     normalizedName: (raw.rawName || raw.nazwa || '').toLowerCase().trim(),
     ilosc,
     quantity: ilosc,
-    jednostka: raw.jednostka || raw.unit || 'szt',
-    unit: raw.jednostka || raw.unit || 'szt',
+    jednostka: unit,
+    unit,
     cenaNetto,
     unitPriceNet: cenaNetto,
     wartoscNetto,
     totalNet: wartoscNetto,
     vat: raw.vat ?? null,
     confidence: raw.confidence ?? 0.7,
-    warnings: [],
+    warnings: raw.warnings || [],
     matchedProductId: null,
     itemType: raw.itemType ?? null,
     shouldAffectInventory: raw.shouldAffectInventory ?? null,
@@ -428,7 +454,7 @@ export async function extractFromFile(file) {
       }
 
       if (itemType === 'service_item') {
-        if (!poz.jednostka || poz.jednostka === 'szt') { poz.jednostka = 'usł.'; poz.unit = 'usł.' }
+        if (!poz.jednostka || poz.jednostka === 'szt') { poz.jednostka = 'usl'; poz.unit = 'usl' }
         if (!poz.ilosc || poz.ilosc === 0) { poz.ilosc = 1; poz.quantity = 1 }
       }
 
@@ -508,7 +534,7 @@ export function parseInvoiceItems(text) {
     if (isForbiddenAsInvoiceItem(line, {})) continue
 
     const match = line.match(
-      /^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(szt\.?|opak\.?|rolka|para|kpl\.?|l|kg|ml|m2|mb|godz)\s+([\d][\d\s.,]*)/i
+      /^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(szt\.?|opak\.?|op\.?|rolk[ai]|pary?|kpl\.?|litr[wy]?|l|kg|g|ml|m2|m²|m3|m³|mb|usł\.?|usl\.?|godz\.?)\s+([\d][\d\s.,]*)/i
     )
     if (match) {
       const ilosc = parseFloat(match[2].replace(',', '.'))
@@ -559,12 +585,13 @@ export function parseInvoiceItems(text) {
 
 const _TABLE_END_LP = /^(razem|do\s*zap[łl]at|p[łl]atno[śs][ćc]|termin|numer\s+rachunk|konto:|uwagi|wystawił|odebra[łl]|podpis|s[łl]owni|podsumowanie|podstawa\s+op|suma\b|vat\s*\d)/i
 // Invoice units used as the actual "product unit" column in Polish invoices.
-// Used for unit extraction inside _parseSegment.
-const _UNIT_TOKEN = /\b(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|kg|g|ml|godz\.?|h|usł\.?|usl\.?|para|rolka|zest\.?|pcs|pc)\b/i
-// Broader set that also includes measurement specs appearing inside product names
-// (e.g. "806 lm", "32 mm", "31 cl"). Used only for the LP false-positive guard
-// in the sequential filter — prevents "100 mm" from being accepted as LP 100.
-const _UNIT_TOKEN_LP = /\b(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|mm|cm|dm|km|lm|cl|dl|kg|g|mg|ml|godz\.?|h|kw|kva|usł\.?|usl\.?|para|rolka|zest\.?|pcs|pc)\b/i
+// Uses Unicode lookbehind/lookahead (u flag) so Polish letters like "ł" in "usł."
+// are handled correctly — plain \b doesn't work for non-ASCII chars.
+// Longer tokens (ml, m2, m3) appear before shorter overlapping ones (l, m).
+const _UNIT_TOKEN = /(?<!\p{L})(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|m3|m³|kg|g|ml|litr[wy]?|l|godz\.?|h|usł\.?|usl\.?|para|pary|rolk[ai]|zest\.?|pcs|pc)(?!\p{L})/iu
+// Broader set for the LP false-positive guard — also covers measurement specs
+// (e.g. "806 lm", "32 mm", "31 cl") so they're not treated as new LP items.
+const _UNIT_TOKEN_LP = /(?<!\p{L})(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|m3|m³|mm|cm|dm|km|lm|cl|dl|kg|g|mg|ml|litr[wy]?|l|godz\.?|h|kw|kva|usł\.?|usl\.?|para|pary|rolk[ai]|zest\.?|pcs|pc)(?!\p{L})/iu
 
 function _isTableEndLP(line) {
   return _TABLE_END_LP.test(line.trim().toLowerCase())
@@ -615,18 +642,45 @@ function _parseSegment(seg) {
   const vat = vatMatch ? parseInt(vatMatch[1]) : 23
   if (vat > 100) return null
 
-  // Unit (first occurrence of a known unit token)
-  const unitMatch = text.match(_UNIT_TOKEN)
-  const unit = unitMatch ? unitMatch[1].toLowerCase().replace(/\.$/, '') : 'szt'
-
-  // Product name = text between the LP number and the unit token.
-  // Strip up to 4-digit LP prefix to support LP 100+.
+  // Strip LP prefix to get name-bearing portion.
   const withoutLP = text.replace(/^\d{1,4}\s+/, '')
+  const lpPrefixLen = text.length - withoutLP.length
+
+  // Find ALL unit token occurrences and pick the RIGHTMOST one that has ≥ 2
+  // numeric amounts after it. This correctly handles multi-unit rows like:
+  //   "Baterie AA 12 szt. op. 3 18,90 23%"  → unit = "op", name contains "12 szt."
+  //   "Domestos 750 ml szt. 6 8,49"          → unit = "szt", name contains "750 ml"
+  const _UNIT_TOKEN_G = new RegExp(_UNIT_TOKEN.source, 'gi')
+  const allUnitMatches = []
+  let m
+  while ((m = _UNIT_TOKEN_G.exec(text)) !== null) {
+    allUnitMatches.push({ match: m[0], index: m.index, token: m[1] })
+  }
+
+  let chosenUnit = null  // { match, index, token }
+  for (let i = allUnitMatches.length - 1; i >= 0; i--) {
+    const candidate = allUnitMatches[i]
+    const afterCandidate = text.slice(candidate.index + candidate.match.length)
+    if (_extractAmounts(afterCandidate).length >= 2) {
+      chosenUnit = candidate
+      break
+    }
+  }
+  // If no unit has ≥ 2 amounts after it, fall back to first occurrence
+  if (!chosenUnit && allUnitMatches.length > 0) {
+    chosenUnit = allUnitMatches[0]
+  }
+
+  const unit = chosenUnit ? normalizeInvoiceItemUnit(chosenUnit.token) || 'szt' : 'szt'
+  const unitInferred = !chosenUnit
+  const segWarnings = unitInferred ? ['unit_inferred_default_szt'] : []
+
+  // Product name = everything between LP prefix and the chosen unit token.
   let name = withoutLP
-  if (unitMatch) {
-    const uIdx = withoutLP.indexOf(unitMatch[0])
-    if (uIdx > 0) name = withoutLP.slice(0, uIdx).trim()
-    else name = withoutLP.split(/\s+/).slice(0, 3).join(' ')  // fallback: first 3 words
+  if (chosenUnit) {
+    const uIdxInWithoutLP = chosenUnit.index - lpPrefixLen
+    if (uIdxInWithoutLP > 0) name = withoutLP.slice(0, uIdxInWithoutLP).trim()
+    else name = withoutLP.split(/\s+/).slice(0, 3).join(' ')
   } else {
     // No unit — take text before first decimal price
     const pIdx = withoutLP.search(/\b\d+[,.]\d{2}\b/)
@@ -638,8 +692,10 @@ function _parseSegment(seg) {
   // Reject names that are just a unit token (e.g. "lm", "szt", "cm")
   if (_UNIT_TOKEN_LP.test(name) && name.replace(/\.$/, '').length <= 4) return null
 
-  // Amounts — everything after the unit
-  const uPos = unitMatch ? (text.indexOf(unitMatch[0]) + unitMatch[0].length) : text.indexOf(name) + name.length
+  // Amounts — everything after the chosen unit (or after the name)
+  const uPos = chosenUnit
+    ? (chosenUnit.index + chosenUnit.match.length)
+    : text.indexOf(name) + name.length
   const afterUnit = text.slice(uPos)
   const nums = _extractAmounts(afterUnit)
   if (nums.length < 2) return null
@@ -657,6 +713,7 @@ function _parseSegment(seg) {
     wartoscNetto: totalNet,
     vat,
     confidence: 0.75,
+    warnings: segWarnings,
   })
 }
 
