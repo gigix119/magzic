@@ -13,6 +13,7 @@ import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
 import { zatwierdźFakturę, cofnijDoRoboczej } from '../utils/magazyn'
+import { safeDeleteInvoice } from '../utils/invoiceDeleteLogic'
 import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from '../utils/priceIntelligence'
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping, rememberSupplierContractorMapping, findSupplierContractorMapping } from '../utils/invoiceLearning'
@@ -241,9 +242,14 @@ export default function Faktury() {
 
   async function handleDeleteFak(fak) {
     if (!window.confirm(`Usunąć fakturę "${fak.numer}"? Usunie też wszystkie pozycje.`)) return
-    const { error } = await supabase.from('faktury').delete().eq('id', fak.id)
-    if (error) { console.error(error); addToast(error.message, 'error') }
-    else { addToast('Faktura usunięta', 'success'); fetchData() }
+    const result = await safeDeleteInvoice(fak.id, supabase)
+    if (!result.success) {
+      console.error('[faktury] delete blocked:', result.error)
+      addToast(result.error, 'error')
+    } else {
+      addToast('Faktura usunięta', 'success')
+      fetchData()
+    }
   }
 
   // ── Add position to existing invoice ──────────────────────────
@@ -1116,6 +1122,9 @@ export default function Faktury() {
     const testFaktury = faktury.filter(f => /^(TEST|DEV)/i.test(f.numer || ''))
     if (testFaktury.length === 0) { addToast('Brak faktur testowych (numer zaczyna się od TEST lub DEV)', 'info'); return }
     const ids = testFaktury.map(f => f.id)
+    // Clean up children first: ruchy_magazynowe (DEV-safe), then pozycje_faktury, then faktury
+    await supabase.from('ruchy_magazynowe').delete().in('faktura_id', ids)
+    await supabase.from('pozycje_faktury').delete().in('faktura_id', ids)
     const { error } = await supabase.from('faktury').delete().in('id', ids)
     if (error) { addToast(`Błąd usuwania: ${error.message}`, 'error'); return }
     addToast(`Usunięto ${ids.length} faktur testowych`, 'success')
