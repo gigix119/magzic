@@ -1,6 +1,31 @@
 let _lineId = 0
 
 /**
+ * Maps a form/extracted position to a pozycje_faktury INSERT payload.
+ *
+ * Whitelists only columns that actually exist in the pozycje_faktury table.
+ * Deliberately excludes: jednostka, unit, warnings, matchScore, itemType,
+ * shouldAffectInventory, indeks, source, _isDraft, _key, etc.
+ *
+ * @param {object} poz - form position (from mapParsedPozycjaToFormPozycja or manual form)
+ * @param {string} fakturaId - UUID of the parent faktura row
+ * @param {Function} [wsDataFn] - () => workspace_id payload (from WorkspaceContext.wsData)
+ * @returns {object} ready-to-insert Supabase payload
+ */
+export function mapPositionToInsertPayload(poz, fakturaId, wsDataFn = () => ({})) {
+  return {
+    faktura_id: fakturaId,
+    towar_id: poz._towarId || poz.towar_id || null,
+    magazyn_id: poz.magazyn_id || null,
+    ilosc: Number(poz.ilosc ?? poz.quantity ?? 0) || 0,
+    cena_netto: Number(poz.cena_netto ?? poz.cenaNetto ?? poz.unitPriceNet ?? 0) || 0,
+    vat_procent: Number(poz.vat_procent ?? poz.vat ?? 23) || 23,
+    raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
+    ...wsDataFn(),
+  }
+}
+
+/**
  * Maps a raw parsed position (from PDF extractor or manual form) to a normalized
  * form-position object ready for display and DB insertion.
  *

@@ -720,23 +720,32 @@ function _parseSegment(seg) {
 export function parseInvoiceItemsLP(rawText) {
   if (!rawText || rawText.length < 10) return []
 
-  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 1)
+  // Keep single-char lines: standalone LP numbers like "1" on their own row are valid.
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0)
 
-  // Find table region: first line that is "1 <NAME_WITH_LETTERS>" starts the table
+  // Find table region: first line that is "1 <NAME_WITH_LETTERS>" starts the table.
+  // Also handles standalone LP: "1" alone on its own line when the next line has letters.
   let tableStartLine = -1
   let tableEndLine = lines.length
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (_isTableEndLP(line) && tableStartLine !== -1) { tableEndLine = i; break }
-    if (tableStartLine === -1 && /^1\s+\p{L}{2}/u.test(line)) {
-      tableStartLine = i
+    if (tableStartLine === -1) {
+      if (/^1\s+\p{L}{2}/u.test(line)) {
+        // LP + name on same line: "1 MALM komoda..."
+        tableStartLine = i
+      } else if (/^\d{1,4}$/.test(line.trim()) && i + 1 < lines.length && /\p{L}{2}/u.test((lines[i + 1] || '').trim())) {
+        // Standalone LP "1" on its own line, next line is the product name
+        tableStartLine = i
+      }
     }
   }
 
   if (tableStartLine === -1) return []
 
   // Build joined lines:
+  // - standalone LP numbers ("1" alone) are merged with the next name line
   // - price-continuation lines are appended to the previous line
   // - all other lines stand on their own (each may start a new LP)
   // NOTE: do NOT run isForbiddenAsInvoiceItem here — concatenated table lines
@@ -746,6 +755,18 @@ export function parseInvoiceItemsLP(rawText) {
   for (let i = tableStartLine; i < tableEndLine; i++) {
     const line = lines[i]
     if (_isTableEndLP(line)) break
+
+    // Standalone LP: single number on its own line — merge with the following name line.
+    // e.g. PDF row "1" on line i, "MALM komoda..." on line i+1 →  "1 MALM komoda..."
+    if (/^\d{1,4}$/.test(line.trim()) && i + 1 < tableEndLine) {
+      const nextLine = (lines[i + 1] || '').trim()
+      if (nextLine && !_isTableEndLP(nextLine) && /\p{L}{2}/u.test(nextLine)) {
+        joinedLines.push(line.trim() + ' ' + nextLine)
+        i++ // consumed next line
+        continue
+      }
+    }
+
     if (_isPriceContinuation(line) && joinedLines.length > 0) {
       joinedLines[joinedLines.length - 1] += ' ' + line
     } else {

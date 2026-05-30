@@ -860,6 +860,79 @@ Razem brutto 154,35
     assert(warnings.includes('unit_inferred_default_szt'), `M7-03: warning unit_inferred_default_szt present (got ${JSON.stringify(warnings)})`)
   })
 
+  // ═══════════════════════════════════════════════════════════════
+  // N. IKEA 6 — standalone LP + multiline product name regression
+  // ═══════════════════════════════════════════════════════════════
+
+  it('N: IKEA 6 — standalone LP "1" + multiline name (MALM komoda)', () => {
+    const text = [
+      'FAKTURA TESTOWA NR FV/TEST/IKEA/2026/006',
+      'Lp. Nazwa towaru / usługi Jm. Ilość Cena',
+      'netto',
+      'Wartość',
+      'netto VAT Kwota',
+      'VAT',
+      'Wartość',
+      'brutto',
+      '1',
+      'MALM komoda 3-szufladowa, dąb',
+      'bejcowany szt.',
+      '1 499,00 zł 499,00 zł 23% 114,77 zł 613,77 zł',
+      '2 RÅSKOG wózek kuchenny, czarny szt.',
+      '1 199,00 zł 199,00 zł 23% 45,77 zł 244,77 zł',
+      '3 SKÅDIS tablica perforowana 56x56 cm szt.',
+      '8 56,99 zł 455,92 zł 23% 104,86 zł 560,78 zł',
+      '4 VARDAGEN szklanka 31 cl szt. 12 7,59 zł 91,08 zł 23% 20,95 zł 112,03 zł 5 KUGGIS pojemnik z pokrywką, biały szt. 5 39,99 zł 199,95 zł 23% 45,99 zł 245,94 zł',
+      'RAZEM 1 444,95 zł 23% 332,34 zł 1 777,29 zł',
+    ].join('\n')
+
+    const items = parseInvoiceItemsLP(text)
+
+    assert(items.length === 5, `N01: 5 items (got ${items.length})`)
+
+    // N1: MALM — standalone LP + multiline name + unit at end of wrapped line
+    const malm = items[0]
+    assert(malm.rawName.toLowerCase().includes('malm'), `N02: item[0] contains MALM (got "${malm.rawName}")`)
+    assert(malm.rawName.toLowerCase().includes('bejcowany'), `N03: name contains "bejcowany" (got "${malm.rawName}")`)
+    assert(malm.rawName.toLowerCase().includes('komoda'), `N04: name contains "komoda" (got "${malm.rawName}")`)
+    assert(malm.unit === 'szt' || malm.jednostka === 'szt', `N05: MALM unit=szt (got unit=${malm.unit} jednostka=${malm.jednostka})`)
+    assert(Math.abs(malm.ilosc - 1) < 0.01, `N06: MALM qty=1 not ${malm.ilosc}`)
+    assert(Math.abs(malm.cenaNetto - 499) < 0.01, `N07: MALM price=499 not ${malm.cenaNetto}`)
+    assert(Math.abs(malm.wartoscNetto - 499) < 0.01, `N08: MALM totalNet=499 not ${malm.wartoscNetto}`)
+
+    // N2: RÅSKOG
+    const raskog = items[1]
+    assert(raskog.rawName.toLowerCase().includes('råskog') || raskog.rawName.toLowerCase().includes('raskog'), `N09: item[1] RÅSKOG (got "${raskog.rawName}")`)
+    assert(raskog.unit === 'szt' || raskog.jednostka === 'szt', `N10: RÅSKOG unit=szt`)
+    assert(Math.abs(raskog.ilosc - 1) < 0.01, `N11: RÅSKOG qty=1`)
+    assert(Math.abs(raskog.cenaNetto - 199) < 0.01, `N12: RÅSKOG price=199`)
+
+    // N3: SKÅDIS
+    const skadis = items[2]
+    assert(skadis.rawName.toLowerCase().includes('sk'), `N13: item[2] SKÅDIS (got "${skadis.rawName}")`)
+    assert(Math.abs(skadis.ilosc - 8) < 0.01, `N14: SKÅDIS qty=8 not ${skadis.ilosc}`)
+    assert(Math.abs(skadis.cenaNetto - 56.99) < 0.01, `N15: SKÅDIS price=56.99 not ${skadis.cenaNetto}`)
+
+    // N4: VARDAGEN — "31 cl" stays in name
+    const vardagen = items[3]
+    assert(vardagen.rawName.toLowerCase().includes('vardagen'), `N16: item[3] VARDAGEN (got "${vardagen.rawName}")`)
+    assert(vardagen.rawName.toLowerCase().includes('31'), `N17: "31 cl" stays in VARDAGEN name (got "${vardagen.rawName}")`)
+    assert(vardagen.unit === 'szt' || vardagen.jednostka === 'szt', `N18: VARDAGEN unit=szt`)
+    assert(Math.abs(vardagen.ilosc - 12) < 0.01, `N19: VARDAGEN qty=12 not ${vardagen.ilosc}`)
+    assert(Math.abs(vardagen.cenaNetto - 7.59) < 0.01, `N20: VARDAGEN price=7.59 not ${vardagen.cenaNetto}`)
+
+    // N5: KUGGIS
+    const kuggis = items[4]
+    assert(kuggis.rawName.toLowerCase().includes('kuggis'), `N21: item[4] KUGGIS (got "${kuggis.rawName}")`)
+    assert(Math.abs(kuggis.ilosc - 5) < 0.01, `N22: KUGGIS qty=5 not ${kuggis.ilosc}`)
+    assert(Math.abs(kuggis.cenaNetto - 39.99) < 0.01, `N23: KUGGIS price=39.99 not ${kuggis.cenaNetto}`)
+
+    // RAZEM / summary lines must not appear as items
+    const names = items.map(i => (i.rawName || '').toLowerCase())
+    assert(!names.some(n => n.includes('razem')), 'N24: RAZEM not in items')
+    assert(!names.some(n => n.startsWith('szt')), 'N25: no item name starts with "szt"')
+  })
+
   it('M8: normalizeInvoiceItemUnit — canonical mapping', () => {
     assert(normalizeInvoiceItemUnit('szt.') === 'szt', 'M8-01: szt. → szt')
     assert(normalizeInvoiceItemUnit('szt') === 'szt', 'M8-02: szt → szt')

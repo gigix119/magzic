@@ -25,7 +25,7 @@ import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
 import { runShadowModelOnResult } from '../utils/invoiceScoringEngine'
 import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
-import { mapParsedPozycjaToFormPozycja } from '../utils/invoiceLineMapper'
+import { mapParsedPozycjaToFormPozycja, mapPositionToInsertPayload } from '../utils/invoiceLineMapper'
 import { findMatchingContractor, prepareContractorFromInvoice } from '../utils/contractorMatcher'
 import { ensureContractorForInvoice } from '../utils/contractorService'
 import ContractorCombobox from '../components/ContractorCombobox'
@@ -1099,8 +1099,10 @@ export default function Faktury() {
       if (fakErr) throw fakErr
 
       // 3. Process each position (no stock updates — those happen on approval)
+      let pozSaveErrors = 0
+      let pozSaveTotal = 0
       for (const poz of nPositions) {
-        if (!poz.nazwa.trim()) continue
+        if (!poz.nazwa?.trim()) continue
 
         // Use explicit match from extraction
         let towarId = poz._towarId || null
@@ -1119,33 +1121,39 @@ export default function Faktury() {
           continue
         }
 
-        // Insert position (towar_id may be null for draft/service lines)
-        // raw_name / jednostka: optional columns — retry without them if schema is older
-        const insertPayload = {
-          faktura_id: fakData.id,
-          towar_id: towarId || null,
-          magazyn_id: poz.magazyn_id || null,
-          ilosc: Number(poz.ilosc) || 0,
-          cena_netto: Number(poz.cena_netto) || 0,
-          vat_procent: Number(poz.vat_procent) || 23,
-          raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
-          jednostka: poz.jednostka || 'szt',
-          ...wsData(),
-        }
+        pozSaveTotal++
+        // Insert position — use whitelisted payload (no undefined columns sent to DB)
+        const insertPayload = mapPositionToInsertPayload(
+          { ...poz, _towarId: towarId },
+          fakData.id,
+          wsData
+        )
         let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
-        // Fallback: if raw_name or jednostka column does not exist yet, retry without optional fields
-        if (pozInsertErr?.code === '42703') {
+        // Fallback: if raw_name column doesn't exist yet (migration not run), retry without it
+        if (pozInsertErr && (
+          pozInsertErr.code === '42703' ||
+          pozInsertErr.message?.includes('raw_name') ||
+          pozInsertErr.message?.includes('schema cache')
+        )) {
           // eslint-disable-next-line no-unused-vars
-          const { raw_name: _rn, jednostka: _jed, ...corePayload } = insertPayload
+          const { raw_name: _rn, ...corePayload } = insertPayload
           ;({ error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([corePayload]))
         }
         if (pozInsertErr) {
           console.error('Błąd zapisu pozycji:', pozInsertErr)
-          addToast(`Błąd zapisu pozycji "${poz.nazwa}": ${pozInsertErr.message}`, 'error')
+          pozSaveErrors++
         }
       }
 
-      addToast(`Faktura ${nForm.numer.trim()} zapisana jako robocza — zatwierdź aby zaktualizować stany`, 'success')
+      // Summary toast — one message instead of N error toasts per failed position
+      const fakNumerSaved = nForm.numer.trim()
+      if (pozSaveErrors > 0 && pozSaveErrors === pozSaveTotal) {
+        addToast(`Faktura ${fakNumerSaved} zapisana, ale nie udało się zapisać żadnej pozycji. Sprawdź schemat bazy danych.`, 'error')
+      } else if (pozSaveErrors > 0) {
+        addToast(`Faktura ${fakNumerSaved} zapisana. Nie udało się zapisać ${pozSaveErrors} z ${pozSaveTotal} pozycji.`, 'error')
+      } else {
+        addToast(`Faktura ${fakNumerSaved} zapisana jako robocza — zatwierdź aby zaktualizować stany`, 'success')
+      }
 
       // Correction tracking — diff what parser extracted vs what user approved
       if (extractedResult && extractedResult.source !== 'manual') {
