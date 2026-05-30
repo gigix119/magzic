@@ -89,6 +89,11 @@ export function advancedSimilarity(rawName, product, aliasLookup = null) {
   const nb = normalizeProductName(product.nazwa || '')
   const nt = normalizeProductName(product.typ || '')
 
+  // Guard: product name too short to produce any tokens after normalization
+  // (e.g. single-char names like "B" normalize to ""). Without this guard,
+  // na.includes('') is always true → false 0.85 match for every invoice item.
+  if (!nb && !nt) return { score: 0, confidenceLabel: 'weak', reasons: ['product name too short to match'], warnings: [] }
+
   if (na === nb) {
     return { score: 1.0, confidenceLabel: 'strong', reasons: ['exact match'], warnings: [] }
   }

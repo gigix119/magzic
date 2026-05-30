@@ -6,6 +6,9 @@ import {
   preparePositionsForInvoiceDraft,
   preparePositionsForInventoryImpact,
   validatePositionForInventoryImpact,
+  validatePositionForInvoiceDraft,
+  validatePositionBeforeInvoiceSave,
+  recalculateInvoiceLineStatus,
 } from './invoicePositionValidator'
 
 const TOWARY = [
@@ -302,5 +305,159 @@ describe('counter logic (getAssignmentStatus + isReadyToSave)', () => {
     const statuses = items.map(i => getAssignmentStatus(i, TOWARY))
     const inventoryReadyCount = statuses.filter(s => s === 'ready').length
     expect(inventoryReadyCount).toBe(1)
+  })
+})
+
+// ── Empty / garbage position filtering ───────────────────────────────────────
+
+describe('validatePositionForInvoiceDraft — empty position rejection', () => {
+  it('rejects position with empty name', () => {
+    const { ok, errors } = validatePositionForInvoiceDraft({ nazwa: '', rawName: '' })
+    expect(ok).toBe(false)
+    expect(errors[0]).toMatch(/brak nazwy/i)
+  })
+
+  it('rejects position with null name', () => {
+    const { ok } = validatePositionForInvoiceDraft({ nazwa: null, rawName: null })
+    expect(ok).toBe(false)
+  })
+
+  it('rejects position with single-char name', () => {
+    const { ok } = validatePositionForInvoiceDraft({ nazwa: 'B', rawName: 'B' })
+    expect(ok).toBe(false)
+  })
+
+  it('rejects undefined/null position', () => {
+    const { ok } = validatePositionForInvoiceDraft(null)
+    expect(ok).toBe(false)
+  })
+
+  it('accepts position with valid name even without productId or price', () => {
+    const { ok } = validatePositionForInvoiceDraft({ nazwa: 'Farba biała matowa 10 l', rawName: 'Farba biała matowa 10 l' })
+    expect(ok).toBe(true)
+  })
+})
+
+describe('preparePositionsForInvoiceDraft — filters empty positions', () => {
+  it('skips empty-name positions and does not add them to draftLines', () => {
+    const positions = [
+      { nazwa: '', rawName: '', itemType: 'inventory_item', unitPriceNet: 10, ilosc: 1 },
+      { nazwa: 'Farba biała', rawName: 'Farba biała', itemType: 'inventory_item', unitPriceNet: 10, ilosc: 1 },
+    ]
+    const { draftLines, blocked } = preparePositionsForInvoiceDraft(positions)
+    expect(draftLines).toHaveLength(1)
+    expect(draftLines[0].nazwa).toBe('Farba biała')
+    expect(blocked).toHaveLength(1)
+  })
+})
+
+// ── Validator: position with invoice name but no productId ───────────────────
+
+describe('validatePositionBeforeInvoiceSave — position without productId', () => {
+  it('reports missing product, NOT "Towar ma zbyt krótką nazwę"', () => {
+    const pos = {
+      nazwa: 'Farba biała matowa 10 l',
+      rawName: 'Farba biała matowa 10 l',
+      ilosc: 2,
+      cena_netto: 45.0,
+      vat_procent: 23,
+      magazyn_id: 'mag-1',
+      itemType: 'inventory_item',
+      shouldAffectInventory: true,
+      _towarId: null,
+      towar_id: null,
+      matchedProductId: null,
+    }
+    const { ok, errors } = validatePositionBeforeInvoiceSave(pos, TOWARY)
+    expect(ok).toBe(false)
+    expect(errors.some(e => e.toLowerCase().includes('dopasowania') || e.toLowerCase().includes('towaru'))).toBe(true)
+    expect(errors.some(e => e.toLowerCase().includes('zbyt krótk'))).toBe(false)
+  })
+})
+
+// ── recalculateInvoiceLineStatus — position without towar_id ─────────────────
+
+describe('recalculateInvoiceLineStatus — no towar_id', () => {
+  it('returns review_required with no errors when towar_id is null', () => {
+    const line = { towar_id: null, ilosc: 2, cena_netto: 45.0, magazyn_id: 'mag-1' }
+    const { invoiceLineStatus, inventoryImpactStatus, errors } = recalculateInvoiceLineStatus(line, { towary: TOWARY })
+    expect(invoiceLineStatus).toBe('review_required')
+    expect(inventoryImpactStatus).toBe('none')
+    expect(errors).toHaveLength(0)
+  })
+
+  it('does NOT report "Towar ma zbyt krótką nazwę" for a position without towar_id', () => {
+    const line = { towar_id: null, ilosc: 1, cena_netto: 10 }
+    const { errors } = recalculateInvoiceLineStatus(line, { towary: TOWARY })
+    expect(errors.some(e => e.includes('zbyt krótk'))).toBe(false)
+  })
+})
+
+// ── Full regression: 30-line ragged invoice ───────────────────────────────────
+
+describe('regression: ragged invoice 30 lines', () => {
+  const TOWARY_EXTENDED = [
+    ...TOWARY,
+    { id: 'prod-3', nazwa: 'Farba biała matowa 10 l', typ: 'farba', jednostka: 'szt' },
+    { id: 'prod-4', nazwa: 'Klej montażowy 300 ml', typ: 'klej', jednostka: 'szt' },
+  ]
+
+  function makeRaggedInvoiceItems() {
+    const items = []
+    for (let i = 0; i < 26; i++) {
+      items.push({
+        nazwa: `Farba biała matowa 10 l ${i}`,
+        rawName: `Farba biała matowa 10 l ${i}`,
+        itemType: 'inventory_item',
+        unitPriceNet: 45.0,
+        ilosc: 1,
+        jednostka: 'szt',
+        matchedProductId: null,
+        matchScore: 0,
+      })
+    }
+    // 1 empty line (should be filtered)
+    items.push({ nazwa: '', rawName: '', itemType: 'inventory_item', unitPriceNet: 0, ilosc: 0 })
+    // 1 service
+    items.push({ nazwa: 'Transport', rawName: 'Transport', itemType: 'service_item', shouldAffectInventory: false, unitPriceNet: 200, ilosc: 1 })
+    // 1 ready with product
+    items.push({ nazwa: 'Tabletki do zmywarki', rawName: 'Tabletki do zmywarki', itemType: 'inventory_item', unitPriceNet: 12.5, ilosc: 5, matchedProductId: 'prod-1', matchScore: 1.0 })
+    // 1 skipped
+    items.push({ nazwa: 'Suma końcowa', rawName: 'Suma końcowa', itemType: 'inventory_item', unitPriceNet: 0, ilosc: 0, lineType: 'summary_line' })
+    return items
+  }
+
+  it('draft: empty line is blocked, not added to draftLines', () => {
+    const items = makeRaggedInvoiceItems()
+    const { draftLines } = preparePositionsForInvoiceDraft(items)
+    const emptyInDraft = draftLines.filter(p => !(p.nazwa || p.rawName || '').trim())
+    expect(emptyInDraft).toHaveLength(0)
+  })
+
+  it('draft: items without productId get invoiceLineStatus review_required', () => {
+    const items = makeRaggedInvoiceItems().filter(i => i.itemType !== 'service_item' && (i.nazwa || '').trim().length >= 2 && !i.lineType)
+    const { draftLines } = preparePositionsForInvoiceDraft(items)
+    const needsReview = draftLines.filter(p => p.invoiceLineStatus === 'review_required')
+    expect(needsReview.length).toBeGreaterThan(0)
+  })
+
+  it('save: item without productId is blocked (no false product assigned)', () => {
+    const raggedItem = {
+      nazwa: 'Farba biała matowa 10 l 0',
+      rawName: 'Farba biała matowa 10 l 0',
+      itemType: 'inventory_item',
+      shouldAffectInventory: true,
+      unitPriceNet: 45.0,
+      ilosc: 1,
+      cena_netto: 45.0,
+      matchedProductId: null,
+      _towarId: null,
+      towar_id: null,
+      matchScore: 0,
+      magazyn_id: 'mag-1',
+    }
+    const { readyToSave, blocked } = preparePositionsForInvoiceSave([raggedItem], TOWARY_EXTENDED)
+    expect(readyToSave).toHaveLength(0)
+    expect(blocked).toHaveLength(1)
   })
 })

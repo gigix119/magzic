@@ -37,9 +37,10 @@ describe('mapPositionToInsertPayload', () => {
     expect(payload.cena_netto).toBe(19.99)
     expect(payload.vat_procent).toBe(23)
     expect(payload.raw_name).toBe('SYFON 32MM')
+    // jednostka is now a real DB column (jednostka_migration.sql) and must be in payload
+    expect(payload.jednostka).toBe('szt')
 
-    // Technical fields NOT present
-    expect(payload).not.toHaveProperty('jednostka')
+    // Technical (front-end-only) fields NOT present
     expect(payload).not.toHaveProperty('unit')
     expect(payload).not.toHaveProperty('warnings')
     expect(payload).not.toHaveProperty('matchScore')
@@ -84,9 +85,15 @@ describe('mapPositionToInsertPayload', () => {
     expect(payload.workspace_id).toBe('ws-123')
   })
 
-  it('does not include jednostka even when poz has it', () => {
+  it('includes jednostka from poz in payload (DB column added in jednostka_migration.sql)', () => {
     const poz = { jednostka: 'op', ilosc: 2, cena_netto: 8.50 }
     const payload = mapPositionToInsertPayload(poz, FAKTURA_ID)
-    expect(payload).not.toHaveProperty('jednostka')
+    expect(payload.jednostka).toBe('op')
+  })
+
+  it('falls back to unit then jm when jednostka not set', () => {
+    expect(mapPositionToInsertPayload({ unit: 'kg', ilosc: 1, cena_netto: 1 }, FAKTURA_ID).jednostka).toBe('kg')
+    expect(mapPositionToInsertPayload({ jm: 'l', ilosc: 1, cena_netto: 1 }, FAKTURA_ID).jednostka).toBe('l')
+    expect(mapPositionToInsertPayload({ ilosc: 1, cena_netto: 1 }, FAKTURA_ID).jednostka).toBeNull()
   })
 })

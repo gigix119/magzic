@@ -911,6 +911,7 @@ export default function Faktury() {
             let bestScore = 0
             let bestProduct = null
             for (const towar of towary) {
+              if (!towar.nazwa || towar.nazwa.trim().length < 2) continue // skip garbage product names
               const { score } = advancedSimilarity(item.rawName, towar)
               if (score > bestScore) { bestScore = score; bestProduct = towar }
             }
@@ -1101,8 +1102,14 @@ export default function Faktury() {
       // 3. Process each position (no stock updates — those happen on approval)
       let pozSaveErrors = 0
       let pozSaveTotal = 0
+      let pozSkipped = 0
       for (const poz of nPositions) {
-        if (!poz.nazwa?.trim()) continue
+        const rawItemName = (poz.nazwa || poz.rawName || '').trim()
+        if (!rawItemName || (rawItemName.length < 2 && !poz._towarId)) {
+          console.warn('[faktury] empty_invoice_item_skipped:', rawItemName || '(empty)')
+          pozSkipped++
+          continue
+        }
 
         // Use explicit match from extraction
         let towarId = poz._towarId || null
@@ -1129,14 +1136,15 @@ export default function Faktury() {
           wsData
         )
         let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
-        // Fallback: if raw_name column doesn't exist yet (migration not run), retry without it
+        // Fallback: if optional columns (jednostka, raw_name) don't exist yet (migrations not run), retry without them
         if (pozInsertErr && (
           pozInsertErr.code === '42703' ||
           pozInsertErr.message?.includes('raw_name') ||
+          pozInsertErr.message?.includes('jednostka') ||
           pozInsertErr.message?.includes('schema cache')
         )) {
           // eslint-disable-next-line no-unused-vars
-          const { raw_name: _rn, ...corePayload } = insertPayload
+          const { raw_name: _rn, jednostka: _jed, ...corePayload } = insertPayload
           ;({ error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([corePayload]))
         }
         if (pozInsertErr) {
@@ -1147,6 +1155,9 @@ export default function Faktury() {
 
       // Summary toast — one message instead of N error toasts per failed position
       const fakNumerSaved = nForm.numer.trim()
+      if (pozSkipped > 0) {
+        console.info(`[faktury] ${pozSkipped} pozycji pominięto jako puste (empty_invoice_item_skipped)`)
+      }
       if (pozSaveErrors > 0 && pozSaveErrors === pozSaveTotal) {
         addToast(`Faktura ${fakNumerSaved} zapisana, ale nie udało się zapisać żadnej pozycji. Sprawdź schemat bazy danych.`, 'error')
       } else if (pozSaveErrors > 0) {
@@ -3057,9 +3068,12 @@ export default function Faktury() {
                   </p>
                   {blockedTowar.map(p => {
                     const s = recalculateInvoiceLineStatus(p, ctx)
+                    const displayName = p.towary?.nazwa && p.towary.nazwa.length >= 2
+                      ? p.towary.nazwa
+                      : (p.raw_name || p.towary?.nazwa || '—')
                     return (
                       <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
-                        · {p.towary?.nazwa || '—'} — {s.errors.join(', ')}
+                        · {displayName} — {s.errors.join(', ')}
                       </div>
                     )
                   })}
@@ -3073,7 +3087,7 @@ export default function Faktury() {
                   </p>
                   {bezTowaru.map(p => (
                     <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
-                      · {p.towary?.nazwa || '(brak nazwy)'} × {p.ilosc}
+                      · {p.raw_name || p.towary?.nazwa || '(brak nazwy)'} × {p.ilosc} — brak dopasowanego towaru
                     </div>
                   ))}
                 </div>

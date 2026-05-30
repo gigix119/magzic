@@ -4,7 +4,7 @@ let _lineId = 0
  * Maps a form/extracted position to a pozycje_faktury INSERT payload.
  *
  * Whitelists only columns that actually exist in the pozycje_faktury table.
- * Deliberately excludes: jednostka, unit, warnings, matchScore, itemType,
+ * Excludes front-end-only fields: warnings, matchScore, matchingSource, itemType,
  * shouldAffectInventory, indeks, source, _isDraft, _key, etc.
  *
  * @param {object} poz - form position (from mapParsedPozycjaToFormPozycja or manual form)
@@ -20,6 +20,7 @@ export function mapPositionToInsertPayload(poz, fakturaId, wsDataFn = () => ({})
     ilosc: Number(poz.ilosc ?? poz.quantity ?? 0) || 0,
     cena_netto: Number(poz.cena_netto ?? poz.cenaNetto ?? poz.unitPriceNet ?? 0) || 0,
     vat_procent: Number(poz.vat_procent ?? poz.vat ?? 23) || 23,
+    jednostka: poz.jednostka || poz.unit || poz.jm || null,
     raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
     ...wsDataFn(),
   }
