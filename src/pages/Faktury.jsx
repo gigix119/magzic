@@ -29,6 +29,7 @@ import { findMatchingContractor, prepareContractorFromInvoice } from '../utils/c
 import { ensureContractorForInvoice } from '../utils/contractorService'
 import ContractorCombobox from '../components/ContractorCombobox'
 import { validateContractorFromPdf } from '../utils/invoiceVerificationStatus'
+import { lookupAliasesForItems, upsertAlias } from '../utils/invoiceAliasService'
 import { Plus, Bot, TrendingUp, Trash2 } from 'lucide-react'
 
 import { IS, emptyFak, emptyPoz, mkPos } from '../components/invoice/invoiceShared'
@@ -551,12 +552,18 @@ export default function Faktury() {
       }]).select('id, nazwa, jednostka, typ').single()
       if (error) throw error
 
-      setNExtractedItems(items => items.map((item, i) => i === nCreateProductFor
+      const _createdIdx = nCreateProductFor
+      setNExtractedItems(items => items.map((item, i) => i === _createdIdx
         ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: null, matchingSource: 'manual_created_from_invoice' }
         : item
       ))
       setTowary(prev => [...prev, created])
       addToast(`Utworzono towar i przypisano go do pozycji. Magazyn zwiększy się dopiero po zatwierdzeniu faktury.`, 'success')
+      // Learn alias for newly created product
+      if (workspaceId && _createdIdx !== null) {
+        const _rawName = nExtractedItems[_createdIdx]?.rawName
+        if (_rawName) upsertAlias(workspaceId, _rawName, created.id, supabase).catch(() => {})
+      }
       setNCreateProductFor(null)
     } catch (err) {
       addToast(`Błąd tworzenia towaru: ${err.message}`, 'error')
@@ -847,6 +854,36 @@ export default function Faktury() {
               skipped: false,
             }
           })
+
+          // ── Alias enrichment — one batch query, cache-first, zero N+1 ────────
+          if (workspaceId) {
+            try {
+              const aliasMap = await lookupAliasesForItems(
+                workspaceId,
+                matched.map(i => i.rawName).filter(Boolean),
+                supabase
+              )
+              if (aliasMap.size > 0) {
+                for (let _ai = 0; _ai < matched.length; _ai++) {
+                  const _hit = aliasMap.get(matched[_ai].rawName)
+                  if (!_hit) continue
+                  const _prod = towary.find(t => t.id === _hit.productId)
+                  if (!_prod) continue
+                  matched[_ai] = {
+                    ...matched[_ai],
+                    matchedProductId: _hit.productId,
+                    matchedProductNazwa: _prod.nazwa,
+                    matchScore: 1.0,
+                    matchingSource: 'alias_learned',
+                    aliasUsageCount: _hit.usageCount,
+                  }
+                }
+              }
+            } catch (_aliasErr) {
+              console.warn('[handleReadAI] alias lookup (non-critical):', _aliasErr?.message)
+            }
+          }
+
           const modelCfg = getInvoiceModelConfig()
           let shadowData = null
           if (modelCfg.mode !== 'off') {
@@ -1071,6 +1108,13 @@ export default function Faktury() {
         addToast(`Faktura ${fakNumerSaved} zapisana jako robocza — zatwierdź aby zaktualizować stany`, 'success')
       }
 
+      // Fire-and-forget: learn aliases for all confirmed positions with a product match
+      if (workspaceId) {
+        nPositions
+          .filter(p => (p.rawName || p.nazwa) && p._towarId)
+          .forEach(p => upsertAlias(workspaceId, p.rawName || p.nazwa, p._towarId, supabase).catch(() => {}))
+      }
+
       if (extractedResult && extractedResult.source !== 'manual') {
         try {
           const kontrahentNazwa =
@@ -1141,19 +1185,25 @@ export default function Faktury() {
     setEditPozNewTowarForm(f => ({ ...f, [field]: value }))
   }
 
-  function handleExtractedProductMatch(idx, towarId) {
+  function handleExtractedProductMatch(idx, towarId, rawName = '') {
     const towarNazwa = towarId ? towary.find(t => t.id === towarId)?.nazwa ?? null : null
     setNExtractedItems(items => items.map((it, i) => i === idx
       ? { ...it, matchedProductId: towarId, matchedProductNazwa: towarNazwa, matchScore: towarId ? 1.0 : 0, matchingSource: towarId ? 'manual_selected' : null }
       : it
     ))
+    if (towarId && rawName && workspaceId) {
+      upsertAlias(workspaceId, rawName, towarId, supabase).catch(() => {})
+    }
   }
 
-  function handleExtractedCandidateSelect(idx, towarId, towarNazwa, score) {
+  function handleExtractedCandidateSelect(idx, towarId, towarNazwa, score, rawName = '') {
     setNExtractedItems(items => items.map((it, i) => i === idx
       ? { ...it, matchedProductId: towarId, matchedProductNazwa: towarNazwa, matchScore: score, matchingSource: 'manual_selected' }
       : it
     ))
+    if (towarId && rawName && workspaceId) {
+      upsertAlias(workspaceId, rawName, towarId, supabase).catch(() => {})
+    }
   }
 
   function handleNewProductFormFieldChange(field, value) {

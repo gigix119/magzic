@@ -21,6 +21,7 @@ export const DEFAULT_INVOICE_MODEL_CONFIG = {
     productCategoryMatch: 0.10,
     productConflictPenalty: -0.35,
     productTfIdfScore: 0.15,
+    productAliasScore: 1.0,
 
     documentInventorySignals: 0.30,
     documentServiceSignals: 0.30,

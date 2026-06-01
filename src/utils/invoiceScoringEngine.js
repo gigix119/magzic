@@ -262,6 +262,12 @@ export function scoreProductCandidate(matchFeatures, config) {
   }
 
   // TF-IDF signal — additive boost when there is real token overlap in the index
+  // DB alias match — overrides all other signals (user-confirmed correction)
+  if (matchFeatures.aliasScore > 0) {
+    score += matchFeatures.aliasScore * (w.productAliasScore ?? 1.0)
+    reasons.push('db_alias_learned')
+  }
+
   if (matchFeatures.tfIdfScore > 0) {
     score += matchFeatures.tfIdfScore * (w.productTfIdfScore ?? 0.15)
     reasons.push(`tfidf:${Math.round(matchFeatures.tfIdfScore * 100)}%`)
@@ -289,6 +295,9 @@ export function rankProductCandidates(rawName, products, context, config) {
     return { best: null, candidates: [] }
   }
 
+  // Alias product from workspace DB (pre-resolved by caller, e.g. Faktury.jsx)
+  const aliasProductId = context?.aliasProductId || null
+
   // Compute TF-IDF scores once for the whole candidate set (cached per products reference)
   let tfIdfScoreMap = null
   try {
@@ -306,7 +315,9 @@ export function rankProductCandidates(rawName, products, context, config) {
       currentPrice: context?.cenaNetto,
       typicalPrice: context?.typicalPrice,
     })
-    // Attach TF-IDF score as an additional signal (0 when unavailable → no effect)
+    // Alias signal: 1.0 for the DB-confirmed product, 0 for all others
+    matchFeatures.aliasScore = (aliasProductId && product.id === aliasProductId) ? 1.0 : 0
+    // TF-IDF signal: additive boost from token overlap
     matchFeatures.tfIdfScore = tfIdfScoreMap?.get(product.id) ?? 0
     const { score, confidenceLabel, reasons, warnings } = scoreProductCandidate(matchFeatures, cfg)
     return { product, score, confidenceLabel, reasons, warnings, features: matchFeatures }

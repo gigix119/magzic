@@ -167,6 +167,9 @@ export default function InvoiceVerificationPanel({
                   {item.matchingSource === 'manual_created_from_invoice' && (
                     <span style={{ display: 'inline-block', marginLeft: 4, background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '0px 4px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
                   )}
+                  {item.matchingSource === 'alias_learned' && (
+                    <span style={{ display: 'inline-block', marginLeft: 4, background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '0px 4px', fontSize: 10, fontWeight: 600 }} title={`Alias z bazy — użyty ${item.aliasUsageCount ?? 1} razy`}>♻ Alias ({item.aliasUsageCount ?? 1}×)</span>
+                  )}
                   {item.matchingSource === 'manual_selected' && item.matchedProductId && (
                     <span style={{ display: 'inline-block', marginLeft: 4, background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>ręcznie</span>
                   )}
@@ -179,7 +182,7 @@ export default function InvoiceVerificationPanel({
               </div>
               <select
                 value={item.matchedProductId || ''}
-                onChange={e => onProductMatch(idx, e.target.value || null)}
+                onChange={e => onProductMatch(idx, e.target.value || null, item.rawName)}
                 style={{ ...IS(), fontSize: 11, padding: '5px 8px', marginBottom: 8 }}
                 disabled={item.skipped}
               >
@@ -289,6 +292,9 @@ export default function InvoiceVerificationPanel({
                       {item.matchingSource === 'manual_created_from_invoice' && (
                         <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
                       )}
+                      {item.matchingSource === 'alias_learned' && (
+                        <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }} title={`Learned alias — used ${item.aliasUsageCount ?? 1} times`}>♻ Alias ({item.aliasUsageCount ?? 1}×)</span>
+                      )}
                       {item.matchingSource === 'manual_selected' && item.matchedProductId && (
                         <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>wybrano ręcznie</span>
                       )}
@@ -336,7 +342,7 @@ export default function InvoiceVerificationPanel({
                   <td className="px-3 py-2" style={{ minWidth: 180 }}>
                     <select
                       value={item.matchedProductId || ''}
-                      onChange={e => onProductMatch(idx, e.target.value || null)}
+                      onChange={e => onProductMatch(idx, e.target.value || null, item.rawName)}
                       style={{ ...IS(), fontSize: 11, padding: '4px 8px' }}
                     >
                       <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
@@ -348,7 +354,7 @@ export default function InvoiceVerificationPanel({
                       <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>
                         Sugestia: <button
                           type="button"
-                          onClick={() => onProductMatch(idx, item._suggestedProductId)}
+                          onClick={() => onProductMatch(idx, item._suggestedProductId, item.rawName)}
                           style={{ color: '#d97706', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, padding: 0 }}
                         >
                           {item._suggestedProductNazwa}
@@ -362,7 +368,7 @@ export default function InvoiceVerificationPanel({
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => onCandidateSelect(idx, c.id, c.nazwa, c.score)}
+                            onClick={() => onCandidateSelect(idx, c.id, c.nazwa, c.score, item.rawName)}
                             title={`Pewność modelu: ${Math.round(c.score * 100)}%`}
                             style={{
                               color: c.score >= 0.7 ? '#6366f1' : '#94a3b8',
@@ -406,6 +412,8 @@ export default function InvoiceVerificationPanel({
                   <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
                     {item.matchingSource === 'manual_created_from_invoice'
                       ? <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
+                      : item.matchingSource === 'alias_learned'
+                      ? <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>♻ Alias</span>
                       : item.matchingSource === 'manual_selected'
                       ? <span style={{ background: '#f3f4f6', color: '#374151', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>ręcznie</span>
                       : item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
