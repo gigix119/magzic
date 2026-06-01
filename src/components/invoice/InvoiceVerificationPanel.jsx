@@ -173,6 +173,18 @@ export default function InvoiceVerificationPanel({
                   {item.matchingSource === 'manual_selected' && item.matchedProductId && (
                     <span style={{ display: 'inline-block', marginLeft: 4, background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>ręcznie</span>
                   )}
+                  {item.autoApproved && (
+                    <span style={{ display: 'inline-block', marginLeft: 4, background: '#dcfce7', color: '#14532d', borderRadius: 4, padding: '0px 4px', fontSize: 10, fontWeight: 700 }}>✓ Auto</span>
+                  )}
+                  {!item.autoApproved && item.confidenceLevel === 'high' && (
+                    <span style={{ display: 'inline-block', marginLeft: 4, background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>High</span>
+                  )}
+                  {item.confidenceLevel === 'medium' && (
+                    <span style={{ display: 'inline-block', marginLeft: 4, background: '#fef9c3', color: '#854d0e', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>Med</span>
+                  )}
+                  {item.confidenceLevel === 'low' && (
+                    <span style={{ display: 'inline-block', marginLeft: 4, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>Low</span>
+                  )}
                 </div>
                 {!item.skipped && (
                   <span style={{ background: statusCfg.bg, color: statusCfg.color, borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
@@ -410,13 +422,30 @@ export default function InvoiceVerificationPanel({
                     )}
                   </td>
                   <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
-                    {item.matchingSource === 'manual_created_from_invoice'
-                      ? <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
-                      : item.matchingSource === 'alias_learned'
-                      ? <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>♻ Alias</span>
-                      : item.matchingSource === 'manual_selected'
-                      ? <span style={{ background: '#f3f4f6', color: '#374151', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>ręcznie</span>
-                      : item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      {item.matchingSource === 'manual_created_from_invoice'
+                        ? <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
+                        : item.matchingSource === 'alias_learned'
+                        ? <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>♻ Alias</span>
+                        : item.matchingSource === 'manual_selected'
+                        ? <span style={{ background: '#f3f4f6', color: '#374151', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>ręcznie</span>
+                        : item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
+                      {item.autoApproved && (
+                        <span style={{ background: '#dcfce7', color: '#14532d', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700 }}>✓ Auto-approved</span>
+                      )}
+                      {!item.autoApproved && item.confidenceLevel === 'high' && (
+                        <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 9 }}>High Confidence</span>
+                      )}
+                      {item.confidenceLevel === 'medium' && (
+                        <span style={{ background: '#fef9c3', color: '#854d0e', borderRadius: 4, padding: '1px 5px', fontSize: 9 }}>Medium Confidence</span>
+                      )}
+                      {item.confidenceLevel === 'low' && (
+                        <span style={{ background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontSize: 9 }}>Low Confidence</span>
+                      )}
+                      {item.confidenceLevel === 'none' && item.matchedProductId && (
+                        <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: 4, padding: '1px 5px', fontSize: 9 }}>Needs Review</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-2 py-2">
                     <div className="flex flex-wrap gap-1 items-start justify-end" style={{ minWidth: 120 }}>

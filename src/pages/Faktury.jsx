@@ -22,6 +22,7 @@ import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import { logExtraction, addToReviewQueue } from '../utils/modelLogger'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
 import { getInvoiceModelConfig } from '../utils/invoiceModelConfig'
+import { calculateItemConfidence } from '../utils/invoiceConfidenceEngine'
 import { runShadowModelOnResult } from '../utils/invoiceScoringEngine'
 import { getAssignmentStatus, isReadyToSave, preparePositionsForInvoiceSave, preparePositionsForInvoiceDraft, recalculateInvoiceLineStatus } from '../utils/invoicePositionValidator'
 import { mapParsedPozycjaToFormPozycja, mapPositionToInsertPayload } from '../utils/invoiceLineMapper'
@@ -922,7 +923,22 @@ export default function Faktury() {
                 }
               })
             : matched
-          setNExtractedItems(enriched)
+          const withConfidence = enriched.map(item => {
+            try {
+              const cr = calculateItemConfidence(item, item._topCandidates || [])
+              return {
+                ...item,
+                confidence: cr.confidence,
+                confidenceLevel: cr.level,
+                confidenceReasons: cr.reasons,
+                confidenceBlockers: cr.blockers,
+                autoApproved: cr.autoApproved,
+              }
+            } catch {
+              return item
+            }
+          })
+          setNExtractedItems(withConfidence)
           setNShowExtracted(true)
           result.warnings.forEach(w => addToast(w, 'warning'))
           if (result.confidence >= 40) {

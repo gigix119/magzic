@@ -42,6 +42,12 @@ export const DEFAULT_INVOICE_MODEL_CONFIG = {
     validationWarningPenalty: -0.15,
     validationErrorPenalty: -0.35,
   },
+  confidenceThresholds: {
+    high: 0.9,
+    medium: 0.6,
+    autoApprove: 0.9,
+    aliasAutoApproveUsageCount: 3,
+  },
   trainedAt: null,
   trainedOn: {
     goldenSamples: 0,
@@ -70,6 +76,7 @@ export function getInvoiceModelConfig() {
       ...parsed,
       thresholds: { ...DEFAULT_INVOICE_MODEL_CONFIG.thresholds, ...parsed.thresholds },
       weights: { ...DEFAULT_INVOICE_MODEL_CONFIG.weights, ...parsed.weights },
+      confidenceThresholds: { ...DEFAULT_INVOICE_MODEL_CONFIG.confidenceThresholds, ...(parsed.confidenceThresholds || {}) },
     }
   } catch {
     return { ...DEFAULT_INVOICE_MODEL_CONFIG }
