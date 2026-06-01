@@ -20,6 +20,7 @@ export const DEFAULT_INVOICE_MODEL_CONFIG = {
     productHistoricalAlias: 0.30,
     productCategoryMatch: 0.10,
     productConflictPenalty: -0.35,
+    productTfIdfScore: 0.15,
 
     documentInventorySignals: 0.30,
     documentServiceSignals: 0.30,

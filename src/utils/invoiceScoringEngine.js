@@ -4,6 +4,23 @@ import {
   extractProductMatchFeatures,
 } from './invoiceFeatureExtractor.js'
 import { getInvoiceModelConfig } from './invoiceModelConfig.js'
+import { buildTfIdfIndex, queryTfIdf } from './invoiceTfIdf.js'
+
+// Module-level TF-IDF index cache — rebuilt only when the products array reference changes
+let _tfIdfProducts = null
+let _tfIdfIndex = null
+
+function getOrBuildTfIdfIndex(products) {
+  if (products === _tfIdfProducts && _tfIdfIndex !== null) return _tfIdfIndex
+  _tfIdfProducts = products
+  try {
+    _tfIdfIndex = buildTfIdfIndex(products)
+  } catch {
+    _tfIdfIndex = null
+    _tfIdfProducts = null
+  }
+  return _tfIdfIndex
+}
 
 const SERVICE_DOC_TYPES = new Set(['telecom_invoice', 'utility_invoice', 'service_cost_invoice'])
 
@@ -244,6 +261,12 @@ export function scoreProductCandidate(matchFeatures, config) {
     warnings.push('generic_name')
   }
 
+  // TF-IDF signal — additive boost when there is real token overlap in the index
+  if (matchFeatures.tfIdfScore > 0) {
+    score += matchFeatures.tfIdfScore * (w.productTfIdfScore ?? 0.15)
+    reasons.push(`tfidf:${Math.round(matchFeatures.tfIdfScore * 100)}%`)
+  }
+
   const finalScore = Math.max(0, Math.min(1, score))
   let confidenceLabel = 'weak'
   if (finalScore >= thr.productStrongMatch) confidenceLabel = 'strong'
@@ -266,6 +289,16 @@ export function rankProductCandidates(rawName, products, context, config) {
     return { best: null, candidates: [] }
   }
 
+  // Compute TF-IDF scores once for the whole candidate set (cached per products reference)
+  let tfIdfScoreMap = null
+  try {
+    const idx = getOrBuildTfIdfIndex(products)
+    if (idx) {
+      const tfResults = queryTfIdf(rawName, idx, products.length)
+      tfIdfScoreMap = new Map(tfResults.map(r => [r.productId, r.score]))
+    }
+  } catch { /* non-critical: TF-IDF failure must not break existing matching */ }
+
   const scored = products.map(product => {
     const matchFeatures = extractProductMatchFeatures(rawName, product, {
       unit: context?.unit,
@@ -273,6 +306,8 @@ export function rankProductCandidates(rawName, products, context, config) {
       currentPrice: context?.cenaNetto,
       typicalPrice: context?.typicalPrice,
     })
+    // Attach TF-IDF score as an additional signal (0 when unavailable → no effect)
+    matchFeatures.tfIdfScore = tfIdfScoreMap?.get(product.id) ?? 0
     const { score, confidenceLabel, reasons, warnings } = scoreProductCandidate(matchFeatures, cfg)
     return { product, score, confidenceLabel, reasons, warnings, features: matchFeatures }
   })
