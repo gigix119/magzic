@@ -555,7 +555,7 @@ export default function Faktury() {
 
       const _createdIdx = nCreateProductFor
       setNExtractedItems(items => items.map((item, i) => i === _createdIdx
-        ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: null, matchingSource: 'manual_created_from_invoice' }
+        ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: 1.0, matchingSource: 'manual_created_from_invoice' }
         : item
       ))
       setTowary(prev => [...prev, created])

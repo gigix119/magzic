@@ -50,8 +50,14 @@ export function mapParsedPozycjaToFormPozycja(poz, defaultMagazynId = null) {
   const itemType = poz.itemType || poz.item_type || 'inventory_item'
   const isService = itemType === 'service_item' || itemType === 'cost_item' || poz.shouldAffectInventory === false
   const matchScore = poz.matchScore ?? poz.confidence ?? 0
-  // Only trust the match if it meets the auto-assign threshold
-  const towarId = (poz.matchedProductId && matchScore >= 0.85) ? poz.matchedProductId : null
+  // Trust the match when the user explicitly selected/created a product, regardless of score.
+  // For auto-matched items only apply the 0.85 threshold.
+  const isExplicitMatch = poz.matchingSource === 'manual_selected' ||
+    poz.matchingSource === 'alias_learned' ||
+    poz.matchingSource === 'manual_created_from_invoice'
+  const towarId = (poz.matchedProductId && (isExplicitMatch || matchScore >= 0.85))
+    ? poz.matchedProductId
+    : null
 
   return {
     nazwa,
@@ -68,6 +74,7 @@ export function mapParsedPozycjaToFormPozycja(poz, defaultMagazynId = null) {
     indeks: poz.indeks || poz.sku || poz.index || poz.kod || '',
     source: 'pdf_extraction',
     matchScore,
+    matchingSource: poz.matchingSource || null,
   }
 }
 
