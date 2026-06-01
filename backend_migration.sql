@@ -206,12 +206,12 @@ SET search_path = public AS $$
 DECLARE
   admin_uid uuid;
 BEGIN
-  -- Znajdź administrator@blueapart.pl w auth.users
+  -- Znajdź your-admin@example.com w auth.users
   SELECT id INTO admin_uid FROM auth.users
-  WHERE email = 'administrator@blueapart.pl' LIMIT 1;
+  WHERE email = 'your-admin@example.com' LIMIT 1;
 
   IF admin_uid IS NULL THEN
-    RETURN 'administrator@blueapart.pl nie istnieje jeszcze w auth.users — uruchom po pierwszym zalogowaniu';
+    RETURN 'your-admin@example.com nie istnieje jeszcze w auth.users — uruchom po pierwszym zalogowaniu';
   END IF;
 
   -- KROK 1: Upsert profilu (INSERT jeśli nie istnieje, UPDATE jeśli istnieje)
@@ -254,7 +254,7 @@ BEGIN
         can_delete = true,
         updated_at = now();
 
-  RETURN 'OK: administrator@blueapart.pl — rola owner, status active (uid: ' || admin_uid::text || ')';
+  RETURN 'OK: your-admin@example.com — rola owner, status active (uid: ' || admin_uid::text || ')';
 END;
 $$;
 
@@ -264,18 +264,18 @@ SELECT public.bootstrap_admin_owner();
 -- Kontrola: profil admina
 SELECT id, email, role, status, updated_at
 FROM public.profiles
-WHERE email = 'administrator@blueapart.pl';
+WHERE email = 'your-admin@example.com';
 
 -- Kontrola: uprawnienia admina
 SELECT module_key, can_view, can_create, can_edit, can_delete
 FROM public.user_permissions
 WHERE user_id = (
-  SELECT id FROM public.profiles WHERE email = 'administrator@blueapart.pl'
+  SELECT id FROM public.profiles WHERE email = 'your-admin@example.com'
 )
 ORDER BY module_key;
 
 -- === 9. Trigger dla nowych użytkowników ===
--- Automatycznie ustawia rolę 'owner' dla administrator@blueapart.pl przy rejestracji
+-- Automatycznie ustawia rolę 'owner' dla your-admin@example.com przy rejestracji
 
 CREATE OR REPLACE FUNCTION public.handle_new_user_workspace()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -293,7 +293,7 @@ BEGIN
     NEW.email,
     NEW.raw_user_meta_data->>'first_name',
     NEW.raw_user_meta_data->>'last_name',
-    CASE WHEN NEW.email = 'administrator@blueapart.pl' THEN 'owner' ELSE 'user' END,
+    CASE WHEN NEW.email = 'your-admin@example.com' THEN 'owner' ELSE 'user' END,
     'active',
     now()
   )
@@ -302,14 +302,14 @@ BEGIN
         last_name  = EXCLUDED.last_name,
         email      = EXCLUDED.email,
         role = CASE
-          WHEN EXCLUDED.email = 'administrator@blueapart.pl' THEN 'owner'
+          WHEN EXCLUDED.email = 'your-admin@example.com' THEN 'owner'
           ELSE profiles.role
         END,
         status     = EXCLUDED.status,
         updated_at = now();
 
   -- Pełne uprawnienia dla administratora
-  IF NEW.email = 'administrator@blueapart.pl' THEN
+  IF NEW.email = 'your-admin@example.com' THEN
     INSERT INTO public.user_permissions (user_id, module_key, can_view, can_create, can_edit, can_delete)
     VALUES
       (NEW.id, 'dashboard',   true, true, true, true),
