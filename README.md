@@ -1,6 +1,6 @@
 # magzic — System zarządzania magazynem AI
 
-System magazynowy dla blueapart.pl zbudowany w React + Vite + Supabase.
+System magazynowy zbudowany w React + Vite + Supabase.
 
 ## Uruchomienie lokalne
 
@@ -24,3 +24,7 @@ Projekt jest wdrożony na Cloudflare Pages.
 Połączony z GitHub — każdy push na `main` automatycznie deployuje.
 
 
+## Konto admina
+
+Utwórz konto administratora w Supabase Dashboard → Authentication → Users → Add user,
+używając własnego adresu e-mail.
