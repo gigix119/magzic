@@ -1,37 +1,7 @@
-const TELECOM_SIGNALS = [
-  'usługi telekomunikacyjne', 'abonament', 'p4 sp', 'play', 'orange',
-  'numer konta klienta', 'twoje abonamenty', 'rozliczenie konta',
-  'opłaty naliczone', 'rodzina m 5g', 'zapłać online', 'obsługa klienta',
-]
-
-const UTILITY_SIGNALS = [
-  'energia elektryczna', 'gaz', 'woda i ścieki', 'tauron',
-  'pge', 'enea', 'energa', 'pgnig',
-  'prąd elektryczny', 'zużycie energii', 'odczyt licznika',
-  'innogy', 'e.on', 'polenergia', 'fortum',
-]
-
-const INVENTORY_SIGNALS = [
-  // Column headers / table structure signals
-  'cena jednostkowa', 'cena netto j', 'cena jedn',
-  'wartość netto', 'jm', 'j.m.', 'ilość szt',
-  'indeks', 'symbol towaru', 'kod towaru', 'ean', 'indeks towaru',
-  // Physical goods keywords
-  'syfon', 'bateria', 'listwa', 'żarówka', 'worki', 'papier toaletowy',
-  'clin', 'płyn do', 'silikon', 'kołki', 'śruby', 'wąż prysznicowy',
-  'materiały budowlane', 'artykuł', 'opakowanie',
-]
-
-const FORBIDDEN_AS_ITEM = [
-  'razem', 'suma', 'do zapłaty', 'wartość faktury',
-  'prosimy o wpłatę', 'zapłać online', 'termin płatności',
-  'forma płatności', 'przelew', 'numer konta', 'numer rachunku',
-  'obsługa klienta', 'zarządzaj kontem', 'twoje abonamenty',
-  'rozliczenie konta', 'saldo końcowe', 'wpłata',
-  'odcinek dla wpłacającego', 'opłać fakturę', 'zeskanuj kod',
-  'tytułem', 'nazwa odbiorcy', 'abonament za okres',
-  'opłaty naliczone w okresie', 'blankiet',
-]
+import {
+  TELECOM_SIGNALS, UTILITY_SIGNALS, INVENTORY_SIGNALS,
+  SERVICE_ITEM_KEYWORDS, FORBIDDEN_AS_ITEM,
+} from './invoiceConstants.js'
 
 export function classifyDocument(text, tableCandidates) {
   const lower = text.toLowerCase()
@@ -55,12 +25,6 @@ export function classifyDocument(text, tableCandidates) {
 }
 
 const SERVICE_DOC_TYPES = new Set(['telecom_invoice', 'utility_invoice', 'service_cost_invoice'])
-
-const SERVICE_ITEM_KEYWORDS = [
-  'usług', 'abonament', 'opłat', 'serwis', 'telekomunik', 'internet',
-  'energia elektryczna', 'gaz ziemny', 'woda i ścieki',
-  'licencj', 'subskrypcj', 'konsulting', 'doradztw', 'szkoleni',
-]
 
 export function classifyItem(item, documentType) {
   const text = (item.rawName || item.nazwa || '').toLowerCase()
