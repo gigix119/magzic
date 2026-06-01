@@ -9,7 +9,6 @@ import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import Modal from '../components/Modal'
-import Badge from '../components/Badge'
 import Spinner from '../components/Spinner'
 import InvoiceUploader from '../components/InvoiceUploader'
 import { zatwierdźFakturę, cofnijDoRoboczej } from '../utils/magazyn'
@@ -18,7 +17,7 @@ import { getPriceHistoryCached, analyzePriceHistory, generatePriceAlerts } from 
 import { findBestMatch, advancedSimilarity } from '../utils/productNormalizer'
 import { findProductByAlias, rememberProductAlias, rememberSupplierItemName, rememberTypicalPrice, getSupplierItemMapping, rememberSupplierContractorMapping, findSupplierContractorMapping } from '../utils/invoiceLearning'
 import { isInvoiceAiAvailable } from '../utils/invoiceAiAdapter'
-import { calculateInvoiceQualityMetrics, getQualityBadge, shouldRequireManualReview, getQualityWarnings } from '../utils/invoiceQualityMetrics'
+import { calculateInvoiceQualityMetrics, getQualityBadge } from '../utils/invoiceQualityMetrics'
 import { saveCorrectionEvent } from '../utils/invoiceCorrectionTracker'
 import { logExtraction, addToReviewQueue } from '../utils/modelLogger'
 import InvoiceLearningDebugPanel from '../components/InvoiceLearningDebugPanel'
@@ -29,57 +28,19 @@ import { mapParsedPozycjaToFormPozycja, mapPositionToInsertPayload } from '../ut
 import { findMatchingContractor, prepareContractorFromInvoice } from '../utils/contractorMatcher'
 import { ensureContractorForInvoice } from '../utils/contractorService'
 import ContractorCombobox from '../components/ContractorCombobox'
-import {
-  validateContractorFromPdf,
-  getVerificationStatusConfig,
-} from '../utils/invoiceVerificationStatus'
-import {
-  Plus, FileText, ChevronDown, ChevronUp, Trash2, Pencil,
-  Upload, Download, File, Image, Table2, X, Bot, CheckCircle2, TrendingUp, AlertTriangle,
-} from 'lucide-react'
+import { validateContractorFromPdf } from '../utils/invoiceVerificationStatus'
+import { Plus, Bot, TrendingUp, Trash2 } from 'lucide-react'
 
-const IS = (err) => ({
-  background: 'var(--input-bg)',
-  border: `1px solid ${err ? '#ef4444' : 'var(--border)'}`,
-  borderRadius: 8, color: 'var(--text)',
-  padding: '8px 12px', fontSize: 14, width: '100%', outline: 'none',
-})
-
-const emptyFak = {
-  numer: '',
-  kontrahent_id: '',
-  data_zakupu: new Date().toISOString().slice(0, 10),
-  typ: 'zakup',
-  magazyn_id: '',
-  notatki: '',
-}
-const emptyPoz = { towar_id: '', ilosc: '', cena_netto: '', vat_procent: 23, magazyn_id: '' }
-
-
-let _posKey = 0
-function mkPos(defaults = {}) {
-  return { _key: ++_posKey, nazwa: '', typ: '', ilosc: 1, jednostka: 'szt', cena_netto: 0, magazyn_id: '', ...defaults }
-}
-
-function fileIcon(url) {
-  if (!url) return null
-  const ext = url.split('?')[0].split('.').pop().toLowerCase()
-  if (ext === 'pdf') return <File size={14} style={{ color: '#f87171' }} />
-  if (ext === 'csv') return <Table2 size={14} style={{ color: '#4ade80' }} />
-  return <Image size={14} style={{ color: '#60a5fa' }} />
-}
-
-function typBadge(typ) {
-  const map = { zakup: ['blue', 'Zakup'], sprzedaz: ['green', 'Sprzedaż'], wz: ['yellow', 'WZ'], paragon: ['zinc', 'Paragon'] }
-  const [v, l] = map[typ] || ['zinc', typ]
-  return <Badge variant={v}>{l}</Badge>
-}
-
-function statusBadge(status) {
-  if (status === 'zatwierdzona') return <Badge variant="green">Zatwierdzona</Badge>
-  if (status === 'anulowana') return <Badge variant="red">Anulowana</Badge>
-  return <Badge variant="zinc">Robocza</Badge>
-}
+import { IS, emptyFak, emptyPoz, mkPos } from '../components/invoice/invoiceShared'
+import InvoiceList from '../components/invoice/InvoiceList'
+import InvoiceUpload from '../components/invoice/InvoiceUpload'
+import InvoiceEditorModal from '../components/invoice/InvoiceEditorModal'
+import InvoicePositionModal from '../components/invoice/InvoicePositionModal'
+import InvoiceEditPositionModal from '../components/invoice/InvoiceEditPositionModal'
+import InvoiceApproveModal from '../components/invoice/InvoiceApproveModal'
+import InvoiceDeleteRollbackModal from '../components/invoice/InvoiceDeleteRollbackModal'
+import InvoiceScoringPanel from '../components/invoice/InvoiceScoringPanel'
+import InvoiceVerificationPanel from '../components/invoice/InvoiceVerificationPanel'
 
 export default function Faktury() {
   const { addToast } = useToast()
@@ -133,7 +94,7 @@ export default function Faktury() {
   const [showZatwierdzModal, setShowZatwierdzModal] = useState(false)
   const [zatwierdzFak, setZatwierdzFak] = useState(null)
   const [nDraftZeroPriceConfirmed, setNDraftZeroPriceConfirmed] = useState(false)
-  const [nCreateProductFor, setNCreateProductFor] = useState(null) // item index
+  const [nCreateProductFor, setNCreateProductFor] = useState(null)
   const [nNewProductForm, setNNewProductForm] = useState({ nazwa: '', jednostka: 'szt', typ: 'towar', kategoria_id: '' })
   const [nNewProductSaving, setNNewProductSaving] = useState(false)
   const [nNewProductDupeWarning, setNNewProductDupeWarning] = useState(null)
@@ -184,10 +145,6 @@ export default function Faktury() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData() }, [workspaceId])
-
-  function totalNetto(fakId) {
-    return (pozycje[fakId] || []).reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
-  }
 
   // ── Edit existing invoice ──────────────────────────────────────
   function openEditFak(fak) {
@@ -248,12 +205,10 @@ export default function Faktury() {
   }
 
   async function handleDeleteFak(fak) {
-    // Check for linked warehouse movements before deciding on delete path
     const { count, error: checkErr } = await countInvoiceMovements(fak.id, supabase)
     if (checkErr) { addToast('Błąd sprawdzania ruchów magazynowych. Spróbuj ponownie.', 'error'); return }
 
     if (count > 0) {
-      // Has movements → open the "Cofnij i usuń" modal instead of a plain toast
       setCofnijDeleteFak(fak)
       setCofnijDeleteRuchyCount(count)
       setCofnijDeleteConfirmed(false)
@@ -261,7 +216,6 @@ export default function Faktury() {
       return
     }
 
-    // No movements → simple safe delete with window.confirm
     if (!window.confirm(`Usunąć fakturę "${fak.numer}"? Usunie też wszystkie pozycje.`)) return
     const result = await safeDeleteInvoice(fak.id, supabase)
     if (!result.success) {
@@ -282,11 +236,9 @@ export default function Faktury() {
 
     let result
     if (fakStatus === 'robocza') {
-      // Inconsistent state: draft invoice with orphan movements — remove ruchy then delete
       const draftResult = await deleteDraftInvoiceWithOrphanMovements(fakId, supabase)
       result = { ...draftResult, rolledBack: false }
     } else {
-      // Approved invoice: full inventory rollback then delete
       result = await deleteInvoiceWithInventoryRollback(fakId, supabase, cofnijDoRoboczej)
     }
 
@@ -304,7 +256,6 @@ export default function Faktury() {
       )
       fetchData()
     } else if (result.rolledBack) {
-      // Applicable only for 'zatwierdzona' path: invoice is now 'robocza', reload
       addToast(result.error, 'error')
       fetchData()
     } else {
@@ -356,15 +307,6 @@ export default function Faktury() {
     const { error } = await supabase.from('pozycje_faktury').delete().eq('id', poz.id)
     if (error) { console.error(error); addToast(error.message, 'error') }
     else { addToast('Pozycja usunięta', 'success'); fetchData() }
-  }
-
-  function getPosBadge(poz, fak) {
-    if (!poz.towar_id) return { label: 'Robocza', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
-    const status = recalculateInvoiceLineStatus(poz, { towary, fakturaDefaultMagazynId: fak?.magazyn_id || null })
-    if (status.inventoryImpactStatus === 'ready') return { label: 'Gotowa', bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' }
-    if (status.inventoryImpactStatus === 'blocked') return { label: 'Niekompletna', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
-    if (status.inventoryImpactStatus === 'none') return { label: 'Koszt', bg: '#f0f9ff', color: '#0369a1', border: '#bae6fd' }
-    return { label: 'Robocza', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
   }
 
   function openEditPoz(poz, fak) {
@@ -480,7 +422,6 @@ export default function Faktury() {
 
   function handleContractorChange(val) {
     setNContractorValue(val)
-    // Keep nForm.kontrahent_id in sync for existing-contractor case
     setNForm(f => ({ ...f, kontrahent_id: val?.existingId || '' }))
   }
 
@@ -588,7 +529,6 @@ export default function Faktury() {
     if (!form.nazwa.trim()) { addToast('Podaj nazwę towaru', 'error'); return }
     setNNewProductSaving(true)
     try {
-      // Check for similar existing products first
       if (!nNewProductDupeWarning) {
         const { data: dupes } = await supabase.from('towary')
           .select('id, nazwa')
@@ -601,7 +541,6 @@ export default function Faktury() {
           return
         }
       }
-      // Create product
       const { data: created, error } = await supabase.from('towary').insert([{
         nazwa: form.nazwa.trim(),
         jednostka: form.jednostka || 'szt',
@@ -612,7 +551,6 @@ export default function Faktury() {
       }]).select('id, nazwa, jednostka, typ').single()
       if (error) throw error
 
-      // Update the item in nExtractedItems
       setNExtractedItems(items => items.map((item, i) => i === nCreateProductFor
         ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: null, matchingSource: 'manual_created_from_invoice' }
         : item
@@ -630,7 +568,6 @@ export default function Faktury() {
     const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
     const active = nExtractedItems.filter(item => !item.skipped)
 
-    // Build candidate positions for validation — use mapper to enforce score threshold
     const candidatePositions = active.map(item => {
       const mapped = mapParsedPozycjaToFormPozycja(item, defaultMag)
       return mkPos({ ...mapped, typ: '' })
@@ -649,7 +586,6 @@ export default function Faktury() {
       return
     }
 
-    // Learning — remember confirmed product mappings for ready positions (score >= 0.85 only)
     const supplierNip = nExtractionResult?.fields?.kontrahent_nip
     const supplierId = nForm.kontrahent_id
     for (const item of active) {
@@ -665,7 +601,6 @@ export default function Faktury() {
     setNShowExtracted(false)
     setNShowForm(true)
 
-    // Auto-analyze prices for matched positions
     const initData = {}
     readyToSave.forEach(pos => {
       if (pos._towarId) initData[pos._key] = { loading: true }
@@ -684,7 +619,6 @@ export default function Faktury() {
     const defaultMag = nForm.magazyn_id || magazyny[0]?.id || ''
     const active = nExtractedItems.filter(item => !item.skipped)
 
-    // Take items that are NOT already ready (those go via commitExtractedItems)
     const draftCandidates = active.filter(item => {
       const s = getAssignmentStatus(item, towary)
       return s === 'needs_review' || s === 'needs_product' || s === 'needs_price' || s === 'service_cost'
@@ -695,14 +629,12 @@ export default function Faktury() {
       return
     }
 
-    // Check for zero-price items requiring explicit confirmation
     const hasZeroPrice = draftCandidates.some(i => !((i.unitPriceNet ?? 0) > 0))
     if (hasZeroPrice && !nDraftZeroPriceConfirmed) {
       addToast('Część pozycji ma cenę 0. Zaznacz potwierdzenie przed dodaniem.', 'error')
       return
     }
 
-    // Use mapper to normalize fields — _towarId only set when score >= 0.85, preventing "towar a" bug
     const candidatePositions = draftCandidates.map(item => {
       const mapped = mapParsedPozycjaToFormPozycja(item, defaultMag)
       return mkPos({ ...mapped, typ: '', shouldAffectInventory: false, _isDraft: true, invoiceLineStatus: 'review_required' })
@@ -782,7 +714,6 @@ export default function Faktury() {
       const result = await extractFromFile(nFile)
       result._fileName = nFile.name
 
-      // Fire-and-forget extraction log to Supabase
       const _processingMs = Date.now() - _extractionStartMs
       const _logStatus = result.confidence >= 85 ? 'success'
         : result.confidence >= 60 ? 'partial'
@@ -817,12 +748,9 @@ export default function Faktury() {
       if (result.source === 'pdf_text') {
         setNExtractStatus('Znaleziono tekst w PDF — sprawdź dane')
 
-        // Fill header fields
         if (result.fields.numer) setNForm(f => ({ ...f, numer: result.fields.numer }))
         if (result.fields.data_zakupu) setNForm(f => ({ ...f, data_zakupu: result.fields.data_zakupu }))
 
-        // Contractor detection & matching from loaded list (no extra network call)
-        // Entire block is wrapped in try-catch — contractor detection must never block invoice import
         setNContractorNipWarning(null)
         try {
           const pdfCandidate = prepareContractorFromInvoice(result)
@@ -831,7 +759,6 @@ export default function Faktury() {
 
             if (!nipOk && nipOk !== null) setNContractorNipWarning(`NIP ${pdfCandidate.nip} — niepoprawna suma kontrolna`)
 
-            // Check learned mapping from previous manual selections (highest priority after NIP validation)
             const learnedMapping = findSupplierContractorMapping(pdfCandidate.nazwa, pdfCandidate.nip)
             const learnedContractor = learnedMapping ? kontrahenci.find(k => k.id === learnedMapping.contractorId) : null
 
@@ -842,7 +769,6 @@ export default function Faktury() {
                 addToast(`NIP kontrahenta ma niepoprawną sumę kontrolną — sprawdź ręcznie.`, 'warning')
               }
             } else if (!contractorValid) {
-              // Generic name — require manual selection
               addToast('Nie udało się pewnie odczytać nazwy kontrahenta — wybierz ręcznie.', 'warning')
             } else {
               if (contractorWarnings.length > 0 && nipOk === false) {
@@ -863,7 +789,6 @@ export default function Faktury() {
                   addToast(`Dopasowano kontrahenta po nazwie: ${matchResult.match.nazwa} — sprawdź NIP.`, 'warning')
                 }
               } else if (matchResult.suggestions?.length > 0) {
-                // Ambiguous — multiple candidates, let user pick
                 handleContractorChange({ existingId: null, candidate: pdfCandidate, matchStatus: 'new_from_pdf' })
                 const hint = pdfCandidate.nazwa || pdfCandidate.nip
                 addToast(`Znaleziono kilka możliwych kontrahentów dla: ${hint} — wybierz ręcznie.`, 'warning')
@@ -874,7 +799,6 @@ export default function Faktury() {
               }
             }
           } else {
-            // No contractor detected — user must pick manually, invoice extraction continues
             addToast('Nie udało się pewnie odczytać kontrahenta — wybierz ręcznie.', 'warning')
           }
         } catch (contractorErr) {
@@ -887,17 +811,14 @@ export default function Faktury() {
         setQualityMetrics(calculateInvoiceQualityMetrics(result))
         setExtractedResult(result)
 
-        // Use structurally-parsed items (already in result.fields.pozycje)
         setNExtractStatus('Dopasowuję pozycje do towarów…')
         const rawItems = result.fields.pozycje || []
         if (rawItems.length > 0) {
           const supplierNip = result.fields.kontrahent_nip
           const matched = rawItems.map(item => {
-            // Service items don't get matched to warehouse products (Etap 5)
             if (item.itemType === 'service_item' || item.shouldAffectInventory === false) {
               return { ...item, matchedProductId: null, matchedProductNazwa: null, matchScore: 0, skipped: false }
             }
-            // Check learning alias first
             const aliasId = findProductByAlias(item.rawName)
             const supplierAliasId = supplierNip ? getSupplierItemMapping(supplierNip, item.rawName) : null
             const knownId = aliasId || supplierAliasId
@@ -907,15 +828,13 @@ export default function Faktury() {
                 return { ...item, matchedProductId: knownId, matchedProductNazwa: knownProduct.nazwa, matchScore: 1.0, skipped: false }
               }
             }
-            // Advanced similarity with diacritics + tech params
             let bestScore = 0
             let bestProduct = null
             for (const towar of towary) {
-              if (!towar.nazwa || towar.nazwa.trim().length < 2) continue // skip garbage product names
+              if (!towar.nazwa || towar.nazwa.trim().length < 2) continue
               const { score } = advancedSimilarity(item.rawName, towar)
               if (score > bestScore) { bestScore = score; bestProduct = towar }
             }
-            // Threshold 0.85 for auto-match; 0.65–0.84 = suggestion only; <0.65 = no match
             const autoMatch = bestScore >= 0.85
             const hasSuggestion = !autoMatch && bestScore >= 0.65
             return {
@@ -928,8 +847,6 @@ export default function Faktury() {
               skipped: false,
             }
           })
-          // Shadow model: run once on full extraction result for rich suggestions
-          // Provides product candidates, item-type classification, and doc-type scores.
           const modelCfg = getInvoiceModelConfig()
           let shadowData = null
           if (modelCfg.mode !== 'off') {
@@ -985,7 +902,7 @@ export default function Faktury() {
               )
             }
           }
-          return // exit — Phase 1.5 takes over
+          return
         }
       } else {
         setNExtractStatus('Wypełnij dane ręcznie')
@@ -1035,7 +952,6 @@ export default function Faktury() {
       const { data: dupCheck } = await supabase.from('faktury').select('id').eq('numer', nForm.numer.trim()).maybeSingle()
       if (dupCheck) { addToast('Faktura o tym numerze już istnieje', 'error'); setNSaving(false); return }
 
-      // 0. Resolve / create contractor
       let fakturaKontrahentId = nForm.kontrahent_id || null
       if (!fakturaKontrahentId && nContractorValue?.candidate?.nazwa?.trim()) {
         try {
@@ -1065,7 +981,6 @@ export default function Faktury() {
         return
       }
 
-      // Remember contractor mapping for future automatic matching
       try {
         const resolvedContractor = kontrahenci.find(k => k.id === fakturaKontrahentId)
         const detectedName = extractedResult?.fields?.kontrahent_nazwa || nContractorValue?.candidate?.nazwa
@@ -1075,7 +990,6 @@ export default function Faktury() {
         }
       } catch { /* non-critical */ }
 
-      // 1. Upload file to storage
       let plik_url = null
       if (nFile) {
         const path = `${Date.now()}-${nFile.name.replace(/[^a-z0-9._-]/gi, '_')}`
@@ -1085,7 +999,6 @@ export default function Faktury() {
         else { const { data: u } = supabase.storage.from('faktury-pliki').getPublicUrl(up.path); plik_url = u.publicUrl }
       }
 
-      // 2. Insert faktura as 'robocza' (stock updated only on approval)
       const { data: fakData, error: fakErr } = await supabase.from('faktury').insert([{
         numer: nForm.numer.trim(),
         kontrahent_id: fakturaKontrahentId,
@@ -1099,7 +1012,6 @@ export default function Faktury() {
       }]).select().single()
       if (fakErr) throw fakErr
 
-      // 3. Process each position (no stock updates — those happen on approval)
       let pozSaveErrors = 0
       let pozSaveTotal = 0
       let pozSkipped = 0
@@ -1111,32 +1023,26 @@ export default function Faktury() {
           continue
         }
 
-        // Use explicit match from extraction
         let towarId = poz._towarId || null
 
-        // For non-draft positions: try to find by typ (manual form only)
         if (!towarId && !poz._isDraft && poz.shouldAffectInventory !== false && poz.typ?.trim()) {
           const { data: found } = await supabase.from('towary')
             .select('id').ilike('typ', poz.typ.trim()).eq('aktywny', true).limit(1).maybeSingle()
           if (found) towarId = found.id
         }
 
-        // Draft / service / review lines → insert with towar_id=null (no auto-create)
-        // Non-draft without towar → skip (do not auto-create, rule: NIE twórz towarów automatycznie)
         if (!towarId && !poz._isDraft && poz.shouldAffectInventory !== false) {
           console.warn('[faktury] Pominięto pozycję bez towaru:', poz.nazwa)
           continue
         }
 
         pozSaveTotal++
-        // Insert position — use whitelisted payload (no undefined columns sent to DB)
         const insertPayload = mapPositionToInsertPayload(
           { ...poz, _towarId: towarId },
           fakData.id,
           wsData
         )
         let { error: pozInsertErr } = await supabase.from('pozycje_faktury').insert([insertPayload])
-        // Fallback: if optional columns (jednostka, raw_name) don't exist yet (migrations not run), retry without them
         if (pozInsertErr && (
           pozInsertErr.code === '42703' ||
           pozInsertErr.message?.includes('raw_name') ||
@@ -1153,7 +1059,6 @@ export default function Faktury() {
         }
       }
 
-      // Summary toast — one message instead of N error toasts per failed position
       const fakNumerSaved = nForm.numer.trim()
       if (pozSkipped > 0) {
         console.info(`[faktury] ${pozSkipped} pozycji pominięto jako puste (empty_invoice_item_skipped)`)
@@ -1166,7 +1071,6 @@ export default function Faktury() {
         addToast(`Faktura ${fakNumerSaved} zapisana jako robocza — zatwierdź aby zaktualizować stany`, 'success')
       }
 
-      // Correction tracking — diff what parser extracted vs what user approved
       if (extractedResult && extractedResult.source !== 'manual') {
         try {
           const kontrahentNazwa =
@@ -1195,13 +1099,11 @@ export default function Faktury() {
     setNSaving(false)
   }
 
-  // DEV-only: delete the last N test invoices (numer starts with TEST or DEV)
   async function handleDevDeleteTestInvoices() {
     if (!import.meta.env.DEV) return
     const testFaktury = faktury.filter(f => /^(TEST|DEV)/i.test(f.numer || ''))
     if (testFaktury.length === 0) { addToast('Brak faktur testowych (numer zaczyna się od TEST lub DEV)', 'info'); return }
     const ids = testFaktury.map(f => f.id)
-    // Clean up children first: ruchy_magazynowe (DEV-safe), then pozycje_faktury, then faktury
     await supabase.from('ruchy_magazynowe').delete().in('faktura_id', ids)
     await supabase.from('pozycje_faktury').delete().in('faktura_id', ids)
     const { error } = await supabase.from('faktury').delete().in('id', ids)
@@ -1209,6 +1111,61 @@ export default function Faktury() {
     addToast(`Usunięto ${ids.length} faktur testowych`, 'success')
     fetchData()
   }
+
+  // ── Thin wrappers for component prop interfaces ───────────────
+
+  function handleFakFormFieldChange(field, value) {
+    setFakForm(f => ({ ...f, [field]: value }))
+  }
+
+  function handlePozFieldChange(field, value) {
+    setPozForm(f => ({ ...f, [field]: value }))
+  }
+
+  function handlePozTowarChange(towarId) {
+    const t = towary.find(x => x.id === towarId)
+    setPozForm(f => ({ ...f, towar_id: towarId, _jednostka: t?.jednostka || '' }))
+  }
+
+  function handleEditPozFieldChange(field, value) {
+    setEditPozForm(f => ({ ...f, [field]: value }))
+  }
+
+  function handleEditPozTowarChange(towarId) {
+    const t = towary.find(x => x.id === towarId)
+    setEditPozForm(f => ({ ...f, towar_id: towarId, is_service: !towarId }))
+    if (t) setEditPozNewTowarForm(v => ({ ...v, nazwa: t.nazwa }))
+  }
+
+  function handleEditPozNewTowarFieldChange(field, value) {
+    setEditPozNewTowarForm(f => ({ ...f, [field]: value }))
+  }
+
+  function handleExtractedProductMatch(idx, towarId) {
+    const towarNazwa = towarId ? towary.find(t => t.id === towarId)?.nazwa ?? null : null
+    setNExtractedItems(items => items.map((it, i) => i === idx
+      ? { ...it, matchedProductId: towarId, matchedProductNazwa: towarNazwa, matchScore: towarId ? 1.0 : 0, matchingSource: towarId ? 'manual_selected' : null }
+      : it
+    ))
+  }
+
+  function handleExtractedCandidateSelect(idx, towarId, towarNazwa, score) {
+    setNExtractedItems(items => items.map((it, i) => i === idx
+      ? { ...it, matchedProductId: towarId, matchedProductNazwa: towarNazwa, matchScore: score, matchingSource: 'manual_selected' }
+      : it
+    ))
+  }
+
+  function handleNewProductFormFieldChange(field, value) {
+    setNNewProductForm(f => ({ ...f, [field]: value }))
+  }
+
+  function handleCloseCreateProduct() {
+    setNCreateProductFor(null)
+    setNNewProductDupeWarning(null)
+  }
+
+  // ─────────────────────────────────────────────────────────────
 
   if (loading) return <Spinner />
 
@@ -1244,195 +1201,21 @@ export default function Faktury() {
         </div>
       </div>
 
-      {/* Faktury list */}
-      <div className="space-y-2">
-        {faktury.length === 0 ? (
-          <div className="text-center py-16 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--muted)' }}>
-            <FileText size={40} className="mx-auto mb-3 opacity-30" />
-            <p>Brak faktur</p>
-          </div>
-        ) : (
-          faktury.map(fak => {
-            const isOpen = expanded === fak.id
-            const poz = pozycje[fak.id] || []
-            const total = totalNetto(fak.id)
-            return (
-              <div key={fak.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-3 px-5 py-4 faktura-card-row" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
-                  <button className="flex-1 flex items-center gap-3 text-left min-w-0" onClick={() => setExpanded(isOpen ? null : fak.id)}>
-                    <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 38, height: 38, background: 'rgba(59,130,246,0.1)' }}>
-                      <FileText size={16} style={{ color: '#3b82f6' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fak.numer}</span>
-                        {typBadge(fak.typ)}
-                        {statusBadge(fak.status)}
-                        {fak.plik_url && <span className="flex items-center gap-1" title="Załączony plik">{fileIcon(fak.plik_url)}</span>}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs" style={{ color: 'var(--text-2)' }}>{fak.kontrahenci?.nazwa || '—'}</span>
-                        <span style={{ color: 'var(--muted)' }}>·</span>
-                        <span className="text-xs" style={{ color: 'var(--text-2)' }}>{fak.data_zakupu}</span>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0 mr-2">
-                      <p className="font-medium text-sm" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>
-                        {total.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł
-                      </p>
-                      <p className="text-xs" style={{ color: 'var(--muted)' }}>{poz.length} poz.</p>
-                    </div>
-                    {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}
-                  </button>
-
-                  <div className="flex items-center gap-1 flex-shrink-0 faktura-row-actions">
-                    {fak.status === 'robocza' && (
-                      <>
-                        <button onClick={() => handleZatwierdz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#22c55e', minHeight: 36 }} title="Zatwierdź fakturę">
-                          <CheckCircle2 size={12} /> Zatwierdź
-                        </button>
-                        <button onClick={() => openAddPoz(fak)} className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }} title="Dodaj pozycję">
-                          <Plus size={12} /> Dodaj poz.
-                        </button>
-                        {fak.plik_url && (
-                          <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center justify-center" style={{ color: '#3b82f6', minHeight: 36, minWidth: 36 }} title="Pobierz plik">
-                            <Download size={13} />
-                          </a>
-                        )}
-                        <button onClick={() => openEditFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                        <button onClick={() => handleDeleteFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
-                      </>
-                    )}
-                    {fak.status === 'zatwierdzona' && (
-                      <>
-                        <button
-                          onClick={() => setExpanded(isOpen ? null : fak.id)}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                          style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }}
-                        >
-                          {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Pozycje
-                        </button>
-                        <button
-                          onClick={() => handleCofnij(fak)}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                          style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid #fcd34d', minHeight: 36 }}
-                          title="Cofnij do roboczej i odwróć stany magazynowe"
-                        >
-                          Cofnij
-                        </button>
-                      </>
-                    )}
-                    {fak.status === 'anulowana' && (
-                      <>
-                        {fak.plik_url && (
-                          <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center justify-center" style={{ color: '#3b82f6', minHeight: 36, minWidth: 36 }} title="Pobierz plik">
-                            <Download size={13} />
-                          </a>
-                        )}
-                        <button onClick={() => handleDeleteFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {isOpen && (
-                  <div style={{ borderTop: '1px solid var(--border)' }}>
-                    {poz.length > 0 ? (
-                      <div className="table-scroll-x">
-                      <table className="w-full text-sm" style={{ minWidth: 480 }}>
-                        <thead>
-                          <tr style={{ background: 'var(--table-sub)' }}>
-                            <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
-                            <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Ilość</th>
-                            <th className="text-right px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Jednostka</th>
-                            <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena netto</th>
-                            <th className="text-right px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>VAT%</th>
-                            <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Suma netto</th>
-                            <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
-                            <th className="px-3 py-2.5" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {poz.map(p => {
-                            const badge = getPosBadge(p, fak)
-                            return (
-                            <tr key={p.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                              <td className="px-5 py-3" style={{ color: 'var(--text)' }}>
-                                {(() => {
-                                  // Guard: treat product names shorter than 2 chars (e.g. "a") as unassigned
-                                  const productName = (p.towary?.nazwa?.length >= 2) ? p.towary.nazwa : null
-                                  const displayNazwa = productName || p.raw_name || p.rawName || p.nazwa || null
-                                  if (!displayNazwa) {
-                                    return <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>(brak towaru)</span>
-                                  }
-                                  return (
-                                    <div>
-                                      <div style={{ fontWeight: 500, fontSize: 13 }}>{displayNazwa}</div>
-                                      {productName && (p.raw_name || p.rawName) && productName !== (p.raw_name || p.rawName) && (
-                                        <div style={{ fontSize: 10, color: 'var(--text-2)' }}>PDF: {p.raw_name || p.rawName}</div>
-                                      )}
-                                      {(p.indeks || p.sku) && (
-                                        <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-2)', marginTop: 1 }}>{p.indeks || p.sku}</div>
-                                      )}
-                                    </div>
-                                  )
-                                })()}
-                              </td>
-                              <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{p.ilosc}</td>
-                              <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
-                                {p.jednostka || (p.towary?.nazwa?.length >= 2 ? p.towary?.jednostka : null) || '—'}
-                              </td>
-                              <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{Number(p.cena_netto).toFixed(2)} zł</td>
-                              <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.vat_procent ?? 23}%</td>
-                              <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{(Number(p.ilosc) * Number(p.cena_netto)).toFixed(2)} zł</td>
-                              <td className="px-4 py-3 hidden sm:table-cell">
-                                <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
-                                  {badge.label}
-                                </span>
-                              </td>
-                              <td className="px-3 py-3 text-right">
-                                {fak.status === 'robocza' && (
-                                  <div className="flex gap-1 justify-end">
-                                    <button onClick={() => openEditPoz(p, fak)} className="p-1 rounded" style={{ color: 'var(--text-2)' }} title="Edytuj pozycję"><Pencil size={12} /></button>
-                                    <button onClick={() => handleDeletePoz(p)} className="p-1 rounded" style={{ color: '#dc2626' }} title="Usuń pozycję"><Trash2 size={12} /></button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                            )
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr style={{ borderTop: '1px solid var(--border)' }}>
-                            <td colSpan={6} className="px-5 py-3 text-right text-sm font-medium" style={{ color: 'var(--text-2)' }}>Razem netto:</td>
-                            <td className="px-5 py-3 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{total.toFixed(2)} zł</td>
-                            <td />
-                          </tr>
-                        </tfoot>
-                      </table>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>Brak pozycji</p>
-                    )}
-
-                    <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
-                      <button onClick={() => openAddPoz(fak)} className="flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                        <Plus size={12} /> Dodaj pozycję
-                      </button>
-                    </div>
-
-                    {fak.notatki && (
-                      <div className="px-5 py-3 text-sm" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                        <span className="font-medium" style={{ color: 'var(--muted)' }}>Notatki: </span>{fak.notatki}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })
-        )}
-      </div>
+      <InvoiceList
+        faktury={faktury}
+        pozycje={pozycje}
+        expanded={expanded}
+        towary={towary}
+        magazyny={magazyny}
+        onToggleExpand={fakId => setExpanded(expanded === fakId ? null : fakId)}
+        onZatwierdz={handleZatwierdz}
+        onCofnij={handleCofnij}
+        onDeleteFak={handleDeleteFak}
+        onEditFak={openEditFak}
+        onAddPoz={openAddPoz}
+        onEditPoz={openEditPoz}
+        onDeletePoz={handleDeletePoz}
+      />
 
       {/* ════════════════════════════════════════════════════════════
           NEW AI INVOICE MODAL
@@ -1445,797 +1228,49 @@ export default function Faktury() {
         >
           {!nShowForm && !nShowExtracted ? (
             /* Phase 1: Upload zone */
-            <div className="space-y-4">
-              <InvoiceUploader
-                file={nFile}
-                onFileSelect={f => { setNFile(f); setNAiCount(0) }}
-                onClear={() => setNFile(null)}
-                onAnalyze={handleReadAI}
-                analyzing={nAiLoading}
-                analyzed={nAiCount > 0}
-                statusText={nExtractStatus}
-              />
-              <div className="text-center pt-1">
-                <button
-                  type="button"
-                  onClick={goToManualForm}
-                  className="text-xs"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  Pomiń — wypełnij ręcznie
-                </button>
-              </div>
-            </div>
+            <InvoiceUpload
+              file={nFile}
+              onFileSelect={f => { setNFile(f); setNAiCount(0) }}
+              onClear={() => setNFile(null)}
+              onAnalyze={handleReadAI}
+              analyzing={nAiLoading}
+              analyzed={nAiCount > 0}
+              statusText={nExtractStatus}
+              onSkipToManual={goToManualForm}
+            />
           ) : nShowExtracted && !nShowForm ? (
             /* Phase 1.5: Extracted items review */
-            <div>
-              {/* Source badge + AI availability */}
-              {nExtractionResult && (
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    background: nExtractionResult.source === 'pdf_text_ai' ? '#eff6ff' : '#f0fdf4',
-                    color: nExtractionResult.source === 'pdf_text_ai' ? '#1d4ed8' : '#15803d',
-                    border: `1px solid ${nExtractionResult.source === 'pdf_text_ai' ? '#bfdbfe' : '#bbf7d0'}`,
-                    borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 600,
-                  }}>
-                    {nExtractionResult.source === 'pdf_text_ai' ? '🤖 Odczyt lokalny + AI' :
-                     nExtractionResult.source === 'pdf_text' ? '📄 Odczyt lokalny' :
-                     '✍️ Wymaga ręcznej weryfikacji'}
-                  </span>
-                  {!isInvoiceAiAvailable() && nExtractionResult.source !== 'pdf_text_ai' && (
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>AI premium nie jest skonfigurowane</span>
-                  )}
-                </div>
-              )}
-              {/* Document type banner */}
-              {nExtractionResult?.documentType === 'inventory_purchase_invoice' && (
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#166534' }}>
-                  <strong>Faktura zakupowa magazynowa</strong> — po zatwierdzeniu pozycje oznaczone jako <strong>Towar</strong> mogą zwiększyć stany magazynowe.
-                </div>
-              )}
-              {nExtractionResult?.documentType && ['telecom_invoice','utility_invoice','service_cost_invoice'].includes(nExtractionResult.documentType) && (
-                <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#92400e' }}>
-                  <strong>Faktura usługowa/kosztowa</strong> — pozycje nie zwiększą stanów magazynowych. Zostaną zapisane jako koszty.
-                </div>
-              )}
-              {nExtractionResult?.documentType === 'unknown' && nExtractedItems.some(i => i.itemType === 'inventory_item') && nExtractedItems.some(i => i.itemType === 'service_item') && (
-                <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#0369a1' }}>
-                  <strong>Faktura mieszana</strong> — tylko pozycje oznaczone jako <strong>Towar</strong> wpłyną na magazyn.
-                </div>
-              )}
-              {nExtractionResult?.debug?.ksefComarchDetected && (
-                <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#78350f' }}>
-                  <strong>Wykryto dokument KSeF/Comarch</strong> — pominięto metadane systemowe (Uwagi/Remarks, Nr wiersza itp.), które nie są pozycjami faktury.
-                  {nExtractionResult.debug.ksefMetadataBlocked > 0 && (
-                    <span> Zablokowano {nExtractionResult.debug.ksefMetadataBlocked} linie metadanych.</span>
-                  )}
-                </div>
-              )}
-              {/* Quality metrics panel */}
-              {qualityMetrics && (
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>📊 Jakość odczytu</span>
-                    <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: getQualityBadge(qualityMetrics).bg, color: getQualityBadge(qualityMetrics).color }}>
-                      {getQualityBadge(qualityMetrics).label}
-                    </span>
-                  </div>
-                  <div className="quality-metrics-grid">
-                    <div>
-                      <div style={{ color: '#64748b' }}>Źródło</div>
-                      <div style={{ fontWeight: 500 }}>
-                        {qualityMetrics.source === 'pdf_text' ? '📄 Lokalny' : qualityMetrics.source?.includes('ai') ? '🤖 AI' : '✍️ Ręczny'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#64748b' }}>Pewność</div>
-                      <div style={{ fontWeight: 500, color: qualityMetrics.confidence >= 85 ? '#16a34a' : qualityMetrics.confidence >= 60 ? '#d97706' : '#dc2626' }}>
-                        {qualityMetrics.confidence}%
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#64748b' }}>Typ dokumentu</div>
-                      <div style={{ fontWeight: 500 }}>
-                        {qualityMetrics.documentType === 'inventory_purchase_invoice' ? '🏭 Zakupowy'
-                          : qualityMetrics.documentType?.includes('telecom') ? '📱 Telecom'
-                          : qualityMetrics.documentType?.includes('service') ? '🔧 Usługowy'
-                          : qualityMetrics.documentType?.includes('utility') ? '⚡ Media'
-                          : '❓ Nieznany'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#64748b' }}>Pozycje</div>
-                      <div style={{ fontWeight: 500 }}>{qualityMetrics.itemCount} ({qualityMetrics.inventoryItemCount} towarów, {qualityMetrics.serviceItemCount} usług)</div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#64748b' }}>Matematyka</div>
-                      <div style={{ fontWeight: 500, color: qualityMetrics.mathValid ? '#16a34a' : '#dc2626' }}>
-                        {qualityMetrics.mathValid ? '✅ OK' : '❌ Sprawdź'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#64748b' }}>Ostrzeżenia</div>
-                      <div style={{ fontWeight: 500, color: qualityMetrics.warningsCount === 0 ? '#16a34a' : '#d97706' }}>
-                        {qualityMetrics.warningsCount}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#64748b' }}>Kontrahent</div>
-                      <div style={{ fontWeight: 500,
-                        color: nContractorValue?.matchStatus === 'matched_nip' || nContractorValue?.matchStatus === 'matched_name' || nContractorValue?.matchStatus === 'learned_history' ? '#16a34a'
-                          : nContractorValue?.matchStatus === 'new_from_pdf' ? '#1d4ed8'
-                          : nContractorValue?.matchStatus === 'low_confidence' ? '#d97706'
-                          : '#d97706' }}>
-                        {nContractorValue?.matchStatus === 'matched_nip' ? '✓ NIP'
-                          : nContractorValue?.matchStatus === 'matched_name' ? '✓ Nazwa'
-                          : nContractorValue?.matchStatus === 'learned_history' ? '♻ Z historii'
-                          : nContractorValue?.matchStatus === 'low_confidence' ? '⚠ Sprawdź'
-                          : nContractorValue?.matchStatus === 'new_from_pdf' ? '+ Nowy (PDF)'
-                          : nContractorValue?.matchStatus === 'new_manual' ? '+ Nowy'
-                          : '— brak'}
-                      </div>
-                    </div>
-                  </div>
-                  {nContractorNipWarning && (
-                    <div style={{ marginTop: 8, padding: '6px 10px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 4, color: '#92400e', fontSize: 11 }}>
-                      ⚠ {nContractorNipWarning}
-                    </div>
-                  )}
-                  {qualityMetrics.errorsCount > 0 && (
-                    <div style={{ marginTop: 8, padding: '6px 10px', background: '#fef2f2', borderRadius: 4, color: '#991b1b', fontSize: 11 }}>
-                      ❌ {qualityMetrics.errorsCount} błędów — wymagane ręczne uzupełnienie
-                    </div>
-                  )}
-                  {qualityMetrics.supplierTemplate && (
-                    <div style={{ marginTop: 8, padding: '6px 10px', background: '#f0fdf4', borderRadius: 4, color: '#166534', fontSize: 11 }}>
-                      Wykryto dostawcę: <strong>{qualityMetrics.supplierTemplate.name}</strong>
-                      {' '}(match: {qualityMetrics.supplierTemplate.matchedBy})
-                      — zastosowano reguły specyficzne dla tego dostawcy
-                    </div>
-                  )}
-                  {shouldRequireManualReview(qualityMetrics) && (() => {
-                    const warnings = getQualityWarnings(qualityMetrics)
-                    return (
-                      <div style={{ marginTop: 8, padding: '8px 10px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 4, fontSize: 11, color: '#9a3412' }}>
-                        <strong>⚠ Sprawdź dane przed zatwierdzeniem.</strong> System nie zapisze zmian automatycznie.
-                        {warnings.length > 0 && (
-                          <ul style={{ margin: '4px 0 0 16px' }}>
-                            {warnings.map((w, i) => <li key={i}>{w}</li>)}
-                          </ul>
-                        )}
-                      </div>
-                    )
-                  })()}
-                  {nShadowResult?.documentScores && (
-                    <div style={{ marginTop: 8, fontSize: 11, color: '#475569', borderTop: '1px solid #e2e8f0', paddingTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, color: '#64748b' }}>Ocena modelu:</span>
-                      <span title="Sygnały magazynowe">🏭 {Math.round((nShadowResult.documentScores.inventoryScore ?? 0) * 100)}%</span>
-                      <span title="Sygnały usługowe">🔧 {Math.round((nShadowResult.documentScores.serviceScore ?? 0) * 100)}%</span>
-                      {(nShadowResult.documentScores.telecomScore ?? 0) > 0.1 && (
-                        <span title="Sygnały telecom">📱 {Math.round(nShadowResult.documentScores.telecomScore * 100)}%</span>
-                      )}
-                      {(nShadowResult.documentScores.utilityScore ?? 0) > 0.1 && (
-                        <span title="Sygnały media">⚡ {Math.round(nShadowResult.documentScores.utilityScore * 100)}%</span>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
-                    System przygotował propozycję. Sprawdź dane przed zatwierdzeniem.
-                  </div>
-                </div>
-              )}
-              {nExtractionResult?.validation && (() => {
-                const v = nExtractionResult.validation
-                const isError = v.suggestedAction === 'manual_required'
-                const isWarn = v.suggestedAction === 'review_required'
-                const hasContractorIssue = !!nContractorNipWarning ||
-                  (!nContractorValue?.existingId && !nContractorValue?.candidate)
-                const effectiveIsWarn = isWarn || (!isError && hasContractorIssue)
-                const bg = isError ? '#1a0000' : effectiveIsWarn ? '#1a1200' : '#001a00'
-                const fg = isError ? '#f87171' : effectiveIsWarn ? '#fbbf24' : '#86efac'
-                const border = isError ? '#7f1d1d' : effectiveIsWarn ? '#78350f' : '#166534'
-                const label = isError ? '⚠ Wymagane ręczne uzupełnienie'
-                  : effectiveIsWarn && hasContractorIssue ? '⚡ Odczytano dane — sprawdź kontrahenta i NIP'
-                  : effectiveIsWarn ? '⚡ Weryfikacja zalecana'
-                  : '✓ Dane odczytane'
-                const msgs = [...v.errors.slice(0, 2), ...v.warnings.slice(0, 2)]
-                return (
-                  <div className="rounded-lg px-4 py-3 mb-3 text-xs" style={{ background: bg, color: fg, border: `1px solid ${border}` }}>
-                    <div className="flex items-center gap-2 font-semibold text-sm">
-                      <span>{label}</span>
-                      <span className="ml-auto opacity-70">Pewność: {nExtractionResult.confidence}%</span>
-                    </div>
-                    {msgs.length > 0 && (
-                      <ul className="mt-1 space-y-0.5 opacity-85">
-                        {msgs.map((m, i) => <li key={i}>· {m}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                )
-              })()}
-              {(() => {
-                const statuses = nExtractedItems.map(i => getAssignmentStatus(i, towary))
-                const inventoryReadyCount = statuses.filter(s => s === 'ready').length
-                const serviceCostCount = statuses.filter(s => s === 'service_cost').length
-                const reviewCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
-                const skippedCount = nExtractedItems.filter(i => i.skipped).length
-                return (
-                  <div className="mb-3">
-                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                      Znaleziono <strong>{nExtractedItems.length}</strong> pozycji —{' '}
-                      <span style={{ color: '#16a34a' }}>gotowe do magazynu: {inventoryReadyCount}</span>
-                      {reviewCount > 0 && <span style={{ color: '#d97706' }}>, do weryfikacji: {reviewCount}</span>}
-                      {serviceCostCount > 0 && <span style={{ color: '#7c3aed' }}>, usługi/koszty: {serviceCostCount}</span>}
-                      {skippedCount > 0 && <span style={{ color: 'var(--muted)' }}>, pominięte: {skippedCount}</span>}
-                    </p>
-                    {reviewCount > 0 && (
-                      <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                        Pozycje do weryfikacji możesz dodać do faktury jako robocze. Nie zwiększą stanów magazynowych, dopóki nie wybierzesz towaru i magazynu.
-                      </p>
-                    )}
-                  </div>
-                )
-              })()}
-              {/* Mobile card view — shown below sm (640px) */}
-              <div className="sm:hidden space-y-2 mt-1" style={{ maxHeight: 440, overflowY: 'auto' }}>
-                {nExtractedItems.map((item, idx) => {
-                  const assignStatus = getAssignmentStatus(item, towary)
-                  const borderColor = assignStatus === 'ready' || assignStatus === 'service_cost' ? '#16a34a'
-                    : assignStatus === 'needs_review' ? '#d97706'
-                    : assignStatus === 'needs_price' || assignStatus === 'needs_product' ? '#ef4444'
-                    : '#94a3b8'
-                  const statusCfg = getVerificationStatusConfig(assignStatus)
-                  return (
-                    <div key={idx} style={{
-                      background: 'var(--card)', borderRadius: 8, padding: '10px 12px',
-                      border: `1px solid var(--border)`, borderLeft: `3px solid ${borderColor}`,
-                      opacity: item.skipped ? 0.4 : 1,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                        <div>
-                          <span style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{item.rawName}</span>
-                          {item.matchingSource === 'manual_created_from_invoice' && (
-                            <span style={{ display: 'inline-block', marginLeft: 4, background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '0px 4px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
-                          )}
-                          {item.matchingSource === 'manual_selected' && item.matchedProductId && (
-                            <span style={{ display: 'inline-block', marginLeft: 4, background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '0px 4px', fontSize: 10 }}>ręcznie</span>
-                          )}
-                        </div>
-                        {!item.skipped && (
-                          <span style={{ background: statusCfg.bg, color: statusCfg.color, borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
-                            {statusCfg.short}
-                          </span>
-                        )}
-                      </div>
-                      <select
-                        value={item.matchedProductId || ''}
-                        onChange={e => {
-                          const val = e.target.value || null
-                          setNExtractedItems(items => items.map((it, i) => i === idx
-                            ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0, matchingSource: val ? 'manual_selected' : null }
-                            : it
-                          ))
-                        }}
-                        style={{ ...IS(), fontSize: 11, padding: '5px 8px', marginBottom: 8 }}
-                        disabled={item.skipped}
-                      >
-                        <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
-                        {towary.map(t => <option key={t.id} value={t.id}>{t.nazwa}</option>)}
-                      </select>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-                        <input
-                          type="number" min="0" step="0.001"
-                          value={item.quantity}
-                          onChange={e => updateExtractedItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                          style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 70, textAlign: 'right' }}
-                          disabled={item.skipped}
-                        />
-                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>×</span>
-                        <input
-                          type="number" min="0" step="0.01"
-                          value={item.unitPriceNet}
-                          onChange={e => updateExtractedItem(idx, 'unitPriceNet', parseFloat(e.target.value) || 0)}
-                          style={{ ...IS(assignStatus === 'needs_price'), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
-                          disabled={item.skipped}
-                        />
-                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>zł</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {!item.skipped && item.itemType !== 'service_item' && (
-                          <button type="button" onClick={() => markItemAsService(idx)}
-                            style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                            Oznacz jako usługę
-                          </button>
-                        )}
-                        {!item.skipped && item.itemType === 'service_item' && (
-                          <button type="button" onClick={() => markItemAsInventory(idx)}
-                            style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                            Zmień na towar
-                          </button>
-                        )}
-                        {!item.skipped && !item.matchedProductId && item.itemType !== 'service_item' && (
-                          <button type="button" onClick={() => openCreateProductFor(idx)}
-                            style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                            Utwórz towar
-                          </button>
-                        )}
-                        <button type="button" onClick={() => toggleSkipExtracted(idx)}
-                          style={{ background: 'var(--table-sub)', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}>
-                          {item.skipped ? 'Przywróć' : 'Pomiń'}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              {/* Desktop table — hidden below sm (640px) */}
-              <div className="hidden sm:block table-scroll-x" style={{ maxHeight: 440, overflowY: 'auto' }}>
-                <table className="w-full text-sm" style={{ minWidth: 580 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--table-sub)', position: 'sticky', top: 0 }}>
-                      <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Odczytana nazwa</th>
-                      <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Towar w bazie</th>
-                      <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Ilość</th>
-                      <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Cena</th>
-                      <th className="text-center px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Pewność</th>
-                      <th className="px-2 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nExtractedItems.map((item, idx) => {
-                      const assignStatus = getAssignmentStatus(item, towary)
-                      const borderColor = assignStatus === 'ready' || assignStatus === 'service_cost' ? '#16a34a'
-                        : assignStatus === 'needs_review' ? '#d97706'
-                        : assignStatus === 'needs_price' || assignStatus === 'needs_product' ? '#ef4444'
-                        : '#94a3b8'
-                      const statusLabel = {
-                        ready: { text: '✓ gotowa', bg: '#dcfce7', color: '#166534' },
-                        service_cost: { text: '✓ usługa', bg: '#f0fdf4', color: '#166534' },
-                        needs_review: { text: '⚠ sprawdź', bg: '#fef9c3', color: '#854d0e' },
-                        needs_price: { text: '✗ brak ceny', bg: '#fee2e2', color: '#991b1b' },
-                        needs_product: { text: '✗ brak towaru', bg: '#fee2e2', color: '#991b1b' },
-                        ignored: { text: '– pominięta', bg: '#f3f4f6', color: '#6b7280' },
-                      }[assignStatus] || { text: assignStatus, bg: '#f3f4f6', color: '#6b7280' }
-                      return (
-                        <tr
-                          key={idx}
-                          style={{
-                            opacity: item.skipped ? 0.35 : 1,
-                            borderTop: '1px solid var(--border)',
-                            borderLeft: `3px solid ${borderColor}`,
-                          }}
-                        >
-                          <td className="px-3 py-2 text-xs" style={{ color: 'var(--text)' }}>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span>{item.rawName}</span>
-                              {item.itemType === 'inventory_item' && (
-                                <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Towar</span>
-                              )}
-                              {item.itemType === 'service_item' && (
-                                <span style={{ background: '#fed7aa', color: '#9a3412', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Usługa</span>
-                              )}
-                              {item.itemType === 'cost_item' && (
-                                <span style={{ background: '#fce7f3', color: '#9d174d', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>Koszt</span>
-                              )}
-                              {(item.itemType === 'unknown' || !item.itemType) && (
-                                <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>Sprawdź</span>
-                              )}
-                              {item.matchingSource === 'manual_created_from_invoice' && (
-                                <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
-                              )}
-                              {item.matchingSource === 'manual_selected' && item.matchedProductId && (
-                                <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>wybrano ręcznie</span>
-                              )}
-                              {item.shouldAffectInventory === true && (
-                                <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10 }}>↑ Magazyn</span>
-                              )}
-                              {item.warnings?.length > 0 && (
-                                <span title={item.warnings.join('; ')} style={{ background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}>⚠ {item.warnings.length}</span>
-                              )}
-                              {item._modelLabel && item.shouldAffectInventory !== false && (
-                                <span
-                                  title={`Model lokalny: ${item._modelLabel}${item._modelCandidatesCount > 0 ? `, ${item._modelCandidatesCount} kandydatów` : ''}`}
-                                  style={{
-                                    background: item._modelLabel === 'strong' ? '#dcfce7' : item._modelLabel === 'review' ? '#fef9c3' : '#f3f4f6',
-                                    color: item._modelLabel === 'strong' ? '#166534' : item._modelLabel === 'review' ? '#854d0e' : '#6b7280',
-                                    borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help',
-                                  }}
-                                >
-                                  M:{item._modelLabel}
-                                </span>
-                              )}
-                              {item._matchDisagreement && (
-                                <span
-                                  title="Parser i model nie są zgodne — sprawdź dopasowanie ręcznie."
-                                  style={{ background: '#fef2f2', color: '#dc2626', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}
-                                >
-                                  ⚡ niezgodność
-                                </span>
-                              )}
-                              {item._modelItemType && item._modelItemType !== item.itemType && item.itemType && item.itemType !== 'unknown' && (
-                                <span
-                                  title={`Model klasyfikuje jako: ${item._modelItemType}`}
-                                  style={{ background: '#fef3c7', color: '#92400e', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'help' }}
-                                >
-                                  M:{item._modelItemType === 'service_item' ? 'usługa?' : item._modelItemType === 'inventory_item' ? 'towar?' : item._modelItemType}
-                                </span>
-                              )}
-                              {!item.skipped && (
-                                <span style={{ background: statusLabel.bg, color: statusLabel.color, borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>
-                                  {statusLabel.text}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2" style={{ minWidth: 180 }}>
-                            <select
-                              value={item.matchedProductId || ''}
-                              onChange={e => {
-                                const val = e.target.value || null
-                                setNExtractedItems(items => items.map((it, i) => i === idx
-                                  ? { ...it, matchedProductId: val, matchedProductNazwa: towary.find(t => t.id === val)?.nazwa ?? null, matchScore: val ? 1.0 : 0, matchingSource: val ? 'manual_selected' : null }
-                                  : it
-                                ))
-                              }}
-                              style={{ ...IS(), fontSize: 11, padding: '4px 8px' }}
-                            >
-                              <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
-                              {towary.map(t => (
-                                <option key={t.id} value={t.id}>{t.nazwa}</option>
-                              ))}
-                            </select>
-                            {!item.matchedProductId && item._suggestedProductId && (
-                              <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>
-                                Sugestia: <button
-                                  type="button"
-                                  onClick={() => setNExtractedItems(items => items.map((it, i) => i === idx
-                                    ? { ...it, matchedProductId: item._suggestedProductId, matchedProductNazwa: item._suggestedProductNazwa, matchScore: 1.0, matchingSource: 'manual_selected' }
-                                    : it
-                                  ))}
-                                  style={{ color: '#d97706', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, padding: 0 }}
-                                >
-                                  {item._suggestedProductNazwa}
-                                </button>
-                              </div>
-                            )}
-                            {!item.matchedProductId && item._topCandidates?.length > 0 && (
-                              <div style={{ fontSize: 10, marginTop: 3, lineHeight: 1.6 }}>
-                                <span style={{ color: 'var(--muted)' }}>Model: </span>
-                                {item._topCandidates.map(c => (
-                                  <button
-                                    key={c.id}
-                                    type="button"
-                                    onClick={() => setNExtractedItems(items => items.map((it, i) => i === idx
-                                      ? { ...it, matchedProductId: c.id, matchedProductNazwa: c.nazwa, matchScore: c.score, matchingSource: 'manual_selected' }
-                                      : it
-                                    ))}
-                                    title={`Pewność modelu: ${Math.round(c.score * 100)}%`}
-                                    style={{
-                                      color: c.score >= 0.7 ? '#6366f1' : '#94a3b8',
-                                      textDecoration: 'underline', fontSize: 10,
-                                      background: 'none', border: 'none', cursor: 'pointer',
-                                      padding: '0 6px 0 0',
-                                    }}
-                                  >
-                                    {c.nazwa} ({Math.round(c.score * 100)}%)
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.001"
-                              value={item.quantity}
-                              onChange={e => updateExtractedItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                              style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 72, textAlign: 'right' }}
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unitPriceNet}
-                              onChange={e => updateExtractedItem(idx, 'unitPriceNet', parseFloat(e.target.value) || 0)}
-                              style={{ ...IS(assignStatus === 'needs_price'), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
-                            />
-                            {assignStatus === 'needs_price' && (
-                              <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>Uzupełnij cenę</div>
-                            )}
-                            {item.recoveredAmount && (
-                              <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>Cena odzyskana heurystycznie</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
-                            {item.matchingSource === 'manual_created_from_invoice'
-                              ? <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>nowy towar</span>
-                              : item.matchingSource === 'manual_selected'
-                              ? <span style={{ background: '#f3f4f6', color: '#374151', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>ręcznie</span>
-                              : item.matchScore > 0 ? `${Math.round(item.matchScore * 100)}%` : '—'}
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="flex flex-wrap gap-1 items-start justify-end" style={{ minWidth: 120 }}>
-                              {!item.skipped && item.itemType !== 'service_item' && (
-                                <button
-                                  type="button"
-                                  onClick={() => markItemAsService(idx)}
-                                  title="Oznacz jako usługę/koszt — nie wpłynie na magazyn"
-                                  className="text-xs px-2 py-0.5 rounded"
-                                  style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}
-                                >
-                                  Oznacz jako usługę
-                                </button>
-                              )}
-                              {!item.skipped && item.itemType === 'service_item' && (
-                                <button
-                                  type="button"
-                                  onClick={() => markItemAsInventory(idx)}
-                                  title="Przywróć jako towar magazynowy"
-                                  className="text-xs px-2 py-0.5 rounded"
-                                  style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}
-                                >
-                                  Zmień na towar
-                                </button>
-                              )}
-                              {!item.skipped && !item.matchedProductId && item.itemType !== 'service_item' && (
-                                <button
-                                  type="button"
-                                  onClick={() => openCreateProductFor(idx)}
-                                  title="Utwórz nowy towar na podstawie tej pozycji"
-                                  className="text-xs px-2 py-0.5 rounded"
-                                  style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', whiteSpace: 'nowrap' }}
-                                >
-                                  Utwórz towar
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => toggleSkipExtracted(idx)}
-                                className="text-xs px-2 py-0.5 rounded"
-                                style={{ background: 'var(--table-sub)', color: 'var(--muted)', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}
-                              >
-                                {item.skipped ? 'Przywróć' : 'Pomiń'}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* Zero-price draft confirmation */}
-              {(() => {
-                const active = nExtractedItems.filter(i => !i.skipped)
-                const draftStatuses = active.filter(i => {
-                  const s = getAssignmentStatus(i, towary)
-                  return s === 'needs_review' || s === 'needs_product' || s === 'needs_price' || s === 'service_cost'
-                })
-                const hasZeroPrice = draftStatuses.some(i => !((i.unitPriceNet ?? 0) > 0))
-                if (!hasZeroPrice) return null
-                return (
-                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 12, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    <input
-                      type="checkbox"
-                      id="draftZeroConfirm"
-                      checked={nDraftZeroPriceConfirmed}
-                      onChange={e => setNDraftZeroPriceConfirmed(e.target.checked)}
-                      style={{ marginTop: 2, flexShrink: 0 }}
-                    />
-                    <label htmlFor="draftZeroConfirm" style={{ color: '#92400e', cursor: 'pointer' }}>
-                      Rozumiem, że pozycje bez ceny zostaną dodane jako robocze i nie wpłyną na magazyn.
-                    </label>
-                  </div>
-                )
-              })()}
-              <div className="flex gap-2 mt-4 flex-wrap items-center">
-                <button
-                  type="button"
-                  onClick={goToManualForm}
-                  className="rounded-lg py-2 px-3 text-sm font-medium"
-                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)', flexShrink: 0 }}
-                >
-                  Pomiń pozycje
-                </button>
-                {(() => {
-                  const active = nExtractedItems.filter(i => !i.skipped)
-                  const statuses = active.map(i => getAssignmentStatus(i, towary))
-                  const readyCount = statuses.filter(s => isReadyToSave(s)).length
-                  const draftCount = statuses.filter(s => s === 'needs_review' || s === 'needs_product' || s === 'needs_price').length
-                  const hasZeroPrice = active.some(i => {
-                    const s = getAssignmentStatus(i, towary)
-                    return (s === 'needs_review' || s === 'needs_product' || s === 'needs_price') && !((i.unitPriceNet ?? 0) > 0)
-                  })
-                  const draftDisabled = draftCount === 0 || (hasZeroPrice && !nDraftZeroPriceConfirmed)
-                  const allReady = readyCount > 0 && draftCount === 0
-                  return (
-                    <>
-                      {draftCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={commitDraftExtractedItems}
-                          disabled={draftDisabled}
-                          className="flex-1 rounded-lg py-2 px-3 text-sm font-semibold"
-                          style={{
-                            background: draftDisabled ? '#f1f5f9' : '#fffbeb',
-                            color: draftDisabled ? '#94a3b8' : '#78350f',
-                            border: `1px solid ${draftDisabled ? '#e2e8f0' : '#fde047'}`,
-                            cursor: draftDisabled ? 'not-allowed' : 'pointer',
-                            minWidth: 160,
-                          }}
-                        >
-                          {readyCount === 0
-                            ? 'Zapisz fakturę roboczą z pozycjami do weryfikacji'
-                            : `Zapisz ${draftCount} pozycji do weryfikacji`}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={commitExtractedItems}
-                        disabled={readyCount === 0}
-                        className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                        style={{
-                          background: readyCount > 0 ? '#3b82f6' : '#94a3b8',
-                          cursor: readyCount > 0 ? 'pointer' : 'not-allowed',
-                          minWidth: 140,
-                        }}
-                      >
-                        {readyCount === 0
-                          ? 'Brak gotowych pozycji'
-                          : allReady
-                          ? 'Dodaj wszystkie pozycje do faktury →'
-                          : `Dodaj ${readyCount} pozycji do faktury →`}
-                      </button>
-                    </>
-                  )
-                })()}
-              </div>
-              {/* ── Create-product mini-modal ── */}
-              {nCreateProductFor !== null && (() => {
-                const creatingFor = nExtractedItems[nCreateProductFor]
-                return (
-                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-                      <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>Utwórz towar z pozycji faktury</p>
-                      {creatingFor?.rawName && (
-                        <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
-                          Pozycja: <em>{creatingFor.rawName}</em>
-                        </p>
-                      )}
-                      {(creatingFor?.quantity > 0 || creatingFor?.unitPriceNet > 0) && (
-                        <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                          {creatingFor.quantity > 0 ? `${creatingFor.quantity} ${creatingFor.jednostka || 'szt'}` : ''}
-                          {creatingFor.quantity > 0 && creatingFor.unitPriceNet > 0 ? ' · ' : ''}
-                          {creatingFor.unitPriceNet > 0 ? `${creatingFor.unitPriceNet} zł/szt` : ''}
-                        </p>
-                      )}
-                      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#1e3a8a' }}>
-                        Tworzysz nowy towar na podstawie pozycji z faktury. Towar zostanie przypisany do tej pozycji, ale <strong>magazyn zwiększy się dopiero po zatwierdzeniu faktury</strong>.
-                      </div>
-                      {nNewProductDupeWarning && (
-                        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#92400e' }}>
-                          <p style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Znaleziono podobne towary w bazie:</p>
-                          <p style={{ marginBottom: 4 }}>{nNewProductDupeWarning}</p>
-                          <p>Wybierz istniejący towar z listy albo kliknij „Utwórz mimo to".</p>
-                        </div>
-                      )}
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs mb-1 font-medium" style={{ color: 'var(--text-2)' }}>Nazwa *</label>
-                          <input
-                            value={nNewProductForm.nazwa}
-                            onChange={e => setNNewProductForm(f => ({ ...f, nazwa: e.target.value }))}
-                            style={IS(!nNewProductForm.nazwa.trim())}
-                            placeholder="Pełna nazwa towaru"
-                            autoFocus
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs mb-1 font-medium" style={{ color: 'var(--text-2)' }}>Jednostka</label>
-                            <select value={nNewProductForm.jednostka} onChange={e => setNNewProductForm(f => ({ ...f, jednostka: e.target.value }))} style={IS()}>
-                              <option value="szt">szt</option>
-                              <option value="kg">kg</option>
-                              <option value="l">l</option>
-                              <option value="m">m</option>
-                              <option value="m2">m²</option>
-                              <option value="opak">opak</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs mb-1 font-medium" style={{ color: 'var(--text-2)' }}>Typ towaru</label>
-                            <select value={nNewProductForm.typ} onChange={e => setNNewProductForm(f => ({ ...f, typ: e.target.value }))} style={IS()}>
-                              <option value="towar">Towar</option>
-                              <option value="material">Materiał</option>
-                              <option value="urzadzenie">Urządzenie</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => { setNCreateProductFor(null); setNNewProductDupeWarning(null) }}
-                            className="flex-1 rounded-lg py-2 text-sm font-medium"
-                            style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
-                          >
-                            Anuluj
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleSaveNewProduct}
-                            disabled={nNewProductSaving || !nNewProductForm.nazwa.trim()}
-                            className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                            style={{
-                              background: (nNewProductSaving || !nNewProductForm.nazwa.trim()) ? '#94a3b8' : '#3b82f6',
-                              cursor: (nNewProductSaving || !nNewProductForm.nazwa.trim()) ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            {nNewProductSaving ? 'Tworzenie...' : nNewProductDupeWarning ? 'Utwórz mimo to' : 'Utwórz towar'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()}
-              {import.meta.env.DEV && nExtractedItems.length > 0 && nExtractionResult && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const { buildGoldenSampleFromApprovedInvoice } = await import('../utils/invoiceDatasetBuilder')
-                        const { saveGoldenSample } = await import('../utils/invoiceGoldenSamples')
-                        const sampleName = window.prompt('Nazwa golden sample:', `${nExtractionResult.fields?.kontrahent_nazwa || 'Faktura'} ${new Date().toLocaleDateString('pl-PL')}`)
-                        if (sampleName === null) return
-                        const sample = buildGoldenSampleFromApprovedInvoice(
-                          nExtractionResult,
-                          nExtractedItems.filter(i => !i.skipped),
-                          { name: sampleName }
-                        )
-                        const result = saveGoldenSample(sample)
-                        if (result.success) alert(`Golden sample "${sampleName}" zapisany (DEV).`)
-                        else alert('Błąd: ' + result.error)
-                      } catch (e) {
-                        alert('Błąd: ' + String(e))
-                      }
-                    }}
-                    style={{
-                      padding: '5px 12px', background: '#059669', color: '#fff',
-                      border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                    }}
-                  >
-                    [DEV] Zapisz jako golden sample
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const { buildInvoiceDebugExport, downloadInvoiceDebugJson } = await import('../utils/invoiceDebugExport')
-                        const debugData = buildInvoiceDebugExport(nExtractionResult)
-                        downloadInvoiceDebugJson(debugData, nExtractionResult._fileName || 'faktura')
-                      } catch (e) {
-                        alert('Błąd eksportu: ' + String(e))
-                      }
-                    }}
-                    style={{
-                      padding: '5px 12px', background: '#2563eb', color: '#fff',
-                      border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                    }}
-                  >
-                    [DEV] Eksportuj debug odczytu
-                  </button>
-                </div>
-              )}
-            </div>
+            <InvoiceVerificationPanel
+              extractedItems={nExtractedItems}
+              towary={towary}
+              extractionResult={nExtractionResult}
+              qualityMetrics={qualityMetrics}
+              contractorValue={nContractorValue}
+              contractorNipWarning={nContractorNipWarning}
+              shadowResult={nShadowResult}
+              draftZeroPriceConfirmed={nDraftZeroPriceConfirmed}
+              createProductFor={nCreateProductFor}
+              newProductForm={nNewProductForm}
+              newProductSaving={nNewProductSaving}
+              newProductDupeWarning={nNewProductDupeWarning}
+              onExtractedItemChange={updateExtractedItem}
+              onProductMatch={handleExtractedProductMatch}
+              onCandidateSelect={handleExtractedCandidateSelect}
+              onToggleSkip={toggleSkipExtracted}
+              onMarkService={markItemAsService}
+              onMarkInventory={markItemAsInventory}
+              onOpenCreateProduct={openCreateProductFor}
+              onCloseCreateProduct={handleCloseCreateProduct}
+              onDraftZeroPriceConfirmedChange={setNDraftZeroPriceConfirmed}
+              onNewProductFormFieldChange={handleNewProductFormFieldChange}
+              onSaveNewProduct={handleSaveNewProduct}
+              onGoToManualForm={goToManualForm}
+              onCommitExtracted={commitExtractedItems}
+              onCommitDraftExtracted={commitDraftExtractedItems}
+            />
           ) : (
             /* Phase 2: Form + positions */
             <div style={{ paddingRight: 2 }}>
-              {/* AI success banner */}
               {nAiCount > 0 && (
                 <div className="rounded-lg px-4 py-3 mb-3 text-sm font-medium flex items-center gap-2"
                   style={{ background: '#052e16', color: '#86efac', border: '1px solid #166534' }}>
@@ -2244,7 +1279,6 @@ export default function Faktury() {
                 </div>
               )}
 
-              {/* Quality metrics summary in form phase */}
               {qualityMetrics && (
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2269,7 +1303,6 @@ export default function Faktury() {
 
               <div className="faktura-new-grid" style={{ display: 'grid', gridTemplateColumns: nFile ? '1fr 260px' : '1fr', gap: 24, alignItems: 'start' }}>
 
-                {/* Left column: form + positions */}
                 <div className="space-y-4 min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
                     Dane faktury — sprawdź i zatwierdź
@@ -2430,7 +1463,7 @@ export default function Faktury() {
                             {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
                           </select>
 
-                          {/* ── Analiza ceny ── */}
+                          {/* Price analysis */}
                           {(() => {
                             const pd = nPriceData[p._key]
                             return (
@@ -2495,7 +1528,6 @@ export default function Faktury() {
                     </div>
                   </div>
 
-                  {/* Action buttons — sticky na dole na mobile */}
                   <div className="invoice-form-actions flex gap-3">
                     <button
                       type="button"
@@ -2521,7 +1553,6 @@ export default function Faktury() {
                   </div>
                 </div>
 
-                {/* Right column: file preview + re-read option */}
                 {nFile && (
                   <div className="flex-shrink-0">
                     <InvoiceUploader
@@ -2541,590 +1572,80 @@ export default function Faktury() {
         </Modal>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          EDIT FAKTURA MODAL
-          ════════════════════════════════════════════════════════════ */}
-      {showFakModal && (
-        <Modal title="Edytuj fakturę" onClose={() => setShowFakModal(false)} maxWidth={620}>
-          <form onSubmit={handleSaveFak} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 modal-2col">
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Numer *</label>
-                <input style={IS(fakErrors.numer)} value={fakForm.numer} onChange={e => setFakForm(f => ({ ...f, numer: e.target.value }))} placeholder="np. FV/2025/001" />
-                {fakErrors.numer && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
-              </div>
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Data *</label>
-                <input type="date" style={IS(fakErrors.data_zakupu)} value={fakForm.data_zakupu} onChange={e => setFakForm(f => ({ ...f, data_zakupu: e.target.value }))} />
-                {fakErrors.data_zakupu && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 modal-2col">
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Kontrahent</label>
-                <select style={IS()} value={fakForm.kontrahent_id} onChange={e => setFakForm(f => ({ ...f, kontrahent_id: e.target.value }))}>
-                  <option value="">— wybierz —</option>
-                  {kontrahenci.map(k => <option key={k.id} value={k.id}>{k.nazwa}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Typ dokumentu</label>
-                <select style={IS()} value={fakForm.typ} onChange={e => setFakForm(f => ({ ...f, typ: e.target.value }))}>
-                  <option value="zakup">Faktura zakupu</option>
-                  <option value="sprzedaz">Faktura sprzedaży</option>
-                  <option value="wz">WZ</option>
-                  <option value="paragon">Paragon</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Magazyn docelowy</label>
-              <select style={IS()} value={fakForm.magazyn_id} onChange={e => setFakForm(f => ({ ...f, magazyn_id: e.target.value }))}>
-                <option value="">— wybierz —</option>
-                {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Załącznik (PDF, CSV, JPG, PNG, WEBP)</label>
-              <div
-                className="rounded-lg px-4 py-3 flex items-center gap-3 cursor-pointer"
-                style={{ border: '1px dashed var(--border)', background: 'var(--table-sub)' }}
-                onClick={() => fileRef.current?.click()}
-              >
-                <Upload size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-                <span className="text-sm flex-1 truncate" style={{ color: selectedFile ? 'var(--text)' : 'var(--muted)' }}>
-                  {selectedFile ? selectedFile.name : editFak?.plik_url ? 'Kliknij aby zmienić plik' : 'Kliknij aby wybrać plik'}
-                </span>
-                {selectedFile && (
-                  <button type="button" onClick={e => { e.stopPropagation(); setSelectedFile(null) }} style={{ color: 'var(--muted)' }}>
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-              <input ref={fileRef} type="file" className="hidden" accept=".pdf,.csv,.jpg,.jpeg,.png,.webp" onChange={e => setSelectedFile(e.target.files[0] || null)} />
-              {editFak?.plik_url && !selectedFile && (
-                <a href={editFak.plik_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs mt-1.5" style={{ color: '#3b82f6' }}>
-                  <Download size={12} /> Aktualny plik
-                </a>
-              )}
-            </div>
-            <div>
-              <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Notatki</label>
-              <textarea style={{ ...IS(), resize: 'vertical', minHeight: 60 }} value={fakForm.notatki} onChange={e => setFakForm(f => ({ ...f, notatki: e.target.value }))} placeholder="Opcjonalne notatki..." />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setShowFakModal(false)} className="flex-1 rounded-lg py-2 text-sm font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
-              <button type="submit" disabled={saving || uploading} className="flex-1 rounded-lg py-2 text-sm font-medium text-white" style={{ background: '#3b82f6', opacity: (saving || uploading) ? 0.7 : 1 }}>
-                {uploading ? 'Wysyłanie pliku...' : saving ? 'Zapisywanie...' : 'Zapisz zmiany'}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <InvoiceEditorModal
+        show={showFakModal}
+        onClose={() => setShowFakModal(false)}
+        fakForm={fakForm}
+        onFieldChange={handleFakFormFieldChange}
+        fakErrors={fakErrors}
+        selectedFile={selectedFile}
+        onFileSelect={setSelectedFile}
+        onFileClear={() => setSelectedFile(null)}
+        fileRef={fileRef}
+        editFak={editFak}
+        onSave={handleSaveFak}
+        saving={saving}
+        uploading={uploading}
+        kontrahenci={kontrahenci}
+        magazyny={magazyny}
+      />
 
-      {/* ════════════════════════════════════════════════════════════
-          ADD POSITION MODAL (existing invoice)
-          ════════════════════════════════════════════════════════════ */}
-      {showPozModal && (() => {
-        const _t = towary.find(t => t.id === pozForm.towar_id)
-        const _net = Number(pozForm.ilosc || 0) * Number(pozForm.cena_netto || 0)
-        const _vat = _net * Number(pozForm.vat_procent || 0) / 100
-        const _brutto = _net + _vat
-        return (
-          <Modal title="Dodaj pozycję do faktury" onClose={() => { setShowPozModal(false); setPozForm(emptyPoz) }} maxWidth={480}>
-            <form onSubmit={handleSavePoz} className="space-y-4">
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Towar *</label>
-                <select
-                  style={IS(pozErrors.towar_id)}
-                  value={pozForm.towar_id}
-                  onChange={e => {
-                    const t = towary.find(x => x.id === e.target.value)
-                    setPozForm(f => ({ ...f, towar_id: e.target.value, _jednostka: t?.jednostka || '' }))
-                  }}
-                >
-                  <option value="">— wybierz towar —</option>
-                  {towary.map(t => <option key={t.id} value={t.id}>{t.nazwa} ({t.jednostka || 'szt'})</option>)}
-                </select>
-                {pozErrors.towar_id && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Wybierz towar</p>}
-              </div>
+      <InvoicePositionModal
+        show={showPozModal}
+        onClose={() => { setShowPozModal(false); setPozForm(emptyPoz) }}
+        pozForm={pozForm}
+        onFieldChange={handlePozFieldChange}
+        onTowarChange={handlePozTowarChange}
+        pozErrors={pozErrors}
+        towary={towary}
+        magazyny={magazyny}
+        onSave={handleSavePoz}
+        saving={savingPoz}
+      />
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Ilość *</label>
-                  <input type="number" min="0.01" step="0.001" style={IS(pozErrors.ilosc)} value={pozForm.ilosc} onChange={e => setPozForm(f => ({ ...f, ilosc: e.target.value }))} placeholder="0" />
-                  {pozErrors.ilosc && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
-                </div>
-                <div>
-                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Jednostka</label>
-                  <div
-                    className="rounded-lg px-3 py-2 text-sm"
-                    style={{ background: 'var(--table-sub)', border: '1px solid var(--border)', color: _t ? 'var(--text)' : 'var(--muted)', minHeight: 37 }}
-                  >
-                    {_t?.jednostka || (pozForm.towar_id ? '—' : 'wybierz towar')}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>VAT %</label>
-                  <select style={IS()} value={pozForm.vat_procent} onChange={e => setPozForm(f => ({ ...f, vat_procent: e.target.value }))}>
-                    <option value={23}>23%</option>
-                    <option value={8}>8%</option>
-                    <option value={5}>5%</option>
-                    <option value={0}>0%</option>
-                  </select>
-                </div>
-              </div>
+      <InvoiceEditPositionModal
+        show={showEditPozModal}
+        onClose={() => { setShowEditPozModal(false); setEditPozTarget(null); setEditPozFak(null) }}
+        editPozTarget={editPozTarget}
+        editPozFak={editPozFak}
+        editPozForm={editPozForm}
+        onFieldChange={handleEditPozFieldChange}
+        onTowarChange={handleEditPozTowarChange}
+        editPozErrors={editPozErrors}
+        editPozShowCreate={editPozShowCreate}
+        onToggleShowCreate={() => setEditPozShowCreate(v => !v)}
+        editPozNewTowarForm={editPozNewTowarForm}
+        onNewTowarFieldChange={handleEditPozNewTowarFieldChange}
+        editPozNewTowarSaving={editPozNewTowarSaving}
+        onSave={handleSaveEditPoz}
+        saving={editPozSaving}
+        onCreateTowar={handleCreateTowarInEditModal}
+        towary={towary}
+        magazyny={magazyny}
+      />
 
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Cena netto za jednostkę (zł) *</label>
-                <input type="number" min="0" step="0.01" style={IS(pozErrors.cena_netto)} value={pozForm.cena_netto} onChange={e => setPozForm(f => ({ ...f, cena_netto: e.target.value }))} placeholder="0.00" />
-                {pozErrors.cena_netto && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>Pole wymagane</p>}
-              </div>
+      <InvoiceDeleteRollbackModal
+        show={showCofnijDeleteModal}
+        onClose={() => { setShowCofnijDeleteModal(false); setCofnijDeleteFak(null); setCofnijDeleteConfirmed(false) }}
+        fak={cofnijDeleteFak}
+        pozycje={pozycje}
+        ruchyCount={cofnijDeleteRuchyCount}
+        confirmed={cofnijDeleteConfirmed}
+        onConfirmedChange={setCofnijDeleteConfirmed}
+        deleting={cofnijDeleting}
+        onDelete={doDeleteWithRollback}
+      />
 
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Magazyn docelowy (dla towarów)</label>
-                <select
-                  style={IS()}
-                  value={pozForm.magazyn_id}
-                  onChange={e => setPozForm(f => ({ ...f, magazyn_id: e.target.value }))}
-                >
-                  <option value="">— brak (usługa / koszt) —</option>
-                  {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
-                </select>
-              </div>
+      <InvoiceApproveModal
+        show={showZatwierdzModal}
+        onClose={() => { setShowZatwierdzModal(false); setZatwierdzFak(null) }}
+        fak={zatwierdzFak}
+        pozycje={pozycje}
+        towary={towary}
+        magazyny={magazyny}
+        onApprove={doZatwierdz}
+      />
 
-              {(Number(pozForm.ilosc) > 0 || Number(pozForm.cena_netto) > 0) && (
-                <div className="rounded-lg px-4 py-3 space-y-1" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
-                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
-                    <span>Suma netto</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{_net.toFixed(2)} zł</span>
-                  </div>
-                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
-                    <span>VAT ({pozForm.vat_procent}%)</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{_vat.toFixed(2)} zł</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold" style={{ color: 'var(--text)', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
-                    <span>Suma brutto</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{_brutto.toFixed(2)} zł</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowPozModal(false); setPozForm(emptyPoz) }} className="flex-1 rounded-lg py-2 text-sm font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
-                <button type="submit" disabled={savingPoz} className="flex-1 rounded-lg py-2 text-sm font-medium text-white" style={{ background: '#3b82f6', opacity: savingPoz ? 0.7 : 1 }}>
-                  {savingPoz ? 'Zapisywanie...' : 'Dodaj pozycję'}
-                </button>
-              </div>
-            </form>
-          </Modal>
-        )
-      })()}
-
-      {/* ════════════════════════════════════════════════════════════
-          EDIT POSITION MODAL
-          ════════════════════════════════════════════════════════════ */}
-      {showEditPozModal && editPozTarget && (() => {
-        const _t = towary.find(t => t.id === editPozForm.towar_id)
-        const _net = Number(editPozForm.ilosc || 0) * Number(editPozForm.cena_netto || 0)
-        const _vat = _net * Number(editPozForm.vat_procent || 0) / 100
-        const _brutto = _net + _vat
-        const lineStatus = recalculateInvoiceLineStatus(
-          { ...editPozTarget, towar_id: editPozForm.towar_id || null, magazyn_id: editPozForm.magazyn_id || null, cena_netto: editPozForm.cena_netto, ilosc: editPozForm.ilosc },
-          { towary, fakturaDefaultMagazynId: editPozFak?.magazyn_id || null }
-        )
-        return (
-          <Modal
-            title="Edytuj pozycję"
-            onClose={() => { setShowEditPozModal(false); setEditPozTarget(null); setEditPozFak(null) }}
-            maxWidth={520}
-          >
-            <div className="space-y-4">
-              {/* Status preview */}
-              {lineStatus.inventoryImpactStatus === 'ready' && (
-                <div className="rounded-lg px-3 py-2 flex items-center gap-2 text-xs" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' }}>
-                  <CheckCircle2 size={13} /> Pozycja gotowa do magazynu
-                </div>
-              )}
-              {lineStatus.inventoryImpactStatus === 'blocked' && lineStatus.errors.length > 0 && (
-                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e' }}>
-                  <div className="flex items-center gap-2 font-semibold mb-1"><AlertTriangle size={13} /> Niekompletna — brakuje:</div>
-                  {lineStatus.errors.map((e, i) => <div key={i}>· {e}</div>)}
-                </div>
-              )}
-              {lineStatus.inventoryImpactStatus === 'none' && (
-                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: '#f0f9ff', border: '1px solid #bae6fd', color: '#0369a1' }}>
-                  Pozycja bez wpływu na magazyn (usługa/koszt lub brak towaru)
-                </div>
-              )}
-
-              {/* Towar */}
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>
-                  Towar {!editPozForm.is_service && <span style={{ color: '#dc2626' }}>*</span>}
-                </label>
-                <select
-                  style={IS(editPozErrors.towar_id)}
-                  value={editPozForm.towar_id}
-                  onChange={e => {
-                    const t = towary.find(x => x.id === e.target.value)
-                    setEditPozForm(f => ({ ...f, towar_id: e.target.value, is_service: !e.target.value }))
-                    if (t) setEditPozNewTowarForm(v => ({ ...v, nazwa: t.nazwa }))
-                  }}
-                >
-                  <option value="">— brak towaru (usługa / koszt) —</option>
-                  {towary.map(t => <option key={t.id} value={t.id}>{t.nazwa} ({t.jednostka || 'szt'})</option>)}
-                </select>
-                {editPozErrors.towar_id && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{editPozErrors.towar_id}</p>}
-                {!editPozForm.towar_id && (
-                  <button
-                    type="button"
-                    onClick={() => setEditPozShowCreate(v => !v)}
-                    className="text-xs mt-1.5 underline"
-                    style={{ color: '#3b82f6' }}
-                  >
-                    {editPozShowCreate ? '▲ Ukryj formularz' : '+ Utwórz towar z tej pozycji'}
-                  </button>
-                )}
-              </div>
-
-              {/* Create towar inline */}
-              {editPozShowCreate && !editPozForm.towar_id && (
-                <div className="rounded-lg p-3 space-y-3" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
-                  <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Nowy towar</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs mb-1" style={{ color: 'var(--text-2)' }}>Nazwa *</label>
-                      <input
-                        style={IS()}
-                        value={editPozNewTowarForm.nazwa}
-                        onChange={e => setEditPozNewTowarForm(f => ({ ...f, nazwa: e.target.value }))}
-                        placeholder="Nazwa towaru"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs mb-1" style={{ color: 'var(--text-2)' }}>Typ / SKU</label>
-                      <input
-                        style={IS()}
-                        value={editPozNewTowarForm.typ}
-                        onChange={e => setEditPozNewTowarForm(f => ({ ...f, typ: e.target.value }))}
-                        placeholder="Typ (opcjonalnie)"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-1" style={{ color: 'var(--text-2)' }}>Jednostka</label>
-                    <select style={IS()} value={editPozNewTowarForm.jednostka} onChange={e => setEditPozNewTowarForm(f => ({ ...f, jednostka: e.target.value }))}>
-                      <option value="szt">szt</option>
-                      <option value="kg">kg</option>
-                      <option value="l">l</option>
-                      <option value="m">m</option>
-                      <option value="m2">m²</option>
-                      <option value="opak">opak</option>
-                    </select>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={editPozNewTowarSaving}
-                    onClick={handleCreateTowarInEditModal}
-                    className="w-full rounded-lg py-2 text-xs font-medium text-white"
-                    style={{ background: '#3b82f6', opacity: editPozNewTowarSaving ? 0.7 : 1 }}
-                  >
-                    {editPozNewTowarSaving ? 'Tworzenie...' : 'Utwórz i przypisz towar'}
-                  </button>
-                </div>
-              )}
-
-              {/* Qty, unit, VAT */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Ilość *</label>
-                  <input
-                    type="number" min="0.001" step="0.001"
-                    style={IS(editPozErrors.ilosc)}
-                    value={editPozForm.ilosc}
-                    onChange={e => setEditPozForm(f => ({ ...f, ilosc: e.target.value }))}
-                    placeholder="0"
-                  />
-                  {editPozErrors.ilosc && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{editPozErrors.ilosc}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Jednostka</label>
-                  <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)', color: _t ? 'var(--text)' : 'var(--muted)', minHeight: 37 }}>
-                    {_t?.jednostka || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>VAT %</label>
-                  <select style={IS()} value={editPozForm.vat_procent} onChange={e => setEditPozForm(f => ({ ...f, vat_procent: e.target.value }))}>
-                    <option value={23}>23%</option>
-                    <option value={8}>8%</option>
-                    <option value={5}>5%</option>
-                    <option value={0}>0%</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Price */}
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Cena netto za jednostkę (zł) *</label>
-                <input
-                  type="number" min="0" step="0.01"
-                  style={IS(editPozErrors.cena_netto)}
-                  value={editPozForm.cena_netto}
-                  onChange={e => setEditPozForm(f => ({ ...f, cena_netto: e.target.value }))}
-                  placeholder="0.00"
-                />
-                {editPozErrors.cena_netto && <p className="text-xs mt-1" style={{ color: '#dc2626' }}>{editPozErrors.cena_netto}</p>}
-              </div>
-
-              {/* Warehouse */}
-              <div>
-                <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Magazyn docelowy</label>
-                <select
-                  style={IS()}
-                  value={editPozForm.magazyn_id}
-                  onChange={e => setEditPozForm(f => ({ ...f, magazyn_id: e.target.value }))}
-                >
-                  <option value="">— brak (usługa / koszt) —</option>
-                  {magazyny.map(m => <option key={m.id} value={m.id}>{m.nazwa}</option>)}
-                </select>
-              </div>
-
-              {/* Summary */}
-              {(Number(editPozForm.ilosc) > 0 || Number(editPozForm.cena_netto) > 0) && (
-                <div className="rounded-lg px-4 py-3 space-y-1" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
-                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
-                    <span>Suma netto</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{_net.toFixed(2)} zł</span>
-                  </div>
-                  <div className="flex justify-between text-xs" style={{ color: 'var(--text-2)' }}>
-                    <span>VAT ({editPozForm.vat_procent}%)</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{_vat.toFixed(2)} zł</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold" style={{ color: 'var(--text)', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
-                    <span>Suma brutto</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{_brutto.toFixed(2)} zł</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowEditPozModal(false); setEditPozTarget(null); setEditPozFak(null) }}
-                  className="flex-1 rounded-lg py-2 text-sm font-medium"
-                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="button"
-                  disabled={editPozSaving}
-                  onClick={handleSaveEditPoz}
-                  className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                  style={{ background: '#3b82f6', opacity: editPozSaving ? 0.7 : 1 }}
-                >
-                  {editPozSaving ? 'Zapisywanie...' : 'Zapisz zmiany'}
-                </button>
-              </div>
-            </div>
-          </Modal>
-        )
-      })()}
-
-      {/* ════════════════════════════════════════════════════════════
-          COFNIJ I USUŃ — MODAL POTWIERDZENIA
-          ════════════════════════════════════════════════════════════ */}
-      {showCofnijDeleteModal && cofnijDeleteFak && (() => {
-        const isDraft = cofnijDeleteFak.status === 'robocza'
-        return (
-        <Modal
-          title={isDraft ? 'Usuń fakturę z osierconymi ruchami' : 'Cofnij i usuń fakturę'}
-          onClose={() => { setShowCofnijDeleteModal(false); setCofnijDeleteFak(null); setCofnijDeleteConfirmed(false) }}
-          maxWidth={480}
-        >
-          <div className="space-y-4">
-            {/* Warning banner — text differs by status */}
-            <div className="rounded-lg px-4 py-3 flex items-start gap-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
-              <AlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-sm" style={{ color: '#92400e' }}>
-                {isDraft
-                  ? 'Ta faktura jest robocza, ale ma powiązane ruchy magazynowe. To wygląda na niespójny stan po wcześniejszym przerwanym procesie zatwierdzania. System usunie powiązane ruchy techniczne tej faktury, a następnie usunie fakturę i jej pozycje.'
-                  : 'Ta faktura wygenerowała ruchy magazynowe. Aby ją usunąć, system najpierw cofnie wpływ faktury na magazyn, a następnie usunie fakturę i jej pozycje.'}
-              </p>
-            </div>
-
-            {/* Invoice summary */}
-            <div className="rounded-lg px-4 py-3 space-y-1.5" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: 'var(--text-2)' }}>Faktura</span>
-                <span className="font-medium" style={{ color: 'var(--text)' }}>{cofnijDeleteFak.numer}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: 'var(--text-2)' }}>Status</span>
-                <span className="font-medium" style={{ color: isDraft ? '#d97706' : '#22c55e' }}>{isDraft ? 'Robocza' : 'Zatwierdzona'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: 'var(--text-2)' }}>Pozycje</span>
-                <span className="font-medium" style={{ color: 'var(--text)' }}>{(pozycje[cofnijDeleteFak.id] || []).length} szt.</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: 'var(--text-2)' }}>Ruchy magazynowe</span>
-                <span className="font-medium" style={{ color: '#d97706' }}>{cofnijDeleteRuchyCount} szt.</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: 'var(--text-2)' }}>{isDraft ? 'Stany magazynowe' : 'Wpływ na stany'}</span>
-                <span className="font-medium" style={{ color: isDraft ? 'var(--muted)' : '#dc2626' }}>
-                  {isDraft ? 'bez zmian (stany pozostają)' : 'zostanie odwrócony'}
-                </span>
-              </div>
-            </div>
-
-            {/* Confirmation checkbox — text differs by status */}
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={cofnijDeleteConfirmed}
-                onChange={e => setCofnijDeleteConfirmed(e.target.checked)}
-                className="mt-0.5 flex-shrink-0"
-                style={{ width: 16, height: 16, accentColor: '#dc2626' }}
-              />
-              <span className="text-sm" style={{ color: 'var(--text)' }}>
-                {isDraft
-                  ? 'Rozumiem, że system usunie powiązane ruchy tej roboczej faktury, aby odblokować usunięcie.'
-                  : 'Rozumiem, że system cofnie wpływ tej faktury na magazyn i dopiero potem ją usunie.'}
-              </span>
-            </label>
-
-            {/* Action buttons */}
-            <div className="flex gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => { setShowCofnijDeleteModal(false); setCofnijDeleteFak(null); setCofnijDeleteConfirmed(false) }}
-                className="flex-1 rounded-lg py-2 text-sm font-medium"
-                style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
-                disabled={cofnijDeleting}
-              >
-                Anuluj
-              </button>
-              <button
-                type="button"
-                onClick={doDeleteWithRollback}
-                className="flex-1 rounded-lg py-2 text-sm font-semibold text-white flex items-center justify-center gap-2"
-                style={{ background: cofnijDeleteConfirmed && !cofnijDeleting ? '#dc2626' : '#9ca3af', cursor: cofnijDeleteConfirmed && !cofnijDeleting ? 'pointer' : 'not-allowed' }}
-                disabled={!cofnijDeleteConfirmed || cofnijDeleting}
-              >
-                {cofnijDeleting ? <><Spinner size={14} /> Cofanie i usuwanie...</> : <><Trash2 size={14} /> Cofnij i usuń</>}
-              </button>
-            </div>
-          </div>
-        </Modal>
-        )
-      })()}
-
-      {/* ════════════════════════════════════════════════════════════
-          ZATWIERDZENIE — MODAL POTWIERDZENIA
-          ════════════════════════════════════════════════════════════ */}
-      {showZatwierdzModal && zatwierdzFak && (() => {
-        const poz = pozycje[zatwierdzFak.id] || []
-        const ctx = { towary, fakturaDefaultMagazynId: zatwierdzFak.magazyn_id || null }
-        const withTowar = poz.filter(p => p.towar_id)
-        const bezTowaru = poz.filter(p => !p.towar_id)
-        const readyTowar = withTowar.filter(p => recalculateInvoiceLineStatus(p, ctx).inventoryImpactStatus === 'ready')
-        const blockedTowar = withTowar.filter(p => recalculateInvoiceLineStatus(p, ctx).inventoryImpactStatus === 'blocked')
-        const mag = magazyny.find(m => m.id === zatwierdzFak.magazyn_id)
-        return (
-          <Modal
-            title={`Zatwierdź fakturę ${zatwierdzFak.numer}`}
-            onClose={() => { setShowZatwierdzModal(false); setZatwierdzFak(null) }}
-            maxWidth={520}
-          >
-            <div className="space-y-4">
-              <p className="text-sm" style={{ color: 'var(--text-2)' }}>
-                Zatwierdzenie zaktualizuje stany magazynowe dla pozycji towarowych z kompletymi danymi.
-              </p>
-
-              {readyTowar.length > 0 && (
-                <div className="rounded-lg p-3 space-y-1.5" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-                  <p className="text-xs font-semibold" style={{ color: '#166534' }}>
-                    ✅ Do przyjęcia na magazyn ({readyTowar.length} poz.):
-                  </p>
-                  {readyTowar.map(p => {
-                    const m = magazyny.find(x => x.id === (p.magazyn_id || zatwierdzFak.magazyn_id))
-                    return (
-                      <div key={p.id} className="text-xs" style={{ color: '#166534' }}>
-                        · {p.towary?.nazwa || '—'} × {p.ilosc} {p.towary?.jednostka || 'szt.'} → {m?.nazwa || mag?.nazwa || '?'}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {blockedTowar.length > 0 && (
-                <div className="rounded-lg p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
-                  <p className="text-xs font-semibold mb-1" style={{ color: '#92400e' }}>
-                    ⚠ {blockedTowar.length} poz. z towarem ale niekompletne — nie trafią do magazynu:
-                  </p>
-                  {blockedTowar.map(p => {
-                    const s = recalculateInvoiceLineStatus(p, ctx)
-                    const displayName = p.towary?.nazwa && p.towary.nazwa.length >= 2
-                      ? p.towary.nazwa
-                      : (p.raw_name || p.towary?.nazwa || '—')
-                    return (
-                      <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
-                        · {displayName} — {s.errors.join(', ')}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {bezTowaru.length > 0 && (
-                <div className="rounded-lg p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
-                  <p className="text-xs font-semibold" style={{ color: '#92400e' }}>
-                    ⚠ {bezTowaru.length} poz. robocze (bez towaru) — nie trafią do magazynu
-                  </p>
-                  {bezTowaru.map(p => (
-                    <div key={p.id} className="text-xs mt-0.5" style={{ color: '#92400e' }}>
-                      · {p.raw_name || p.towary?.nazwa || '(brak nazwy)'} × {p.ilosc} — brak dopasowanego towaru
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {readyTowar.length === 0 && (
-                <div className="rounded-lg p-3" style={{ background: '#fef2f2', border: '1px solid #fca5a5' }}>
-                  <p className="text-xs" style={{ color: '#991b1b' }}>
-                    ❌ Brak gotowych pozycji towarowych — żadna pozycja nie trafi do magazynu. Faktura zostanie oznaczona jako zatwierdzona.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowZatwierdzModal(false); setZatwierdzFak(null) }}
-                  className="flex-1 rounded-lg py-2 text-sm font-medium"
-                  style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="button"
-                  onClick={doZatwierdz}
-                  className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
-                  style={{ background: '#22c55e' }}
-                >
-                  Zatwierdź fakturę
-                </button>
-              </div>
-            </div>
-          </Modal>
-        )
-      })()}
-
-      {/* Dev panel — visible in development mode only */}
       {import.meta.env.DEV && <InvoiceLearningDebugPanel />}
     </div>
   )
