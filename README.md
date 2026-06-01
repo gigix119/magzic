@@ -23,8 +23,4 @@ Po pierwszym uruchomieniu wklej w Supabase SQL Editor:
 Projekt jest wdrożony na Cloudflare Pages.
 Połączony z GitHub — każdy push na `main` automatycznie deployuje.
 
-## Konto admina
 
-Utwórz w Supabase Dashboard:  
-Authentication → Users → Add user  
-Email: administrator@blueapart.pl
