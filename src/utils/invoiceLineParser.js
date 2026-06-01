@@ -58,13 +58,60 @@ function assignToColumn(items, colMap) {
   return result
 }
 
+// Detect and fix qty+price concatenation in the cenaNetto column assignment.
+//
+// Root cause: assignToColumn uses a -15px left-tolerance so that right-aligned
+// numeric tokens (e.g. qty "1" right-justified in the "Ilość" column) sometimes
+// fall within the next column's (cenaNetto) range and are concatenated there:
+//   "1" + " " + "249,00" → "1 249,00"
+// normalizePolishNumber then treats this as a thousands number (1249) or removes
+// the space via the comma-only path ("6 29,99" → 629.99).
+//
+// Fix: if cenaNetto has exactly two whitespace tokens and the arithmetic
+// possibleQty × possibleCena ≈ wartoscNetto validates, split them back.
+function splitMergedCenaIlosc(assigned) {
+  const cenaRaw = (assigned.cenaNetto || '').trim()
+  if (!cenaRaw) return assigned
+
+  const tokens = cenaRaw.split(/\s+/).filter(Boolean)
+  if (tokens.length !== 2) return assigned
+
+  // First token must be a plain positive integer (quantity candidate, 1–9999)
+  if (!/^\d{1,4}$/.test(tokens[0])) return assigned
+
+  const possibleQty = parseInt(tokens[0], 10)
+  const possibleCena = normalizePolishNumber(tokens[1])
+  if (isNaN(possibleCena) || possibleCena <= 0 || possibleQty <= 0) return assigned
+
+  // Arithmetic gate: only accept the split when possibleQty * possibleCena ≈ wartoscNetto
+  const wartoscNettoRaw = (assigned.wartoscNetto || '').trim()
+  if (!wartoscNettoRaw) return assigned
+
+  const wartoscNetto = normalizePolishNumber(wartoscNettoRaw)
+  if (isNaN(wartoscNetto) || wartoscNetto <= 0) return assigned
+
+  const expectedTotal = Math.round(possibleQty * possibleCena * 100) / 100
+  const tolerance = Math.max(0.05, wartoscNetto * 0.015) // 1.5% or 5 groszy
+  if (Math.abs(expectedTotal - wartoscNetto) > tolerance) return assigned
+
+  // Confirmed concatenation — restore the individual price field.
+  // Preserve existing ilosc if it was explicitly assigned (non-trivial value).
+  const hasExplicitIlosc = assigned.ilosc && assigned.ilosc !== '' && assigned.ilosc !== '1'
+  return {
+    ...assigned,
+    cenaNetto: tokens[1],
+    ilosc: hasExplicitIlosc ? assigned.ilosc : tokens[0],
+  }
+}
+
 // Parse a single invoice line using known column positions
 export function parseInvoiceLineData(items, colMap) {
   if (Object.keys(colMap).length < 2) {
     return parseLineHeuristic(items)
   }
 
-  const assigned = assignToColumn(items, colMap)
+  const rawAssigned = assignToColumn(items, colMap)
+  const assigned = splitMergedCenaIlosc(rawAssigned)
   const nazwa = (assigned.nazwa || '').trim()
   if (!nazwa || nazwa.length < 2) return null
 

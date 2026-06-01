@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { findTableCandidates, chooseBestTableCandidate, detectColumnBoundaries } from './invoiceTableDetector'
 import { parseInvoiceLineData } from './invoiceLineParser'
 import { detectInvoiceStructure } from './invoiceStructureDetector'
+import { parseInvoiceItemsLP } from './invoiceExtractor'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -610,5 +611,378 @@ describe('no product count limit — 20 products', () => {
     const items = parseVia20()
     expect(items.length).toBeGreaterThan(10)  // definitely more than "4/6/10" limits
     expect(items.length).toBe(20)
+  })
+})
+
+// ── Regression: qty+price concatenation in cenaNetto column ──────────────────
+//
+// Root cause: assignToColumn uses a -15px left-tolerance.  In invoices where
+// the quantity token is right-aligned and its x position falls within that
+// tolerance of the cenaNetto column start, both the qty token AND the price
+// token get assigned to cenaNetto.  The resulting raw string "1 249,00" is then
+// parsed by normalizePolishNumber as:
+//   • thousands number → 1249   (3-digit price:  "1 249,00", "2 129,00")
+//   • concatenated int  → 629.99 (2-digit price:  "6 29,99")
+//   • concatenated int  → 1018.99 (2-digit price: "10 18,99")
+//
+// The fix is in parseInvoiceLineData → splitMergedCenaIlosc which validates
+// the 2-token cenaNetto against wartoscNetto arithmetic before splitting.
+
+describe('qty+price concatenation regression — misaligned cenaNetto column', () => {
+  // We re-use the standard IKEA header (ilosc at x=350, cenaNetto at x=400).
+  // We place the qty token at x=393 so that:
+  //   distFromLeft to cenaNetto = 393 - 400 = -7  (>= -15 → accepted, dist 7)
+  //   distFromLeft to ilosc     = 393 - 350 = 43   (dist 43)
+  // cenaNetto wins → qty is concatenated into cenaNetto.
+
+  const raw = detectColumnBoundaries(IKEA_HEADER_ONELINE.items)
+  const colMap = adaptColMap(raw)
+
+  // Helper: build a single-line row where qty is misaligned into cenaNetto
+  function misalignedRow(lp, nameParts, qtyStr, priceStr, totalStr, vatAmt, gross) {
+    const nameItems = nameParts.map(([x, t]) => mkItem(x, t))
+    return {
+      y: 700,
+      items: [
+        mkItem(15, String(lp)),
+        ...nameItems,
+        mkItem(300, 'szt.'),
+        mkItem(393, qtyStr),   // qty: 7px LEFT of cenaNetto (x=400) → goes to cenaNetto
+        mkItem(430, priceStr), // price: also goes to cenaNetto (distFromLeft 30)
+        mkItem(465, totalStr), // wartoscNetto (distFromLeft to wartoscNetto(460) = 5)
+        mkItem(520, '23%'),
+        mkItem(580, vatAmt),
+        mkItem(640, gross),
+      ],
+    }
+  }
+
+  it('BILLY qty=1 price=249 — "1 249,00" must not parse as 1249', () => {
+    const row = misalignedRow(1, [[60, 'BILLY'], [70, 'regał'], [80, 'biały']], '1', '249,00', '249,00', '57,27', '306,27')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(1)
+    expect(parsed.cenaNetto).toBeCloseTo(249, 1)
+    expect(parsed.cenaNetto).not.toBeCloseTo(1249, 0)
+    expect(parsed.wartoscNetto).toBeCloseTo(249, 1)
+  })
+
+  it('KALLAX qty=1 price=329 — "1 329,00" must not parse as 1329', () => {
+    const row = misalignedRow(2, [[60, 'KALLAX'], [70, 'regał']], '1', '329,00', '329,00', '75,67', '404,67')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(1)
+    expect(parsed.cenaNetto).toBeCloseTo(329, 1)
+    expect(parsed.cenaNetto).not.toBeCloseTo(1329, 0)
+  })
+
+  it('LACK qty=2 price=129 — "2 129,00" must not parse as 2129', () => {
+    const row = misalignedRow(3, [[60, 'LACK'], [70, 'stolik']], '2', '129,00', '258,00', '59,34', '317,34')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(2)
+    expect(parsed.cenaNetto).toBeCloseTo(129, 1)
+    expect(parsed.cenaNetto).not.toBeCloseTo(2129, 0)
+    expect(parsed.wartoscNetto).toBeCloseTo(258, 1)
+  })
+
+  it('FEJKA qty=6 price=29.99 — "6 29,99" must not parse as 629.99', () => {
+    const row = misalignedRow(4, [[60, 'FEJKA'], [70, 'sztuczna'], [80, 'roślina']], '6', '29,99', '179,94', '41,39', '221,33')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(6)
+    expect(parsed.cenaNetto).toBeCloseTo(29.99, 2)
+    expect(parsed.cenaNetto).not.toBeCloseTo(629.99, 0)
+    expect(parsed.wartoscNetto).toBeCloseTo(179.94, 2)
+  })
+
+  it('LEDARE qty=10 price=18.99 — "10 18,99" must not parse as 1018.99', () => {
+    const row = misalignedRow(5, [[60, 'LEDARE'], [70, 'żarówka']], '10', '18,99', '189,90', '43,68', '233,58')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(10)
+    expect(parsed.cenaNetto).toBeCloseTo(18.99, 2)
+    expect(parsed.cenaNetto).not.toBeCloseTo(1018.99, 0)
+    expect(parsed.wartoscNetto).toBeCloseTo(189.90, 2)
+  })
+
+  it('MALM qty=1 price=399 — "1 399,00" must not parse as 1399', () => {
+    const row = misalignedRow(6, [[60, 'MALM'], [70, 'komoda']], '1', '399,00', '399,00', '91,77', '490,77')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(1)
+    expect(parsed.cenaNetto).toBeCloseTo(399, 1)
+    expect(parsed.cenaNetto).not.toBeCloseTo(1399, 0)
+  })
+
+  it('SKÅDIS qty=3 price=59.99 — "3 59,99" must not parse as 359.99', () => {
+    const row = misalignedRow(7, [[60, 'SKÅDIS'], [70, 'tablica']], '3', '59,99', '179,97', '41,39', '221,36')
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(3)
+    expect(parsed.cenaNetto).toBeCloseTo(59.99, 2)
+    expect(parsed.cenaNetto).not.toBeCloseTo(359.99, 0)
+    expect(parsed.wartoscNetto).toBeCloseTo(179.97, 2)
+  })
+
+  it('genuine thousands price 1249 is NOT split when wartoscNetto matches', () => {
+    // Product costs 1249 PLN, qty=1 — wartoscNetto=1249 so split would fail arithmetic
+    const row = misalignedRow(9, [[60, 'Drogi'], [70, 'produkt']], '1', '249,00', '1249,00', '287,27', '1536,27')
+    // wartoscNetto "1249,00" at x=465 → assigned.wartoscNetto = "1249,00"
+    // possibleQty=1, possibleCena=249, 1*249=249 ≠ 1249 → NO split → cenaNetto stays as "1 249,00" → normalizePolishNumber → 1249
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    // When wartoscNetto=1249 and cenaNetto=1249 (thousands), result is correct
+    if (parsed) {
+      expect(parsed.cenaNetto).toBeCloseTo(1249, 0)
+    }
+  })
+
+  it('qty already in ilosc column — cenaNetto-only concatenation is still fixed', () => {
+    // When qty "2" IS correctly in ilosc column AND price "129,00" is correctly in cenaNetto
+    // (no concatenation), everything should work normally
+    const row = {
+      y: 680,
+      items: [
+        mkItem(15, '3'),
+        mkItem(60, 'LACK'), mkItem(70, 'stolik'),
+        mkItem(300, 'szt.'),
+        mkItem(370, '2'),    // qty at x=370: distFromLeft to ilosc(350)=20, to cenaNetto(400)=-30<-15 → ilosc ✓
+        mkItem(440, '129,00'), // price at cenaNetto range (distFromLeft=40 to cenaNetto)
+        mkItem(465, '258,00'),
+        mkItem(520, '23%'), mkItem(580, '59,34'), mkItem(640, '317,34'),
+      ],
+    }
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(2)
+    expect(parsed.cenaNetto).toBeCloseTo(129, 1)
+  })
+})
+
+// ── LP parser: 8-product IKEA invoice regression ─────────────────────────────
+// Verifies that parseInvoiceItemsLP correctly handles ALL 8 products from
+// the failing invoice, including the specific qty+price combinations that
+// caused wrong output (1249, 629.99, 1018.99 etc.) in the LP text path.
+
+describe('parseInvoiceItemsLP — 8-product IKEA invoice (regression)', () => {
+  const ikeaText8 = [
+    'FAKTURA VAT',
+    'Sprzedawca: IKEA Retail Sp. z o.o.',
+    '',
+    'Lp. Nazwa towaru / usługi Jm. Ilość Cena netto Wartość netto VAT Kwota VAT Wartość brutto',
+    '',
+    '1 BILLY regał biały 80x28x202 cm szt. 1 249,00 249,00 23% 57,27 306,27',
+    '2 KALLAX regał 77x147 cm, biały szt. 1 329,00 329,00 23% 75,67 404,67',
+    '3 LACK stolik kawowy 90x55 cm szt. 2 129,00 258,00 23% 59,34 317,34',
+    '4 FEJKA sztuczna roślina doniczkowa szt. 6 29,99 179,94 23% 41,39 221,33',
+    '5 LEDARE żarówka LED E27 806 lm szt. 10 18,99 189,90 23% 43,68 233,58',
+    '6 MALM komoda 3-szufladowa biała szt. 1 399,00 399,00 23% 91,77 490,77',
+    '7 SKÅDIS tablica perforowana biała szt. 3 59,99 179,97 23% 41,39 221,36',
+    '8 FIXA zestaw wkrętów i kołków 260 szt. kpl. 2 24,99 49,98 23% 11,50 61,48',
+    'Razem netto 1 834,79',
+    'VAT 23% 422,01',
+    'Do zapłaty 2 256,80',
+  ].join('\n')
+
+  let items
+
+  it('returns exactly 8 products', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    expect(items.length).toBe(8)
+  })
+
+  it('BILLY (LP1): qty=1, unitNetPrice=249, netValue=249, NOT 1249', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const billy = items.find(i => (i.rawName || '').includes('BILLY'))
+    expect(billy).toBeDefined()
+    expect(billy.ilosc).toBe(1)
+    expect(billy.cenaNetto).toBeCloseTo(249, 1)
+    expect(billy.cenaNetto).not.toBeCloseTo(1249, 0)
+    expect(billy.wartoscNetto).toBeCloseTo(249, 1)
+  })
+
+  it('KALLAX (LP2): qty=1, unitNetPrice=329, NOT 1329', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const kallax = items.find(i => (i.rawName || '').includes('KALLAX'))
+    expect(kallax).toBeDefined()
+    expect(kallax.ilosc).toBe(1)
+    expect(kallax.cenaNetto).toBeCloseTo(329, 1)
+    expect(kallax.cenaNetto).not.toBeCloseTo(1329, 0)
+  })
+
+  it('LACK (LP3): qty=2, unitNetPrice=129, netValue=258, NOT 2129', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const lack = items.find(i => (i.rawName || '').includes('LACK'))
+    expect(lack).toBeDefined()
+    expect(lack.ilosc).toBe(2)
+    expect(lack.cenaNetto).toBeCloseTo(129, 1)
+    expect(lack.cenaNetto).not.toBeCloseTo(2129, 0)
+    expect(lack.wartoscNetto).toBeCloseTo(258, 1)
+  })
+
+  it('FEJKA (LP4): qty=6, unitNetPrice=29.99, netValue=179.94, NOT 629.99', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const fejka = items.find(i => (i.rawName || '').includes('FEJKA'))
+    expect(fejka).toBeDefined()
+    expect(fejka.ilosc).toBe(6)
+    expect(fejka.cenaNetto).toBeCloseTo(29.99, 2)
+    expect(fejka.cenaNetto).not.toBeCloseTo(629.99, 0)
+    expect(fejka.wartoscNetto).toBeCloseTo(179.94, 2)
+  })
+
+  it('LEDARE (LP5): qty=10, unitNetPrice=18.99, netValue=189.90, NOT 1018.99', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const ledare = items.find(i => (i.rawName || '').includes('LEDARE'))
+    expect(ledare).toBeDefined()
+    expect(ledare.ilosc).toBe(10)
+    expect(ledare.cenaNetto).toBeCloseTo(18.99, 2)
+    expect(ledare.cenaNetto).not.toBeCloseTo(1018.99, 0)
+    expect(ledare.wartoscNetto).toBeCloseTo(189.90, 2)
+  })
+
+  it('MALM (LP6): qty=1, unitNetPrice=399, NOT 1399', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const malm = items.find(i => (i.rawName || '').includes('MALM'))
+    expect(malm).toBeDefined()
+    expect(malm.ilosc).toBe(1)
+    expect(malm.cenaNetto).toBeCloseTo(399, 1)
+    expect(malm.cenaNetto).not.toBeCloseTo(1399, 0)
+  })
+
+  it('SKÅDIS (LP7): qty=3, unitNetPrice=59.99, netValue=179.97', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const skadis = items.find(i => (i.rawName || '') .includes('SK'))
+    expect(skadis).toBeDefined()
+    expect(skadis.ilosc).toBe(3)
+    expect(skadis.cenaNetto).toBeCloseTo(59.99, 2)
+    expect(skadis.wartoscNetto).toBeCloseTo(179.97, 2)
+  })
+
+  it('FIXA (LP8): unit=kpl, qty=2, unitNetPrice=24.99, netValue=49.98', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const fixa = items.find(i => (i.rawName || '').includes('FIXA'))
+    expect(fixa).toBeDefined()
+    expect(fixa.ilosc).toBe(2)
+    expect(fixa.cenaNetto).toBeCloseTo(24.99, 2)
+    expect(fixa.wartoscNetto).toBeCloseTo(49.98, 2)
+    const unit = fixa.jednostka || fixa.unit || ''
+    expect(unit).toBe('kpl')
+  })
+
+  it('total net ≈ 1834.79 (±0.05)', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const totalNet = items.reduce((s, i) => s + (i.wartoscNetto || i.totalNet || 0), 0)
+    expect(Math.abs(totalNet - 1834.79)).toBeLessThan(0.05)
+  })
+
+  it('all 8 names present (no stop lines as products)', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    const names = items.map(i => (i.rawName || '').toLowerCase())
+    expect(names.some(n => n.includes('billy'))).toBe(true)
+    expect(names.some(n => n.includes('kallax'))).toBe(true)
+    expect(names.some(n => n.includes('lack'))).toBe(true)
+    expect(names.some(n => n.includes('fejka'))).toBe(true)
+    expect(names.some(n => n.includes('ledare'))).toBe(true)
+    expect(names.some(n => n.includes('malm'))).toBe(true)
+    expect(names.some(n => n.includes('fixa'))).toBe(true)
+    expect(names.every(n => !/^razem/.test(n))).toBe(true)
+    expect(names.every(n => !/do\s*zap/.test(n))).toBe(true)
+  })
+
+  it('VAT rate is 23 for all items', () => {
+    items = parseInvoiceItemsLP(ikeaText8)
+    expect(items.every(i => i.vat === 23)).toBe(true)
+  })
+})
+
+// ── Column-based parser: 8-product invoice via full table detection pipeline ──
+
+describe('8-product IKEA invoice via table detector + parseInvoiceLineData', () => {
+  // Well-aligned x positions — qty at x=355 stays in ilosc column (x=350, dist=5),
+  // price at x=420 goes to cenaNetto (x=400, dist=20). No concatenation.
+  function sl8(lp, nameParts, unit, qty, cena, total, vat) {
+    const totalNum = parseFloat(String(total).replace(',', '.'))
+    const vatAmt   = (Math.round(totalNum * vat / 100 * 100) / 100).toFixed(2).replace('.', ',')
+    const gross    = (totalNum + parseFloat(vatAmt.replace(',', '.'))).toFixed(2).replace('.', ',')
+    return mkLine(800 - lp * 18,
+      [15, String(lp)],
+      ...nameParts,
+      [300, unit],
+      [355, String(qty)],
+      [420, cena],
+      [465, total],
+      [520, `${vat}%`],
+      [580, vatAmt],
+      [640, gross],
+    )
+  }
+
+  const products8 = [
+    sl8(1, [[60, 'BILLY'], [70, 'regał'], [80, 'biały']],  'szt.',  1, '249,00', '249,00', 23),
+    sl8(2, [[60, 'KALLAX'], [70, 'regał']],                'szt.',  1, '329,00', '329,00', 23),
+    sl8(3, [[60, 'LACK'], [70, 'stolik']],                 'szt.',  2, '129,00', '258,00', 23),
+    sl8(4, [[60, 'FEJKA'], [70, 'sztuczna'], [80, 'ros']], 'szt.',  6, '29,99',  '179,94', 23),
+    sl8(5, [[60, 'LEDARE'], [70, 'żarówka']],              'szt.', 10, '18,99',  '189,90', 23),
+    sl8(6, [[60, 'MALM'], [70, 'komoda']],                 'szt.',  1, '399,00', '399,00', 23),
+    sl8(7, [[60, 'SKADIS'], [70, 'tablica']],              'szt.',  3, '59,99',  '179,97', 23),
+    sl8(8, [[60, 'FIXA'], [70, 'zestaw']],                 'kpl.',  2, '24,99',  '49,98',  23),
+  ]
+
+  const layout8 = {
+    pages: [{
+      pageNum: 1, height: 842,
+      lines: [IKEA_HEADER_ONELINE, ...products8, IKEA_RAZEM],
+    }],
+    fullText: [IKEA_HEADER_ONELINE, ...products8, IKEA_RAZEM].map(l => l.text).join('\n'),
+  }
+
+  function parseVia8() {
+    const candidates = findTableCandidates(layout8)
+    const best = chooseBestTableCandidate(candidates)
+    if (!best) return []
+    const colMap = adaptColMap(best.columnMap || {})
+    if (Object.keys(colMap).length < 2) return []
+    return parseTableRows(best.rows, colMap)
+  }
+
+  it('returns 8 products', () => {
+    expect(parseVia8().length).toBe(8)
+  })
+
+  it('BILLY: qty=1, price=249', () => {
+    const billy = parseVia8().find(i => i.nazwa?.includes('BILLY'))
+    expect(billy).toBeDefined()
+    expect(billy.ilosc).toBe(1)
+    expect(billy.cenaNetto).toBeCloseTo(249, 1)
+  })
+
+  it('LACK: qty=2, price=129, net=258', () => {
+    const lack = parseVia8().find(i => i.nazwa?.includes('LACK'))
+    expect(lack).toBeDefined()
+    expect(lack.ilosc).toBe(2)
+    expect(lack.cenaNetto).toBeCloseTo(129, 1)
+    expect(lack.wartoscNetto).toBeCloseTo(258, 1)
+  })
+
+  it('FEJKA: qty=6, price=29.99, net=179.94', () => {
+    const fejka = parseVia8().find(i => i.nazwa?.includes('FEJKA'))
+    expect(fejka).toBeDefined()
+    expect(fejka.ilosc).toBe(6)
+    expect(fejka.cenaNetto).toBeCloseTo(29.99, 2)
+    expect(fejka.wartoscNetto).toBeCloseTo(179.94, 2)
+  })
+
+  it('LEDARE: qty=10, price=18.99, net=189.90', () => {
+    const ledare = parseVia8().find(i => i.nazwa?.includes('LEDARE'))
+    expect(ledare).toBeDefined()
+    expect(ledare.ilosc).toBe(10)
+    expect(ledare.cenaNetto).toBeCloseTo(18.99, 2)
+    expect(ledare.wartoscNetto).toBeCloseTo(189.90, 2)
+  })
+
+  it('total net ≈ 1834.79', () => {
+    const items = parseVia8()
+    const total = items.reduce((s, i) => s + (i.wartoscNetto || 0), 0)
+    expect(Math.abs(total - 1834.79)).toBeLessThan(0.1)
   })
 })
