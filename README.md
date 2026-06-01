@@ -24,7 +24,3 @@ Projekt jest wdrożony na Cloudflare Pages.
 Połączony z GitHub — każdy push na `main` automatycznie deployuje.
 
 
-## Konto admina
-
-Utwórz konto administratora w Supabase Dashboard → Authentication → Users → Add user,
-używając własnego adresu e-mail.
