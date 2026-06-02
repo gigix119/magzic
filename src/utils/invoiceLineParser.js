@@ -104,6 +104,58 @@ function splitMergedCenaIlosc(assigned) {
   }
 }
 
+// Detect and fix qty token landing in the JEDNOSTKA column.
+//
+// Root cause (same -15px tolerance as splitMergedCenaIlosc, different column pair):
+// In the no-LP layout "Nazwa | Ilość | Jm | Cena netto | …" the quantity column
+// (Ilość) comes BEFORE the unit column (Jm).  A right-aligned qty digit (e.g. "4")
+// near the right edge of the Ilość column often falls within -15px of the Jm column
+// start and gets assigned to JEDNOSTKA instead.  Result:
+//   assigned.ilosc    = ""          (nothing → defaults to 1)
+//   assigned.jednostka = "4 szt."   (qty + real unit both here)
+//
+// Fix: if jednostka starts with a small integer optionally followed by a unit token,
+// and possibleQty × cenaNetto ≈ wartoscNetto, move qty to ilosc and keep the unit.
+function repairIloscInJednostka(assigned) {
+  const jednostkaRaw = (assigned.jednostka || '').trim()
+  if (!jednostkaRaw) return assigned
+
+  // Pattern: leading integer (the misplaced qty), optionally followed by a unit token
+  const qtyUnitMatch = jednostkaRaw.match(/^(\d{1,4})\s*(.*)$/)
+  if (!qtyUnitMatch) return assigned
+
+  const qtyStr  = qtyUnitMatch[1]
+  const restStr = qtyUnitMatch[2].trim()
+
+  // restStr must be empty (just a bare number) or a recognised unit
+  const looksLikeUnit = !restStr || isUnit(restStr.replace(/\.$/, ''))
+  if (!looksLikeUnit) return assigned
+
+  const possibleQty = parseInt(qtyStr, 10)
+  if (!possibleQty || possibleQty <= 0) return assigned
+
+  // Do not interfere when ilosc was already explicitly assigned
+  const hasExplicitIlosc = assigned.ilosc && assigned.ilosc !== '' && assigned.ilosc !== '1'
+  if (hasExplicitIlosc) return assigned
+
+  // Arithmetic gate: possibleQty × cenaNetto ≈ wartoscNetto
+  const cenaNetto    = normalizePolishNumber(assigned.cenaNetto    || '')
+  const wartoscNetto = normalizePolishNumber(assigned.wartoscNetto || '')
+  if (isNaN(cenaNetto) || cenaNetto <= 0) return assigned
+  if (isNaN(wartoscNetto) || wartoscNetto <= 0) return assigned
+
+  const expectedTotal = Math.round(possibleQty * cenaNetto * 100) / 100
+  const tolerance     = Math.max(0.05, wartoscNetto * 0.015)
+  if (Math.abs(expectedTotal - wartoscNetto) > tolerance) return assigned
+
+  // Confirmed swap — restore qty to ilosc, keep real unit in jednostka
+  return {
+    ...assigned,
+    ilosc:     qtyStr,
+    jednostka: restStr,   // "" → falls back to 'szt' in parseInvoiceLineData
+  }
+}
+
 // Parse a single invoice line using known column positions
 export function parseInvoiceLineData(items, colMap) {
   if (Object.keys(colMap).length < 2) {
@@ -111,7 +163,10 @@ export function parseInvoiceLineData(items, colMap) {
   }
 
   const rawAssigned = assignToColumn(items, colMap)
-  const assigned = splitMergedCenaIlosc(rawAssigned)
+  // Fix 1: qty+price concatenated into cenaNetto (previous LP-layout bug)
+  const afterCenaFix = splitMergedCenaIlosc(rawAssigned)
+  // Fix 2: qty token landed in jednostka (no-LP layout bug)
+  const assigned = repairIloscInJednostka(afterCenaFix)
   const nazwa = (assigned.nazwa || '').trim()
   if (!nazwa || nazwa.length < 2) return null
 

@@ -986,3 +986,282 @@ describe('8-product IKEA invoice via table detector + parseInvoiceLineData', () 
     expect(Math.abs(total - 1834.79)).toBeLessThan(0.1)
   })
 })
+
+// ── No-LP layout: Nazwa | Ilość | Jm | Cena netto | Wartość netto | VAT | Wartość brutto ──
+//
+// Bug: In the no-LP layout Ilość comes BEFORE Jm.  A right-aligned qty digit ("4")
+// at the right edge of the Ilość column falls within the -15px tolerance of the Jm
+// column start → qty assigned to JEDNOSTKA.  Result: ilosc=1, jednostka="4 szt."
+// Fix: repairIloscInJednostka (arithmetic-validated swap back).
+
+describe('No-LP invoice — qty misaligned into Jm column (regression)', () => {
+  // No-LP header (Ilość before Jm)
+  const NO_LP_HDR = mkLine(800,
+    [15,  'Nazwa'],
+    [195, 'Ilość'],          // ILOSC at x=195
+    [245, 'Jm'],             // JEDNOSTKA at x=245
+    [305, 'Cena netto'],
+    [390, 'Wartość netto'],
+    [465, 'VAT'],
+    [535, 'Wartość brutto'],
+  )
+
+  const rawNoLp = detectColumnBoundaries(NO_LP_HDR.items)
+  const colMapNoLp = adaptColMap(rawNoLp)
+
+  // qty at x=233: distFromLeft to Jm(245)=-12 ≥ -15 → JEDNOSTKA wins (dist 12 < dist 38 to Ilość)
+  // unit at x=263: distFromLeft to Cena netto(305)=-42 < -15 → rejected → also JEDNOSTKA
+  // Produces: assigned.jednostka="4 szt.", assigned.ilosc=""
+  function misalignedNoLpRow(nameParts, qtyStr, unitStr, priceStr, netStr, vatStr, grossStr) {
+    return {
+      y: 750,
+      items: [
+        ...nameParts.map(([x, t]) => mkItem(x, t)),
+        mkItem(233, qtyStr),
+        mkItem(263, unitStr),
+        mkItem(325, priceStr),
+        mkItem(405, netStr),
+        mkItem(470, vatStr),
+        mkItem(545, grossStr),
+      ],
+    }
+  }
+
+  it('header has ilosc and jednostka columns', () => {
+    expect(typeof colMapNoLp.ilosc).toBe('number')
+    expect(typeof colMapNoLp.jednostka).toBe('number')
+  })
+
+  it('Panel ścienny qty=4: ilosc must be 4, NOT 1; jednostka must not be "4"', () => {
+    const row = misalignedNoLpRow(
+      [[15,'Panel'],[55,'ścienny'],[100,'akustyczny'],[150,'dąb']],
+      '4', 'szt.', '79,90', '319,60', '23%', '393,11'
+    )
+    const parsed = parseInvoiceLineData(row.items, colMapNoLp)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(4)
+    expect(parsed.ilosc).not.toBe(1)
+    expect(parsed.jednostka).not.toMatch(/^\d/)
+    expect(parsed.cenaNetto).toBeCloseTo(79.90, 2)
+    expect(parsed.wartoscNetto).toBeCloseTo(319.60, 2)
+    expect(parsed.vat).toBe(23)
+  })
+
+  it('Taśma LED qty=3 unit=kpl: ilosc=3, NOT 1', () => {
+    const row = misalignedNoLpRow(
+      [[15,'Taśma'],[50,'LED'],[80,'neutralna'],[115,'5m']],
+      '3', 'kpl.', '49,99', '149,97', '23%', '184,46'
+    )
+    const parsed = parseInvoiceLineData(row.items, colMapNoLp)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(3)
+    expect(parsed.ilosc).not.toBe(1)
+    expect(parsed.cenaNetto).toBeCloseTo(49.99, 2)
+    expect(parsed.wartoscNetto).toBeCloseTo(149.97, 2)
+  })
+
+  it('Zasilacz LED qty=2: ilosc=2, NOT 1', () => {
+    const row = misalignedNoLpRow(
+      [[15,'Zasilacz'],[60,'LED'],[90,'60W'],[120,'IP44']],
+      '2', 'szt.', '84,50', '169,00', '23%', '207,87'
+    )
+    const parsed = parseInvoiceLineData(row.items, colMapNoLp)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(2)
+    expect(parsed.cenaNetto).toBeCloseTo(84.50, 2)
+    expect(parsed.wartoscNetto).toBeCloseTo(169.00, 2)
+  })
+
+  it('Listwa montażowa qty=5: ilosc=5, NOT 1', () => {
+    const row = misalignedNoLpRow(
+      [[15,'Listwa'],[55,'montażowa'],[115,'aluminiowa'],[175,'2m']],
+      '5', 'szt.', '31,20', '156,00', '23%', '191,88'
+    )
+    const parsed = parseInvoiceLineData(row.items, colMapNoLp)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(5)
+    expect(parsed.cenaNetto).toBeCloseTo(31.20, 2)
+    expect(parsed.wartoscNetto).toBeCloseTo(156.00, 2)
+  })
+
+  it('all 4 products: total net ≈ 794.57, no item has ilosc=1 or numeric jednostka', () => {
+    const rows = [
+      misalignedNoLpRow([[15,'Panel'],[55,'ścienny'],[100,'akustyczny'],[150,'dąb']],
+        '4','szt.','79,90','319,60','23%','393,11'),
+      misalignedNoLpRow([[15,'Taśma'],[50,'LED'],[80,'neutralna'],[115,'5m']],
+        '3','kpl.','49,99','149,97','23%','184,46'),
+      misalignedNoLpRow([[15,'Zasilacz'],[60,'LED'],[90,'60W'],[120,'IP44']],
+        '2','szt.','84,50','169,00','23%','207,87'),
+      misalignedNoLpRow([[15,'Listwa'],[55,'montażowa'],[115,'aluminiowa'],[175,'2m']],
+        '5','szt.','31,20','156,00','23%','191,88'),
+    ]
+    const items = rows
+      .map(r => parseInvoiceLineData(r.items, colMapNoLp))
+      .filter(p => p && p.nazwa && (p.cenaNetto > 0 || p.wartoscNetto > 0))
+    expect(items.length).toBe(4)
+    const totalNet = items.reduce((s, i) => s + (i.wartoscNetto || 0), 0)
+    expect(Math.abs(totalNet - 794.57)).toBeLessThan(0.05)
+    expect(items.every(i => i.ilosc > 1)).toBe(true)
+    expect(items.every(i => !/^\d/.test(i.jednostka || ''))).toBe(true)
+  })
+
+  it('generic row — Produkt ABC qty=7 price=12.30 net=86.10', () => {
+    const row = misalignedNoLpRow(
+      [[15,'Produkt'],[65,'ABC']],
+      '7', 'szt.', '12,30', '86,10', '23%', '105,90'
+    )
+    const parsed = parseInvoiceLineData(row.items, colMapNoLp)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(7)
+    expect(parsed.cenaNetto).toBeCloseTo(12.30, 2)
+    expect(parsed.wartoscNetto).toBeCloseTo(86.10, 2)
+  })
+
+  it('genuine unit in jednostka (qty correctly in ilosc) — repair must not trigger', () => {
+    // qty "4" at x=210: distFromLeft to Jm(245)=-35 < -15 → REJECTED → goes to ILOSC ✓
+    // No misalignment; repair must not fire
+    const row = {
+      y: 750,
+      items: [
+        mkItem(15, 'Produkt'), mkItem(60, 'testowy'),
+        mkItem(210, '4'),    // dist to ILOSC(195)=15; to Jm(245)=-35<-15→rejected → ILOSC
+        mkItem(265, 'szt.'), // JEDNOSTKA
+        mkItem(325, '10,00'),
+        mkItem(405, '40,00'),
+        mkItem(470, '23%'),
+        mkItem(545, '49,20'),
+      ],
+    }
+    const parsed = parseInvoiceLineData(row.items, colMapNoLp)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(4)
+    expect(parsed.cenaNetto).toBeCloseTo(10, 1)
+  })
+})
+
+// ── No-LP 4-product invoice via full table detection pipeline ─────────────────
+
+describe('No-LP 4-product invoice via table detector (happy path)', () => {
+  // Well-aligned rows — qty at x=215 (dist 20 to ILOSC=195, dist -30<-15 to Jm=245 → ILOSC ✓)
+  function slNoLp(nameParts, unit, qty, cena, total, vat) {
+    const totalNum = parseFloat(String(total).replace(',', '.'))
+    const vatAmt   = (Math.round(totalNum * vat / 100 * 100) / 100).toFixed(2).replace('.', ',')
+    const gross    = (totalNum + parseFloat(vatAmt.replace(',', '.'))).toFixed(2).replace('.', ',')
+    return mkLine(750,
+      ...nameParts,
+      [215, String(qty)],
+      [265, unit],
+      [325, cena],
+      [405, total],
+      [470, `${vat}%`],
+      [545, gross],
+    )
+  }
+
+  const NO_LP_HDR = mkLine(800,
+    [15,'Nazwa'],[195,'Ilość'],[245,'Jm'],
+    [305,'Cena netto'],[390,'Wartość netto'],[465,'VAT'],[535,'Wartość brutto'],
+  )
+  const RAZEM_LINE = mkLine(680, [15,'Razem'], [390,'794,57'], [535,'977,32'])
+
+  const noLpRows = [
+    slNoLp([[15,'Panel'],[55,'ścienny'],[100,'akustyczny'],[150,'dąb']],  'szt.', 4, '79,90', '319,60', 23),
+    slNoLp([[15,'Taśma'],[50,'LED'],[80,'neutralna'],[115,'5m']],          'kpl.', 3, '49,99', '149,97', 23),
+    slNoLp([[15,'Zasilacz'],[60,'LED'],[90,'60W'],[120,'IP44']],            'szt.', 2, '84,50', '169,00', 23),
+    slNoLp([[15,'Listwa'],[55,'montażowa'],[115,'aluminiowa'],[175,'2m']],  'szt.', 5, '31,20', '156,00', 23),
+  ]
+
+  const layout = {
+    pages: [{ pageNum: 1, height: 842, lines: [NO_LP_HDR, ...noLpRows, RAZEM_LINE] }],
+    fullText: [NO_LP_HDR, ...noLpRows, RAZEM_LINE].map(l => l.text).join('\n'),
+  }
+
+  function parseViaNoLpPipeline() {
+    const candidates = findTableCandidates(layout)
+    const best = chooseBestTableCandidate(candidates)
+    if (!best) return []
+    const colMap = adaptColMap(best.columnMap || {})
+    if (Object.keys(colMap).length < 2) return []
+    return parseTableRows(best.rows, colMap)
+  }
+
+  it('finds table header', () => {
+    expect(findTableCandidates(layout).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('returns 4 products', () => {
+    expect(parseViaNoLpPipeline().length).toBe(4)
+  })
+
+  it('Panel ścienny: qty=4, cenaNetto=79.90, wartoscNetto=319.60', () => {
+    const panel = parseViaNoLpPipeline().find(i => i.nazwa?.includes('Panel'))
+    expect(panel).toBeDefined()
+    expect(panel.ilosc).toBe(4)
+    expect(panel.cenaNetto).toBeCloseTo(79.90, 2)
+    expect(panel.wartoscNetto).toBeCloseTo(319.60, 2)
+  })
+
+  it('Taśma LED: qty=3, cenaNetto=49.99', () => {
+    const tasma = parseViaNoLpPipeline().find(i => i.nazwa?.includes('Taśma'))
+    expect(tasma).toBeDefined()
+    expect(tasma.ilosc).toBe(3)
+    expect(tasma.cenaNetto).toBeCloseTo(49.99, 2)
+  })
+
+  it('Zasilacz LED: qty=2, cenaNetto=84.50', () => {
+    const zasilacz = parseViaNoLpPipeline().find(i => i.nazwa?.includes('Zasilacz'))
+    expect(zasilacz).toBeDefined()
+    expect(zasilacz.ilosc).toBe(2)
+    expect(zasilacz.cenaNetto).toBeCloseTo(84.50, 2)
+  })
+
+  it('Listwa montażowa: qty=5, cenaNetto=31.20', () => {
+    const listwa = parseViaNoLpPipeline().find(i => i.nazwa?.includes('Listwa'))
+    expect(listwa).toBeDefined()
+    expect(listwa.ilosc).toBe(5)
+    expect(listwa.cenaNetto).toBeCloseTo(31.20, 2)
+  })
+
+  it('total net ≈ 794.57', () => {
+    const total = parseViaNoLpPipeline().reduce((s, i) => s + (i.wartoscNetto || 0), 0)
+    expect(Math.abs(total - 794.57)).toBeLessThan(0.05)
+  })
+
+  it('Razem line is NOT a product', () => {
+    expect(parseViaNoLpPipeline().every(i => !/^razem/i.test(i.nazwa || ''))).toBe(true)
+  })
+})
+
+// ── Previous LP-layout fixes must still pass (non-regression) ─────────────────
+// Quick smoke test to ensure repairIloscInJednostka does not break the LP layout
+// where the header order is: Lp | Nazwa | Jm | Ilość | Cena netto | …
+
+describe('LP-layout non-regression after no-LP fix', () => {
+  // Use the existing IKEA header where Jm(300) comes BEFORE Ilość(350)
+  const raw = detectColumnBoundaries(IKEA_HEADER_ONELINE.items)
+  const colMap = adaptColMap(raw)
+
+  it('LEDARE single-line row still parses correctly', () => {
+    const parsed = parseInvoiceLineData(IKEA_LEDARE.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(12)
+    expect(parsed.cenaNetto).toBeCloseTo(18.99, 2)
+    expect(parsed.wartoscNetto).toBeCloseTo(227.88, 2)
+  })
+
+  it('VARDAGEN single-line row still parses correctly', () => {
+    const parsed = parseInvoiceLineData(IKEA_VARDAGEN.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(8)
+    expect(parsed.cenaNetto).toBeCloseTo(7.59, 2)
+  })
+
+  it('repairIloscInJednostka does not fire for LP layout (unit correctly in jednostka)', () => {
+    // In LP layout Jm=300 comes before Ilość=350. "szt." at x=305 → JEDNOSTKA(300) dist=5.
+    // assigned.jednostka = "szt." — a real unit string, NOT a number → repair must not trigger.
+    const parsed = parseInvoiceLineData(IKEA_TJENA.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.ilosc).toBe(6)
+    expect(parsed.cenaNetto).toBeCloseTo(24.99, 2)
+  })
+})
