@@ -4,19 +4,26 @@ import { supabase } from '../supabase'
 const AuthContext = createContext({})
 
 export function AuthProvider({ children }) {
-  const [user, setUser]           = useState(null)
-  const [profile, setProfile]     = useState(null)
-  const [workspace, setWorkspace] = useState(null)
-  const [loading, setLoading]     = useState(true)
+  const [user, setUser]                       = useState(null)
+  const [profile, setProfile]                 = useState(null)
+  const [workspace, setWorkspace]             = useState(null)
+  const [loading, setLoading]                 = useState(true)
+  // workspaceLoading: true while workspace is being fetched/created after auth state changes.
+  // Separate from `loading` so the full-page spinner and per-action guards can be decoupled.
+  const [workspaceLoading, setWorkspaceLoading] = useState(true)
 
   async function loadUserData(sessionUser) {
+    setWorkspaceLoading(true)
     try {
-      const [{ data: prof }, { data: ws }] = await Promise.all([
+      const [{ data: prof }, { data: ws, error: wsErr }] = await Promise.all([
         supabase.from('profiles')
           .select('id, email, first_name, last_name, role, status, display_name, last_login_at, last_seen_at')
           .eq('id', sessionUser.id)
           .maybeSingle(),
-        supabase.from('workspaces').select('id, name, owner_user_id').eq('owner_user_id', sessionUser.id).maybeSingle(),
+        supabase.from('workspaces')
+          .select('id, name, owner_user_id')
+          .eq('owner_user_id', sessionUser.id)
+          .maybeSingle(),
       ])
 
       // Auto-sign-out blocked users
@@ -26,11 +33,34 @@ export function AuthProvider({ children }) {
       }
 
       setProfile(prof ?? null)
-      setWorkspace(ws ?? null)
+
+      if (wsErr) {
+        // Query error — keep existing workspace value, log for diagnostics
+        console.error('[AuthContext] workspace query error:', wsErr)
+      } else if (ws) {
+        setWorkspace(ws)
+      } else {
+        // No workspace row found — auto-create one so the user can operate immediately.
+        // This handles users who registered before the handle_new_user_workspace trigger
+        // was added (i.e., no workspace was ever provisioned for them).
+        const { data: created, error: createErr } = await supabase
+          .from('workspaces')
+          .insert({ owner_user_id: sessionUser.id, name: 'Mój magazyn' })
+          .select('id, name, owner_user_id')
+          .single()
+        if (createErr) {
+          console.error('[AuthContext] auto-create workspace failed:', createErr)
+          setWorkspace(null)
+        } else {
+          setWorkspace(created)
+        }
+      }
     } catch (err) {
       console.error('[AuthContext] loadUserData error:', err)
       setProfile(null)
       setWorkspace(null)
+    } finally {
+      setWorkspaceLoading(false)
     }
   }
 
@@ -108,7 +138,11 @@ export function AuthProvider({ children }) {
 
   const signOut = () => supabase.auth.signOut()
 
-  const refreshWorkspace = () => user ? loadUserData(user) : Promise.resolve()
+  const refreshWorkspace = () => {
+    if (user) return loadUserData(user)
+    setWorkspaceLoading(false)
+    return Promise.resolve()
+  }
 
   if (loading) {
     return (
@@ -128,7 +162,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, workspace, loading, signIn, signUp, signOut, refreshWorkspace }}>
+    <AuthContext.Provider value={{ user, profile, workspace, loading, workspaceLoading, signIn, signUp, signOut, refreshWorkspace }}>
       {children}
     </AuthContext.Provider>
   )

@@ -17,6 +17,7 @@ export default function InvoiceVerificationPanel({
   newProductForm,
   newProductSaving,
   newProductDupeWarning,
+  workspaceLoading = false,
 
   onExtractedItemChange,
   onProductMatch,
@@ -659,14 +660,20 @@ export default function InvoiceVerificationPanel({
                 <button
                   type="button"
                   onClick={onSaveNewProduct}
-                  disabled={newProductSaving || !newProductForm.nazwa.trim()}
+                  disabled={newProductSaving || !newProductForm.nazwa.trim() || workspaceLoading}
                   className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
                   style={{
-                    background: (newProductSaving || !newProductForm.nazwa.trim()) ? '#94a3b8' : '#3b82f6',
-                    cursor: (newProductSaving || !newProductForm.nazwa.trim()) ? 'not-allowed' : 'pointer',
+                    background: (newProductSaving || !newProductForm.nazwa.trim() || workspaceLoading) ? '#94a3b8' : '#3b82f6',
+                    cursor: (newProductSaving || !newProductForm.nazwa.trim() || workspaceLoading) ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {newProductSaving ? 'Tworzenie...' : newProductDupeWarning ? 'Utwórz mimo to' : 'Utwórz towar'}
+                  {newProductSaving
+                    ? 'Tworzenie...'
+                    : workspaceLoading
+                    ? 'Ładowanie przestrzeni...'
+                    : newProductDupeWarning
+                    ? 'Utwórz mimo to'
+                    : 'Utwórz towar'}
                 </button>
               </div>
             </div>

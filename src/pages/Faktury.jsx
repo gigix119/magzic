@@ -46,7 +46,7 @@ import InvoiceVerificationPanel from '../components/invoice/InvoiceVerificationP
 
 export default function Faktury() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
+  const { workspaceId, workspaceLoading, wsQuery, addWsFilter, wsData } = useWorkspace()
   const fileRef = useRef(null)
 
   const [faktury, setFaktury] = useState([])
@@ -529,12 +529,19 @@ export default function Faktury() {
   async function handleSaveNewProduct() {
     const form = nNewProductForm
     if (!form.nazwa.trim()) { addToast('Podaj nazwę towaru', 'error'); return }
-    // Guard: workspace must be loaded before inserting — without it the RLS WITH CHECK
-    // receives workspace_id=null and rejects the insert with a policy violation error.
-    if (!workspaceId) {
-      addToast('Brak kontekstu przestrzeni roboczej — odśwież stronę i spróbuj ponownie.', 'error')
+
+    // Re-read workspaceId at execution time (avoids stale-closure issues).
+    // workspaceLoading means workspace is still being fetched — wait for it.
+    if (workspaceLoading) {
+      addToast('Ładowanie przestrzeni roboczej — spróbuj za chwilę.', 'info')
       return
     }
+    // workspaceId=null after loading completes means workspace could not be resolved.
+    if (!workspaceId) {
+      addToast('Nie wykryto aktywnej przestrzeni roboczej. Odśwież stronę lub skontaktuj się z administratorem.', 'error')
+      return
+    }
+
     setNNewProductSaving(true)
     try {
       if (!nNewProductDupeWarning) {
@@ -542,7 +549,7 @@ export default function Faktury() {
           .select('id, nazwa')
           .ilike('nazwa', `%${form.nazwa.trim().slice(0, 20)}%`)
           .eq('aktywny', true)
-          .eq('workspace_id', workspaceId)   // workspace-scoped dupe check
+          .eq('workspace_id', workspaceId)
           .limit(3)
         if (dupes?.length > 0) {
           setNNewProductDupeWarning(dupes.map(d => d.nazwa).join(', '))
@@ -550,25 +557,36 @@ export default function Faktury() {
           return
         }
       }
-      const { data: created, error } = await supabase.from('towary').insert([{
+
+      const insertPayload = {
         nazwa: form.nazwa.trim(),
         jednostka: form.jednostka || 'szt',
         typ: form.typ || 'towar',
         kategoria_id: form.kategoria_id || null,
         aktywny: true,
-        ...wsData(),
-      }]).select('id, nazwa, jednostka, typ').single()
+        workspace_id: workspaceId,
+      }
+      const { data: created, error } = await supabase.from('towary')
+        .insert([insertPayload])
+        .select('id, nazwa, jednostka, typ')
+        .single()
       if (error) throw error
 
       const _createdIdx = nCreateProductFor
       setNExtractedItems(items => items.map((item, i) => i === _createdIdx
-        ? { ...item, matchedProductId: created.id, matchedProductNazwa: created.nazwa, matchScore: 1.0, matchingSource: 'manual_created_from_invoice' }
+        ? {
+            ...item,
+            matchedProductId:        created.id,
+            matchedProductNazwa:     created.nazwa,
+            matchedProductJednostka: created.jednostka,
+            matchScore:              1.0,
+            matchingSource:          'manual_created_from_invoice',
+          }
         : item
       ))
       setTowary(prev => [...prev, created])
-      addToast(`Utworzono towar i przypisano go do pozycji. Magazyn zwiększy się dopiero po zatwierdzeniu faktury.`, 'success')
-      // Learn alias for newly created product
-      if (workspaceId && _createdIdx !== null) {
+      addToast('Utworzono towar i przypisano go do pozycji. Magazyn zwiększy się dopiero po zatwierdzeniu faktury.', 'success')
+      if (_createdIdx !== null) {
         const _rawName = nExtractedItems[_createdIdx]?.rawName
         if (_rawName) upsertAlias(workspaceId, _rawName, created.id, supabase).catch(() => {})
       }
@@ -1326,6 +1344,7 @@ export default function Faktury() {
               newProductForm={nNewProductForm}
               newProductSaving={nNewProductSaving}
               newProductDupeWarning={nNewProductDupeWarning}
+              workspaceLoading={workspaceLoading}
               onExtractedItemChange={updateExtractedItem}
               onProductMatch={handleExtractedProductMatch}
               onCandidateSelect={handleExtractedCandidateSelect}
