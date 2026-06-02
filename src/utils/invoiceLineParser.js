@@ -58,6 +58,45 @@ function assignToColumn(items, colMap) {
   return result
 }
 
+// Detect and fix a unit token that leaked into the cenaNetto column.
+//
+// Root cause (no-LP layout, real PDF):
+// In the layout "Nazwa | Ilość | Jm | Cena netto | …" the Jm column
+// (JEDNOSTKA) sits between Ilość and Cena netto.  When the Jm column is
+// narrow, the unit token ("szt.", "kpl.") can fall within the -15px
+// left-tolerance of the Cena netto column and get assigned there, producing:
+//   assigned.cenaNetto = "szt. 79,90"
+// normalizePolishNumber("szt. 79,90") → NaN → cenaNetto = 0.
+//
+// Fix: if cenaNetto starts with a letter-based unit token followed by a
+// price, extract the price and append the unit to jednostka (which may
+// already contain the misplaced qty like "4", giving "4 szt.").
+// After this repair repairIloscInJednostka can finish the job.
+function repairUnitInCenaNetto(assigned) {
+  const cenaRaw = (assigned.cenaNetto || '').trim()
+  if (!cenaRaw) return assigned
+
+  // Pattern: leading letter-based unit token, then whitespace, then a digit (price start)
+  const unitPriceMatch = cenaRaw.match(
+    /^([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ][a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ.]*\.?)\s+(\d.*)$/
+  )
+  if (!unitPriceMatch) return assigned
+
+  const possibleUnit = unitPriceMatch[1].trim()
+  const priceStr     = unitPriceMatch[2].trim()
+
+  if (!isUnit(possibleUnit.replace(/\.$/, ''))) return assigned
+
+  const price = normalizePolishNumber(priceStr)
+  if (isNaN(price) || price <= 0) return assigned
+
+  // Append unit to jednostka (which may already hold the qty number like "4")
+  const currentJednostka = (assigned.jednostka || '').trim()
+  const newJednostka     = currentJednostka ? currentJednostka + ' ' + possibleUnit : possibleUnit
+
+  return { ...assigned, cenaNetto: priceStr, jednostka: newJednostka }
+}
+
 // Detect and fix qty+price concatenation in the cenaNetto column assignment.
 //
 // Root cause: assignToColumn uses a -15px left-tolerance so that right-aligned
@@ -163,9 +202,11 @@ export function parseInvoiceLineData(items, colMap) {
   }
 
   const rawAssigned = assignToColumn(items, colMap)
-  // Fix 1: qty+price concatenated into cenaNetto (previous LP-layout bug)
-  const afterCenaFix = splitMergedCenaIlosc(rawAssigned)
-  // Fix 2: qty token landed in jednostka (no-LP layout bug)
+  // Fix 1: unit token leaked into cenaNetto (no-LP real PDF — "szt. 79,90" → NaN)
+  const afterUnitFix = repairUnitInCenaNetto(rawAssigned)
+  // Fix 2: qty+price concatenated into cenaNetto (LP-layout qty-spill)
+  const afterCenaFix = splitMergedCenaIlosc(afterUnitFix)
+  // Fix 3: qty token landed in jednostka (no-LP layout — "4" or "4 szt." in Jm field)
   const assigned = repairIloscInJednostka(afterCenaFix)
   const nazwa = (assigned.nazwa || '').trim()
   if (!nazwa || nazwa.length < 2) return null

@@ -10,6 +10,28 @@ import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 import { detectKsefComarchDocument, parseKsefComarchItems, isKsefMetadataLine } from './invoiceKsefComarchParser.js'
 import { recoverAmountsForItem } from './invoiceAmountRecovery.js'
 
+// Per-row regex fallback for column-based parser rows where cenaNetto ended up 0.
+// Mirrors the regex in parseInvoiceItems but returns a structured object for one line.
+// Used when column assignment puts the unit token into the cenaNetto field (causing NaN).
+const _ROW_REGEX = /^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(szt\.?|opak\.?|op\.?|rolk[ai]|pary?|kpl\.?|litr[wy]?|l|kg|g|ml|m2|m²|m3|m³|mb|usł\.?|usl\.?|godz\.?|h|pcs?|zest\.?)\s+([\d][\d\s.,]*)/i
+function parseInvoiceLineByRegex(rowText) {
+  if (!rowText || rowText.length < 5) return null
+  const m = rowText.match(_ROW_REGEX)
+  if (!m) return null
+  const ilosc = parseFloat(String(m[2]).replace(',', '.'))
+  const cena  = normalizePolishNumber(m[4])
+  if (!(ilosc > 0) || isNaN(cena) || !(cena > 0)) return null
+  return {
+    nazwa:        m[1].trim(),
+    ilosc,
+    jednostka:    m[3].toLowerCase().replace(/\.$/, ''),
+    cenaNetto:    cena,
+    wartoscNetto: Math.round(ilosc * cena * 100) / 100,
+    vat:          23,
+    confidence:   0.6,
+  }
+}
+
 // detectColumnBoundaries (invoiceTableDetector) returns { LP: {x, rightBound}, NAZWA: {x,…}, … }
 // parseInvoiceLineData / assignToColumn expects { lp: x, nazwa: x, … } (lowercase camelCase, numbers)
 const _COL_KEY_MAP = {
@@ -327,7 +349,31 @@ export async function extractFromFile(file) {
 
         for (const row of mergedRows) {
           try {
-            const parsed = parseInvoiceLineData(row.items || [], colMap)
+            let parsed = parseInvoiceLineData(row.items || [], colMap)
+
+            // Per-row regex fallback: column parser produced cenaNetto=0, which means
+            // the unit token ended up in the cenaNetto column (making it NaN) or some
+            // other misassignment occurred despite the repair helpers in parseInvoiceLineData.
+            // The row.text (items joined by space) is fed to a unit-aware regex that
+            // correctly identifies name / qty / unit / unitNetPrice regardless of column positions.
+            if (parsed && parsed.nazwa && parsed.cenaNetto <= 0) {
+              const rowText = row.text || (row.items || []).map(i => i.text).join(' ')
+              const rx = parseInvoiceLineByRegex(rowText.trim())
+              if (rx && rx.cenaNetto > 0) {
+                parsed = {
+                  ...parsed,
+                  ilosc:        rx.ilosc,
+                  jednostka:    rx.jednostka,
+                  cenaNetto:    rx.cenaNetto,
+                  wartoscNetto: rx.wartoscNetto,
+                  confidence:   Math.min(parsed.confidence || 0.6, rx.confidence),
+                }
+                if (import.meta.env.DEV) {
+                  console.debug('[invoice] row-regex fallback used for:', parsed.nazwa)
+                }
+              }
+            }
+
             if (parsed && parsed.nazwa && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0)) {
               pozycje.push(makeItem({ ...parsed, rawName: parsed.nazwa }))
             }
