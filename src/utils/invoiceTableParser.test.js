@@ -1265,3 +1265,69 @@ describe('LP-layout non-regression after no-LP fix', () => {
     expect(parsed.cenaNetto).toBeCloseTo(24.99, 2)
   })
 })
+
+// ── splitMergedCenaIlosc: 3-token cenaNetto with thousands price ───────────────
+// Root cause: in LP-layout PDFs with a price of e.g. "1 249,00", the PDF emits
+// TWO text items ("1" and "249,00") for the price.  When the qty token ALSO spills
+// into cenaNetto (x within -15px), assignToColumn concatenates all three:
+//   assigned.cenaNetto = "1 1 249,00"   (qty "1" + price thousands-digit "1" + "249,00")
+// The 2-token code path would not handle this; the 3-token extension does.
+
+describe('splitMergedCenaIlosc — 3-token cenaNetto (qty + thousands price)', () => {
+  const raw = detectColumnBoundaries(IKEA_HEADER_ONELINE.items)
+  const colMap = adaptColMap(raw)
+
+  // qty "1" at x=393 → cenaNetto (dist 7); price "1" at x=402 → cenaNetto; "249,00" at x=415 → cenaNetto
+  // wartoscNetto "1" at x=465 → wartoscNetto; "249,00" at x=477 → wartoscNetto
+  it('cenaNetto="1 1 249,00" wartoscNetto="1 249,00" → price=1249 NOT 11249', () => {
+    const row = {
+      y: 700,
+      items: [
+        mkItem(15, '1'),
+        mkItem(60, 'Urządzenie'), mkItem(110, 'premium'), mkItem(155, '-'),
+        mkItem(165, 'prawdziwa'), mkItem(210, 'kwota'), mkItem(240, '1'), mkItem(255, '249,00'),
+        mkItem(300, 'szt.'),
+        mkItem(393, '1'),      // qty → cenaNetto (dist 7 < dist 43 to ilosc)
+        mkItem(402, '1'),      // price thousands-digit → cenaNetto
+        mkItem(415, '249,00'), // price decimal → cenaNetto → assigned.cenaNetto="1 1 249,00"
+        mkItem(465, '1'),      // wartoscNetto thousands-digit
+        mkItem(477, '249,00'), // wartoscNetto decimal → assigned.wartoscNetto="1 249,00"=1249
+        mkItem(520, '23%'),
+        mkItem(580, '287,27'),
+        mkItem(640, '1 536,27'),
+      ],
+    }
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.cenaNetto).toBeCloseTo(1249, 0)
+    expect(parsed.cenaNetto).not.toBeCloseTo(11249, 0) // must not flatten "1 1 249" → 11249
+    expect(parsed.cenaNetto).not.toBeCloseTo(1, 0)
+    expect(parsed.cenaNetto).not.toBeCloseTo(249, 0)
+    expect(parsed.ilosc).toBe(1)
+    expect(parsed.wartoscNetto).toBeCloseTo(1249, 0)
+  })
+
+  it('cenaNetto="2 1 249,00" wartoscNetto="2 498,00" → price=1249, qty=2', () => {
+    const row = {
+      y: 680,
+      items: [
+        mkItem(15, '2'),
+        mkItem(60, 'Serwer'), mkItem(95, 'produkcyjny'),
+        mkItem(300, 'szt.'),
+        mkItem(393, '2'),      // qty=2 → cenaNetto → "2 1 249,00"
+        mkItem(402, '1'),
+        mkItem(415, '249,00'),
+        mkItem(465, '2'),      // wartoscNetto → "2 498,00" = 2498
+        mkItem(477, '498,00'),
+        mkItem(520, '23%'),
+        mkItem(580, '574,54'),
+        mkItem(640, '3 072,54'),
+      ],
+    }
+    const parsed = parseInvoiceLineData(row.items, colMap)
+    expect(parsed).not.toBeNull()
+    expect(parsed.cenaNetto).toBeCloseTo(1249, 0)
+    expect(parsed.ilosc).toBe(2)
+    expect(parsed.wartoscNetto).toBeCloseTo(2498, 0)
+  })
+})

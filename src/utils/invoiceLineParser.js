@@ -113,13 +113,27 @@ function splitMergedCenaIlosc(assigned) {
   if (!cenaRaw) return assigned
 
   const tokens = cenaRaw.split(/\s+/).filter(Boolean)
-  if (tokens.length !== 2) return assigned
+
+  // Support 2-token case "qty price"          e.g. "1 249,00"    → qty=1, price=249
+  // Support 3-token case "qty k price"        e.g. "1 1 249,00"  → qty=1, price=1249
+  //   (qty overflows into cenaNetto, price is a thousands number split across two items)
+  let possibleQtyStr, possibleCenaStr
+  if (tokens.length === 2) {
+    possibleQtyStr = tokens[0]
+    possibleCenaStr = tokens[1]
+  } else if (tokens.length === 3) {
+    // First token = qty (plain integer), last two tokens form a thousands-separated price
+    possibleQtyStr = tokens[0]
+    possibleCenaStr = tokens[1] + ' ' + tokens[2]
+  } else {
+    return assigned
+  }
 
   // First token must be a plain positive integer (quantity candidate, 1–9999)
-  if (!/^\d{1,4}$/.test(tokens[0])) return assigned
+  if (!/^\d{1,4}$/.test(possibleQtyStr)) return assigned
 
-  const possibleQty = parseInt(tokens[0], 10)
-  const possibleCena = normalizePolishNumber(tokens[1])
+  const possibleQty  = parseInt(possibleQtyStr, 10)
+  const possibleCena = normalizePolishNumber(possibleCenaStr)
   if (isNaN(possibleCena) || possibleCena <= 0 || possibleQty <= 0) return assigned
 
   // Arithmetic gate: only accept the split when possibleQty * possibleCena ≈ wartoscNetto
@@ -130,16 +144,15 @@ function splitMergedCenaIlosc(assigned) {
   if (isNaN(wartoscNetto) || wartoscNetto <= 0) return assigned
 
   const expectedTotal = Math.round(possibleQty * possibleCena * 100) / 100
-  const tolerance = Math.max(0.05, wartoscNetto * 0.015) // 1.5% or 5 groszy
+  const tolerance = Math.max(0.05, wartoscNetto * 0.015)
   if (Math.abs(expectedTotal - wartoscNetto) > tolerance) return assigned
 
-  // Confirmed concatenation — restore the individual price field.
-  // Preserve existing ilosc if it was explicitly assigned (non-trivial value).
+  // Confirmed concatenation — restore qty to ilosc, real price to cenaNetto.
   const hasExplicitIlosc = assigned.ilosc && assigned.ilosc !== '' && assigned.ilosc !== '1'
   return {
     ...assigned,
-    cenaNetto: tokens[1],
-    ilosc: hasExplicitIlosc ? assigned.ilosc : tokens[0],
+    cenaNetto: possibleCenaStr,
+    ilosc: hasExplicitIlosc ? assigned.ilosc : possibleQtyStr,
   }
 }
 

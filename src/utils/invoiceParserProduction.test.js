@@ -726,3 +726,93 @@ describe('handleSaveNewProduct — workspace_id guard prevents RLS violation', (
     expect(hasWorkspaceFilter).toBe(true)
   })
 })
+
+// ── FAKTURA TEST 05 — TYSIĄCE I ILOŚCI DZIESIĘTNE ─────────────────────────────
+// Exercises the LP-parser thousands-price arithmetic fallback.
+// Row 1: product name contains a money-like number ("1 249,00") AND the real
+//        price is also "1 249,00" — the name money must stay in the name, the
+//        financial value must come from the post-unit token stream.
+// Row 3: net value "1 199,98" is a Polish thousands number split across two
+//        space-separated tokens by _extractAmounts; Strategy B recombines it.
+
+const FIXTURE_05_TYSIACE = `FAKTURA TEST 05 - TYSIĄCE I ILOŚCI DZIESIĘTNE
+Numer faktury: FV/TEST/05/2026
+Lp Nazwa Ilość Jm Cena netto Wartość netto VAT Wartość brutto
+1 Urządzenie premium - prawdziwa kwota 1 249,00 szt. 1 1 249,00 1 249,00 23% 287,27 1 536,27
+2 Kabel instalacyjny 2,5mm mb 12,5 8,40 105,00 23% 24,15 129,15
+3 Zestaw montażowy PRO kpl. 2 599,99 1 199,98 23% 276,00 1 475,98
+4 Czujnik IP44 DN50 pcs 6 45,75 274,50 23% 63,14 337,64
+Razem netto 2 828,48`
+
+describe('Production fixture 05 — TYSIĄCE I ILOŚCI DZIESIĘTNE (LP parser)', () => {
+  let items
+
+  it('parseInvoiceItemsLP returns exactly 4 positions', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    expect(items.length).toBe(4)
+  })
+
+  it('Row 1: Urządzenie premium — qty=1, unit=szt, price=1249, net=1249', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    const row1 = items.find(i => (i.rawName || '').includes('Urządzenie'))
+    expect(row1).toBeDefined()
+    expect(row1.ilosc).toBe(1)
+    const cena = row1.cenaNetto ?? row1.unitPriceNet
+    expect(cena).toBeCloseTo(1249, 0)
+    expect(cena).not.toBeCloseTo(11249, 0) // must not flatten "1 1 249" → 11249
+    expect(cena).not.toBeCloseTo(1, 0)
+    expect(cena).not.toBeCloseTo(249, 0)
+    expect(row1.wartoscNetto ?? row1.totalNet).toBeCloseTo(1249, 0)
+  })
+
+  it('Row 1: product name preserves the money-like number "1 249,00"', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    const row1 = items.find(i => (i.rawName || '').includes('Urządzenie'))
+    expect(row1).toBeDefined()
+    expect(row1.rawName).toMatch(/1\s*249/)
+  })
+
+  it('Row 2: Kabel 2,5mm — qty=12.5, unit=mb, price=8.40, net=105', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    const row2 = items.find(i => (i.rawName || '').includes('Kabel'))
+    expect(row2).toBeDefined()
+    expect(row2.ilosc).toBeCloseTo(12.5, 2)
+    expect(row2.ilosc).not.toBe(1)
+    const unit = row2.jednostka || row2.unit || ''
+    expect(unit).toBe('mb')
+    expect(row2.cenaNetto ?? row2.unitPriceNet).toBeCloseTo(8.40, 2)
+    expect(row2.wartoscNetto ?? row2.totalNet).toBeCloseTo(105, 1)
+  })
+
+  it('Row 3: Zestaw PRO kpl. — qty=2, price=599.99, net=1199.98 (thousands net)', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    const row3 = items.find(i => (i.rawName || '').includes('Zestaw'))
+    expect(row3).toBeDefined()
+    expect(row3.ilosc).toBe(2)
+    expect(row3.cenaNetto ?? row3.unitPriceNet).toBeCloseTo(599.99, 1)
+    const net = row3.wartoscNetto ?? row3.totalNet
+    expect(net).toBeCloseTo(1199.98, 1)
+    expect(net).not.toBeCloseTo(1, 0) // raw nums[2] before fix
+  })
+
+  it('Row 4: Czujnik IP44 DN50 — qty=6, unit=pcs, price=45.75, net=274.50', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    const row4 = items.find(i => (i.rawName || '').includes('Czujnik'))
+    expect(row4).toBeDefined()
+    expect(row4.ilosc).toBe(6)
+    expect(row4.cenaNetto ?? row4.unitPriceNet).toBeCloseTo(45.75, 2)
+    expect(row4.wartoscNetto ?? row4.totalNet).toBeCloseTo(274.5, 1)
+  })
+
+  it('total net ≈ 2828.48 (NOT 12828.48)', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    const total = items.reduce((s, i) => s + (i.wartoscNetto || i.totalNet || 0), 0)
+    expect(Math.abs(total - 2828.48)).toBeLessThan(0.5)
+    expect(total).not.toBeGreaterThan(10000) // 12828.48 would fail this
+  })
+
+  it('"Razem netto" is NOT parsed as a product', () => {
+    items = parseInvoiceItemsLP(FIXTURE_05_TYSIACE)
+    expect(items.every(i => !/^razem/i.test(i.rawName || ''))).toBe(true)
+  })
+})

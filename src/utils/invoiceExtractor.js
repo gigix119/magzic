@@ -775,9 +775,51 @@ function _parseSegment(seg) {
   if (nums.length < 2) return null
 
   const qty = nums[0]
-  const unitPriceNet = nums[1]
-  const totalNet = nums[2] ?? Math.round(qty * unitPriceNet * 100) / 100
+  let unitPriceNet = nums[1]
+  let totalNet = nums[2] ?? Math.round(qty * unitPriceNet * 100) / 100
   if (qty <= 0 || unitPriceNet <= 0) return null
+
+  // Arithmetic validation: when standard interpretation fails, try thousands recombination.
+  // Root cause: _extractAmounts tokenises by whitespace, so "1 249,00" → [1, 249] (two tokens).
+  // Strategy A: price = nums[1..2] thousands pair (e.g. [1,249]→1249), net = nums[3..4].
+  //   e.g. nums=[1, 1, 249, 1, 249, …] → price=1249, net=1249, 1×1249=1249 ✓
+  // Strategy B: price correct (nums[1]), net = nums[2..3] thousands pair.
+  //   e.g. nums=[2, 599.99, 1, 199.98, …] → price=599.99, net=1199.98, 2×599.99=1199.98 ✓
+  if (nums.length >= 3 && totalNet > 0) {
+    const stdTol = Math.max(0.05, totalNet * 0.015)
+    if (Math.abs(qty * unitPriceNet - totalNet) > stdTol) {
+      // Strategy A: nums[1] (whole integer) + nums[2] (3-digit range) = thousands price
+      if (Number.isInteger(nums[1]) && nums[1] >= 1 && nums[1] <= 999
+          && nums[2] >= 100 && nums[2] < 1000) {
+        const pA = nums[1] * 1000 + nums[2]
+        let nA
+        if (nums.length >= 5 && Number.isInteger(nums[3]) && nums[3] >= 1 && nums[3] <= 999
+            && nums[4] >= 0 && nums[4] < 1000) {
+          nA = nums[3] * 1000 + nums[4]
+        } else if (nums.length >= 4) {
+          nA = nums[3]
+        } else {
+          nA = Math.round(qty * pA * 100) / 100
+        }
+        if (nA > 0 && Math.abs(qty * pA - nA) <= Math.max(0.05, nA * 0.015)) {
+          unitPriceNet = pA
+          totalNet = nA
+        }
+      }
+      // Strategy B (if A didn't fix it): price correct (nums[1]), net = nums[2..3] thousands pair
+      const remainTol = Math.max(0.05, totalNet * 0.015)
+      if (Math.abs(qty * unitPriceNet - totalNet) > remainTol
+          && nums.length >= 4
+          && Number.isInteger(nums[2]) && nums[2] >= 1 && nums[2] <= 999
+          && nums[3] >= 0 && nums[3] < 1000) {
+        const nB = nums[2] * 1000 + nums[3]
+        if (nB > 0 && Math.abs(qty * nums[1] - nB) <= Math.max(0.05, nB * 0.015)) {
+          unitPriceNet = nums[1]
+          totalNet = nB
+        }
+      }
+    }
+  }
 
   return makeItem({
     rawName: name,
