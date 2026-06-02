@@ -10,6 +10,33 @@ import { isForbiddenAsInvoiceItem } from './invoiceLineGuards.js'
 import { detectKsefComarchDocument, parseKsefComarchItems, isKsefMetadataLine } from './invoiceKsefComarchParser.js'
 import { recoverAmountsForItem } from './invoiceAmountRecovery.js'
 
+// Extract the FIRST well-formed money token from a string that may contain multiple
+// space-separated values (e.g. "79,90 319,60 23" → 79.90).
+//
+// Root cause of the 79.90319 bug:
+//   The regex `([\d][\d\s.,]*)` captures price + net + VAT number as one string.
+//   normalizePolishNumber("79,90 319,60 23") removes spaces → "79,90319,6023"
+//   → replaces first comma → "79.90319,6023" → parseFloat → 79.90319.
+//
+// Fix: extract only the FIRST money token before parsing.
+//   Supports Polish thousands: "1 249,00" → 1249, "1 250 000,00" → 1250000.
+//   Plain comma-decimal:       "79,90"    → 79.90.
+//   English dot-decimal:       "79.90"    → 79.90.
+export function parseFirstMoneyToken(text) {
+  if (!text) return NaN
+  const str = String(text).trim()
+  // Polish format: 1–3 digits, optional space-separated 3-digit groups, comma decimal
+  const plMatch = str.match(/(\d{1,3}(?:[\s ]\d{3})*[,]\d{1,2})/)
+  if (plMatch) return normalizePolishNumber(plMatch[1])
+  // English format: digits with dot decimal
+  const enMatch = str.match(/(\d+[.]\d{1,2})/)
+  if (enMatch) return normalizePolishNumber(enMatch[1])
+  // Plain integer (no decimal separator)
+  const intMatch = str.match(/^(\d+)/)
+  if (intMatch) return normalizePolishNumber(intMatch[1])
+  return NaN
+}
+
 // Per-row regex fallback for column-based parser rows where cenaNetto ended up 0.
 // Mirrors the regex in parseInvoiceItems but returns a structured object for one line.
 // Used when column assignment puts the unit token into the cenaNetto field (causing NaN).
@@ -19,7 +46,8 @@ function parseInvoiceLineByRegex(rowText) {
   const m = rowText.match(_ROW_REGEX)
   if (!m) return null
   const ilosc = parseFloat(String(m[2]).replace(',', '.'))
-  const cena  = normalizePolishNumber(m[4])
+  // Use parseFirstMoneyToken to avoid merging price+net into a malformed decimal
+  const cena  = parseFirstMoneyToken(m[4])
   if (!(ilosc > 0) || isNaN(cena) || !(cena > 0)) return null
   return {
     nazwa:        m[1].trim(),
@@ -584,7 +612,7 @@ export function parseInvoiceItems(text) {
     )
     if (match) {
       const ilosc = parseFloat(match[2].replace(',', '.'))
-      const cena = normalizePolishNumber(match[4])
+      const cena = parseFirstMoneyToken(match[4])  // first token only — avoids "79,90 319,60 23" → 79.90319
       if (ilosc > 0 && !isNaN(cena) && cena > 0) {
         items.push(makeItem({
           rawName: match[1].trim(),

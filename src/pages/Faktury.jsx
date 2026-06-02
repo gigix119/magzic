@@ -529,6 +529,12 @@ export default function Faktury() {
   async function handleSaveNewProduct() {
     const form = nNewProductForm
     if (!form.nazwa.trim()) { addToast('Podaj nazwę towaru', 'error'); return }
+    // Guard: workspace must be loaded before inserting — without it the RLS WITH CHECK
+    // receives workspace_id=null and rejects the insert with a policy violation error.
+    if (!workspaceId) {
+      addToast('Brak kontekstu przestrzeni roboczej — odśwież stronę i spróbuj ponownie.', 'error')
+      return
+    }
     setNNewProductSaving(true)
     try {
       if (!nNewProductDupeWarning) {
@@ -536,6 +542,7 @@ export default function Faktury() {
           .select('id, nazwa')
           .ilike('nazwa', `%${form.nazwa.trim().slice(0, 20)}%`)
           .eq('aktywny', true)
+          .eq('workspace_id', workspaceId)   // workspace-scoped dupe check
           .limit(3)
         if (dupes?.length > 0) {
           setNNewProductDupeWarning(dupes.map(d => d.nazwa).join(', '))
