@@ -57,6 +57,9 @@ export function mapParsedPozycjaToFormPozycja(poz, defaultMagazynId = null) {
   const cenaNetto = Number(
     poz.cenaNetto ?? poz.cena_netto ?? poz.unitPriceNet ?? poz.unitPrice ?? poz.netPrice ?? poz.price ?? 0
   )
+  const cenaBrutto = Number(
+    poz.cenaBrutto ?? poz.unit_price_gross ?? poz.unitPriceGross ?? 0
+  )
   const vatProcent = Number(poz.vat ?? poz.vatRate ?? poz.vatProcent ?? poz.vat_procent ?? 23)
   const itemType = poz.itemType || poz.item_type || 'inventory_item'
   const isService = itemType === 'service_item' || itemType === 'cost_item' || poz.shouldAffectInventory === false
@@ -78,6 +81,8 @@ export function mapParsedPozycjaToFormPozycja(poz, defaultMagazynId = null) {
     ilosc,
     jednostka,
     cena_netto: cenaNetto,
+    cenaBrutto: cenaBrutto || null,
+    unit_price_gross: cenaBrutto || null,
     vat_procent: vatProcent,
     magazyn_id: isService ? null : (poz.magazynId || poz.magazyn_id || defaultMagazynId || null),
     itemType: isService ? 'service_item' : 'inventory_item',

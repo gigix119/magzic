@@ -22,10 +22,19 @@ export default function InvoiceList({
       {faktury.map(fak => {
         const isOpen = expanded === fak.id
         const poz = pozycje[fak.id] || []
-        const totalNetto = poz.reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
+        const totalNetto = poz.reduce((s, p) => {
+          const ltn = Number(p.line_total_net)
+          if (ltn > 0) return s + ltn
+          return s + Math.round(Number(p.ilosc) * Number(p.cena_netto) * 100) / 100
+        }, 0)
         const totalBrutto = poz.reduce((s, p) => {
-          const net = Number(p.ilosc) * Number(p.cena_netto)
-          return s + net * (1 + Number(p.vat_procent ?? 23) / 100)
+          // Prefer stored line_total_gross (already rounded, avoids netto×vat float errors)
+          const ltg = Number(p.line_total_gross)
+          if (ltg > 0) return s + ltg
+          const upg = Number(p.unit_price_gross ?? 0)
+          if (upg > 0) return s + Math.round(upg * Number(p.ilosc) * 100) / 100
+          const net = Math.round(Number(p.ilosc) * Number(p.cena_netto) * 100) / 100
+          return s + Math.round(net * (1 + Number(p.vat_procent ?? 23) / 100) * 100) / 100
         }, 0)
         const isGross = fak.price_mode === 'gross'
         const mainAmount  = isGross ? totalBrutto : totalNetto

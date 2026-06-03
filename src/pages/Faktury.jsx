@@ -1497,36 +1497,41 @@ export default function Faktury() {
                     </div>
 
                     {/* Price mode toggle */}
-                    <div className="flex items-center gap-3 mb-2 px-3 py-2 rounded-lg" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Tryb ceny:</span>
-                      <div className="flex rounded-md overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <div className="mb-3 p-3 rounded-lg" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Zapisz fakturę w trybie:</p>
+                      <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => setNPriceMode('net')}
-                          className="px-3 py-1 text-xs font-medium"
+                          className="flex-1 py-2 text-sm font-semibold rounded-lg"
                           style={{
                             background: nPriceMode === 'net' ? '#3b82f6' : 'var(--card)',
                             color: nPriceMode === 'net' ? '#fff' : 'var(--text-2)',
-                            borderRight: '1px solid var(--border)',
+                            border: nPriceMode === 'net' ? '2px solid #3b82f6' : '2px solid var(--border)',
                           }}
-                        >Netto</button>
+                        >NETTO</button>
                         <button
                           type="button"
                           onClick={() => setNPriceMode('gross')}
-                          className="px-3 py-1 text-xs font-medium"
+                          className="flex-1 py-2 text-sm font-semibold rounded-lg"
                           style={{
-                            background: nPriceMode === 'gross' ? '#3b82f6' : 'var(--card)',
+                            background: nPriceMode === 'gross' ? '#1d4ed8' : 'var(--card)',
                             color: nPriceMode === 'gross' ? '#fff' : 'var(--text-2)',
+                            border: nPriceMode === 'gross' ? '2px solid #1d4ed8' : '2px solid var(--border)',
                           }}
-                        >Brutto</button>
+                        >BRUTTO</button>
                       </div>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                        {nExtractionResult?.priceMode === 'gross' && nPriceMode !== 'gross' && '⚠ PDF ma ceny brutto — zalecany tryb: Brutto'}
-                        {nExtractionResult?.priceMode === 'net'   && nPriceMode !== 'net'   && '⚠ PDF ma ceny netto — zalecany tryb: Netto'}
-                        {nExtractionResult?.priceMode === 'gross' && nPriceMode === 'gross' && '✓ Faktura z cenami brutto'}
-                        {nExtractionResult?.priceMode === 'net'   && nPriceMode === 'net'   && '✓ Faktura z cenami netto'}
-                        {!nExtractionResult?.priceMode || nExtractionResult.priceMode === 'unknown' ? 'Wybierz tryb wyświetlania cen' : null}
-                      </span>
+                      {nExtractionResult?.priceMode && nExtractionResult.priceMode !== 'unknown' && (
+                        <p className="text-xs mt-2" style={{ color: nPriceMode === nExtractionResult.priceMode ? '#16a34a' : '#d97706' }}>
+                          {nPriceMode === nExtractionResult.priceMode
+                            ? `✓ Parser wykrył ceny ${nExtractionResult.priceMode === 'gross' ? 'brutto' : 'netto'} — tryb zgodny`
+                            : `⚠ Parser wykrył ceny ${nExtractionResult.priceMode === 'gross' ? 'brutto' : 'netto'} — zalecany tryb: ${nExtractionResult.priceMode === 'gross' ? 'BRUTTO' : 'NETTO'}`
+                          }
+                        </p>
+                      )}
+                      {(!nExtractionResult?.priceMode || nExtractionResult.priceMode === 'unknown') && (
+                        <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>Wybierz tryb wyświetlania i zapisu cen pozycji</p>
+                      )}
                     </div>
 
                     <div className="space-y-2" style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 2 }}>
@@ -1685,6 +1690,34 @@ export default function Faktury() {
                       )
                       })}
                     </div>
+
+                    {/* Running totals */}
+                    {nPositions.length > 0 && (() => {
+                      const fTotalNet = nPositions.reduce((s, p) =>
+                        s + Math.round(Number(p.cena_netto || 0) * Number(p.ilosc || 0) * 100) / 100, 0)
+                      const fTotalGross = nPositions.reduce((s, p) => {
+                        const net = Math.round(Number(p.cena_netto || 0) * Number(p.ilosc || 0) * 100) / 100
+                        return s + Math.round(net * (1 + Number(p.vat_procent || 23) / 100) * 100) / 100
+                      }, 0)
+                      const mainT  = nPriceMode === 'gross' ? fTotalGross : fTotalNet
+                      const altT   = nPriceMode === 'gross' ? fTotalNet  : fTotalGross
+                      const mainLbl = nPriceMode === 'gross' ? 'Razem brutto:' : 'Razem netto:'
+                      const altLbl  = nPriceMode === 'gross' ? 'netto:' : 'brutto:'
+                      return (
+                        <div className="mt-2 px-3 py-2 rounded-lg flex items-center justify-between"
+                          style={{ background: nPriceMode === 'gross' ? '#eff6ff' : '#f0fdf4', border: '1px solid var(--border)' }}>
+                          <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{mainLbl}</span>
+                          <div className="text-right">
+                            <span className="text-sm font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: nPriceMode === 'gross' ? '#1d4ed8' : '#166534' }}>
+                              {mainT.toFixed(2)} zł
+                            </span>
+                            <span className="text-xs ml-3" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace' }}>
+                              {altLbl} {altT.toFixed(2)} zł
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   <div className="invoice-form-actions flex gap-3">

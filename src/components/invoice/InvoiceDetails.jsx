@@ -18,11 +18,18 @@ const PRICE_MODE_BADGE = {
 }
 
 export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, onDeletePoz }) {
-  const total = poz.reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
+  const total = poz.reduce((s, p) => {
+    const ltn = Number(p.line_total_net)
+    if (ltn > 0) return s + ltn
+    return s + Math.round(Number(p.ilosc) * Number(p.cena_netto) * 100) / 100
+  }, 0)
   const totalBrutto = poz.reduce((s, p) => {
-    const net = Number(p.ilosc) * Number(p.cena_netto)
-    const vat = net * (Number(p.vat_procent ?? 23) / 100)
-    return s + net + vat
+    const ltg = Number(p.line_total_gross)
+    if (ltg > 0) return s + ltg
+    const upg = Number(p.unit_price_gross ?? 0)
+    if (upg > 0) return s + Math.round(upg * Number(p.ilosc) * 100) / 100
+    const net = Math.round(Number(p.ilosc) * Number(p.cena_netto) * 100) / 100
+    return s + Math.round(net * (1 + Number(p.vat_procent ?? 23) / 100) * 100) / 100
   }, 0)
 
   // price_mode = saved mode (from DB), priceMode = parser-detected (from extraction)
