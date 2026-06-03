@@ -147,6 +147,35 @@ export default function InvoiceVerificationPanel({
         )
       })()}
 
+      {/* Price mode banner + invoice totals */}
+      {extractionResult?.priceMode && extractionResult.priceMode !== 'unknown' && (() => {
+        const pm = extractionResult.priceMode
+        const active = extractedItems.filter(i => !i.skipped)
+        const totalNet   = active.reduce((s, i) => s + (i.wartoscNetto || (i.unitPriceNet || 0) * (i.quantity || i.ilosc || 1)), 0)
+        const totalBrutto = active.reduce((s, i) => s + (i.wartoscBrutto || (i.cenaBrutto || i.unitPriceGross || 0) * (i.quantity || i.ilosc || 1)), 0)
+        const BADGE = {
+          net:   { label: 'NETTO', bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+          gross: { label: 'BRUTTO', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+          mixed: { label: 'MIESZANA', bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
+        }[pm] || { label: pm.toUpperCase(), bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' }
+        return (
+          <div className="mb-3 flex flex-wrap items-center gap-3 px-3 py-2 rounded-lg" style={{ background: BADGE.bg, border: `1px solid ${BADGE.border}` }}>
+            <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: BADGE.border, color: BADGE.color }}>{BADGE.label}</span>
+            <span className="text-xs" style={{ color: BADGE.color }}>
+              {pm === 'gross' && 'Ceny z PDF to kwoty brutto — wartości netto wyliczone automatycznie'}
+              {pm === 'net'   && 'Ceny z PDF to kwoty netto'}
+              {pm === 'mixed' && 'Faktura mieszana — sprawdź każdą pozycję'}
+            </span>
+            {totalNet > 0 && (
+              <span className="ml-auto text-xs font-medium" style={{ color: BADGE.color }}>
+                Razem netto: <strong>{totalNet.toFixed(2)} zł</strong>
+                {totalBrutto > 0 && <span className="ml-3">brutto: <strong>{totalBrutto.toFixed(2)} zł</strong></span>}
+              </span>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Mobile card view */}
       <div className="sm:hidden space-y-2 mt-1" style={{ maxHeight: 440, overflowY: 'auto' }}>
         {extractedItems.map((item, idx) => {
@@ -257,7 +286,9 @@ export default function InvoiceVerificationPanel({
               <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Odczytana nazwa</th>
               <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Towar w bazie</th>
               <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Ilość</th>
-              <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Cena</th>
+              <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>
+                {extractionResult?.priceMode === 'gross' ? 'Cena brutto' : extractionResult?.priceMode === 'net' ? 'Cena netto' : 'Cena'}
+              </th>
               <th className="text-center px-3 py-2 font-medium" style={{ color: 'var(--muted)', fontSize: 11 }}>Pewność</th>
               <th className="px-2 py-2" />
             </tr>
@@ -407,20 +438,40 @@ export default function InvoiceVerificationPanel({
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unitPriceNet}
-                      onChange={e => onExtractedItemChange(idx, 'unitPriceNet', parseFloat(e.target.value) || 0)}
-                      style={{ ...IS(assignStatus === 'needs_price'), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
-                    />
-                    {assignStatus === 'needs_price' && (
-                      <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>Uzupełnij cenę</div>
-                    )}
-                    {item.recoveredAmount && (
-                      <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>Cena odzyskana heurystycznie</div>
-                    )}
+                    {(() => {
+                      const pm = extractionResult?.priceMode ?? 'unknown'
+                      const isGross = pm === 'gross'
+                      const displayPrice = isGross
+                        ? (item.cenaBrutto || item.unitPriceGross || item.unitPriceNet || 0)
+                        : (item.unitPriceNet || 0)
+                      const altPrice = isGross
+                        ? item.unitPriceNet
+                        : (item.cenaBrutto || item.unitPriceGross || null)
+                      const fieldToEdit = isGross ? 'cenaBrutto' : 'unitPriceNet'
+                      return (
+                        <>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={displayPrice}
+                            onChange={e => onExtractedItemChange(idx, fieldToEdit, parseFloat(e.target.value) || 0)}
+                            style={{ ...IS(assignStatus === 'needs_price'), fontSize: 11, padding: '4px 8px', width: 80, textAlign: 'right' }}
+                          />
+                          {altPrice > 0 && (
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
+                              {isGross ? `netto: ${altPrice.toFixed(2)}` : `brutto: ${altPrice.toFixed(2)}`}
+                            </div>
+                          )}
+                          {assignStatus === 'needs_price' && (
+                            <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>Uzupełnij cenę</div>
+                          )}
+                          {item.recoveredAmount && (
+                            <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>Cena odzyskana heurystycznie</div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </td>
                   <td className="px-3 py-2 text-center text-xs font-medium" style={{ color: borderColor }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>

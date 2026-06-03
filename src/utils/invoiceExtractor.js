@@ -528,11 +528,38 @@ export async function extractFromFile(file) {
       result.documentType = 'unknown'
     }
 
-    // 9. Filter forbidden lines, classify each item, apply supplier template rules
+    // 9. Brutto↔netto conversion BEFORE classify so cenaNetto is populated for gross invoices.
+    const priceMode = result.priceMode
+    for (const poz of pozycje) {
+      const qty = poz.ilosc || 1
+      const vat = poz.vat ?? 23
+      if (priceMode === 'gross' && (poz.cenaBrutto > 0 || poz.wartoscBrutto > 0)) {
+        const grossPrice = poz.cenaBrutto || (poz.wartoscBrutto > 0 ? poz.wartoscBrutto / qty : 0)
+        if (grossPrice > 0) {
+          const calc = calculateFromGross(grossPrice, qty, vat)
+          poz.cenaBrutto     = calc.unitPriceGross
+          poz.wartoscBrutto  = calc.lineTotalGross
+          poz.cenaNetto      = calc.unitPriceNet
+          poz.unitPriceNet   = calc.unitPriceNet
+          poz.wartoscNetto   = calc.lineTotalNet
+          poz.totalNet       = calc.lineTotalNet
+          poz.vatAmount      = calc.vatAmount
+          poz.priceSource    = 'gross'
+        }
+      } else if ((priceMode === 'net' || priceMode === 'unknown') && poz.cenaNetto > 0) {
+        const calc = calculateFromNet(poz.cenaNetto, qty, vat)
+        poz.cenaBrutto    = calc.unitPriceGross
+        poz.wartoscBrutto = calc.lineTotalGross
+        poz.vatAmount     = calc.vatAmount
+        poz.priceSource   = 'net'
+      }
+    }
+
+    // 9.5. Filter forbidden lines, classify each item, apply supplier template rules
     const filteredPozycje = []
     const ignoredLines = []
     for (let poz of pozycje) {
-      const ctx = { hasPrice: poz.cenaNetto > 0, hasUnit: !!(poz.jednostka) }
+      const ctx = { hasPrice: poz.cenaNetto > 0 || poz.cenaBrutto > 0, hasUnit: !!(poz.jednostka) }
       const rawName = poz.rawName || ''
       if (isForbiddenAsInvoiceItem(rawName, ctx)) {
         ignoredLines.push({ text: rawName, reason: 'forbidden' })
@@ -562,34 +589,6 @@ export async function extractFromFile(file) {
       }
     }
     pozycje = filteredPozycje
-
-    // 9.5. For gross-price invoices: compute unitPriceNet / wartoscNetto from brutto.
-    // For net-price invoices: compute unitPriceGross / wartoscBrutto from netto.
-    const priceMode = result.priceMode
-    for (const poz of pozycje) {
-      const qty = poz.ilosc || 1
-      const vat = poz.vat ?? 23
-      if (priceMode === 'gross' && (poz.cenaBrutto > 0 || poz.wartoscBrutto > 0)) {
-        const grossPrice = poz.cenaBrutto || (poz.wartoscBrutto > 0 ? poz.wartoscBrutto / qty : 0)
-        if (grossPrice > 0) {
-          const calc = calculateFromGross(grossPrice, qty, vat)
-          poz.cenaBrutto     = calc.unitPriceGross
-          poz.wartoscBrutto  = calc.lineTotalGross
-          poz.cenaNetto      = calc.unitPriceNet
-          poz.unitPriceNet   = calc.unitPriceNet
-          poz.wartoscNetto   = calc.lineTotalNet
-          poz.totalNet       = calc.lineTotalNet
-          poz.vatAmount      = calc.vatAmount
-          poz.priceSource    = 'gross'
-        }
-      } else if ((priceMode === 'net' || priceMode === 'unknown') && poz.cenaNetto > 0) {
-        const calc = calculateFromNet(poz.cenaNetto, qty, vat)
-        poz.cenaBrutto    = calc.unitPriceGross
-        poz.wartoscBrutto = calc.lineTotalGross
-        poz.vatAmount     = calc.vatAmount
-        poz.priceSource   = 'net'
-      }
-    }
 
     result.fields.pozycje = pozycje
     result.debug.ignoredLines = ignoredLines

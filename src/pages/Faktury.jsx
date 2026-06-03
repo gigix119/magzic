@@ -492,7 +492,15 @@ export default function Faktury() {
   }
 
   function updateExtractedItem(idx, field, value) {
-    setNExtractedItems(items => items.map((item, i) => i === idx ? { ...item, [field]: value } : item))
+    setNExtractedItems(items => items.map((item, i) => {
+      if (i !== idx) return item
+      if (field === 'cenaBrutto') {
+        const vat = item.vat ?? 23
+        const unitPriceNet = value > 0 ? Math.round(value / (1 + vat / 100) * 100) / 100 : 0
+        return { ...item, cenaBrutto: value, unitPriceNet }
+      }
+      return { ...item, [field]: value }
+    }))
   }
 
   function toggleSkipExtracted(idx) {

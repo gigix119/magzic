@@ -14,8 +14,12 @@ export function classifyDocument(text, tableCandidates) {
 
   const inventoryScore = INVENTORY_SIGNALS.filter(s => lower.includes(s)).length
 
+  // JEDNOSTKA is optional — invoices without a unit column still qualify
   const hasInventoryTable = (tableCandidates || []).some(c =>
-    c.columnMap?.ILOSC && c.columnMap?.JEDNOSTKA && c.rowCount >= 1
+    c.columnMap?.ILOSC &&
+    (c.columnMap?.JEDNOSTKA || c.columnMap?.CENA_NETTO || c.columnMap?.WARTOSC_NETTO ||
+     c.columnMap?.CENA_BRUTTO || c.columnMap?.WARTOSC_BRUTTO) &&
+    c.rowCount >= 1
   )
 
   if (inventoryScore >= 2 || hasInventoryTable) return 'inventory_purchase_invoice'
@@ -48,8 +52,14 @@ export function classifyItem(item, documentType) {
     return { itemType: 'service_item', shouldAffectInventory: false }
   }
 
-  // Step 4: inventory document with price+qty+unit → inventory_item
-  if (item.ilosc > 0 && item.cenaNetto > 0 && item.jednostka) {
+  // Step 4: item with qty + any price (net or gross) + unit → inventory_item
+  const hasAnyPrice = (item.cenaNetto > 0) || (item.cenaBrutto > 0) ||
+    (item.wartoscNetto > 0) || (item.wartoscBrutto > 0)
+  if (item.ilosc > 0 && hasAnyPrice && item.jednostka) {
+    return { itemType: 'inventory_item', shouldAffectInventory: true }
+  }
+  // Also classify if price exists but unit is missing (gross invoice without unit column)
+  if (item.ilosc > 0 && hasAnyPrice) {
     return { itemType: 'inventory_item', shouldAffectInventory: true }
   }
 
