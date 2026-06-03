@@ -10,22 +10,52 @@ function getPosBadge(poz, fak, towary) {
   return { label: 'Robocza', bg: '#fef3c7', color: '#92400e', border: '#fcd34d' }
 }
 
+const PRICE_MODE_BADGE = {
+  net:     { label: 'NETTO',    bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+  gross:   { label: 'BRUTTO',   bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  mixed:   { label: 'MIESZANA', bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
+  unknown: { label: 'NIEPEWNA', bg: '#fef2f2', color: '#991b1b', border: '#fecaca' },
+}
+
 export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, onDeletePoz }) {
   const total = poz.reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
+  const totalBrutto = poz.reduce((s, p) => {
+    const net = Number(p.ilosc) * Number(p.cena_netto)
+    const vat = net * (Number(p.vat_procent ?? 23) / 100)
+    return s + net + vat
+  }, 0)
+
+  const priceMode = fak?.priceMode ?? 'unknown'
+  const modeBadge = PRICE_MODE_BADGE[priceMode] || PRICE_MODE_BADGE.unknown
 
   return (
     <div style={{ borderTop: '1px solid var(--border)' }}>
+      {priceMode !== 'unknown' && (
+        <div className="px-5 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+            style={{ background: modeBadge.bg, color: modeBadge.color, border: `1px solid ${modeBadge.border}` }}>
+            {modeBadge.label}
+          </span>
+          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+            {priceMode === 'net' && 'Faktura z cenami netto'}
+            {priceMode === 'gross' && 'Faktura z cenami brutto — wartości netto wyliczone automatycznie'}
+            {priceMode === 'mixed' && 'Faktura z cenami mieszanymi — sprawdź pozycje'}
+          </span>
+        </div>
+      )}
       {poz.length > 0 ? (
         <div className="table-scroll-x">
-          <table className="w-full text-sm" style={{ minWidth: 480 }}>
+          <table className="w-full text-sm" style={{ minWidth: 560 }}>
             <thead>
               <tr style={{ background: 'var(--table-sub)' }}>
                 <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
                 <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Ilość</th>
                 <th className="text-right px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Jednostka</th>
                 <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena netto</th>
+                <th className="text-right px-5 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena brutto</th>
                 <th className="text-right px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>VAT%</th>
                 <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Suma netto</th>
+                <th className="text-right px-5 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Suma brutto</th>
                 <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
                 <th className="px-3 py-2.5" />
               </tr>
@@ -33,6 +63,13 @@ export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, 
             <tbody>
               {poz.map(p => {
                 const badge = getPosBadge(p, fak, towary)
+                const netPrice = Number(p.cena_netto)
+                const vatRate = Number(p.vat_procent ?? 23)
+                const grossPrice = netPrice * (1 + vatRate / 100)
+                const sumaNetto = Number(p.ilosc) * netPrice
+                const sumaBrutto = sumaNetto * (1 + vatRate / 100)
+                const isService = p.itemType === 'service_item' || p.shouldAffectInventory === false
+
                 return (
                   <tr key={p.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                     <td className="px-5 py-3" style={{ color: 'var(--text)' }}>
@@ -48,6 +85,9 @@ export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, 
                             {productName && (p.raw_name || p.rawName) && productName !== (p.raw_name || p.rawName) && (
                               <div style={{ fontSize: 10, color: 'var(--text-2)' }}>PDF: {p.raw_name || p.rawName}</div>
                             )}
+                            {isService && (
+                              <span className="text-xs font-medium px-1 py-0.5 rounded" style={{ background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', fontSize: 10 }}>Usługa</span>
+                            )}
                             {(p.indeks || p.sku) && (
                               <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-2)', marginTop: 1 }}>{p.indeks || p.sku}</div>
                             )}
@@ -59,9 +99,11 @@ export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, 
                     <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
                       {p.jednostka || (p.towary?.nazwa?.length >= 2 ? p.towary?.jednostka : null) || '—'}
                     </td>
-                    <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{Number(p.cena_netto).toFixed(2)} zł</td>
+                    <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{netPrice.toFixed(2)} zł</td>
+                    <td className="px-5 py-3 text-right hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)', opacity: 0.7 }}>{grossPrice.toFixed(2)} zł</td>
                     <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{p.vat_procent ?? 23}%</td>
-                    <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{(Number(p.ilosc) * Number(p.cena_netto)).toFixed(2)} zł</td>
+                    <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{sumaNetto.toFixed(2)} zł</td>
+                    <td className="px-5 py-3 text-right hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)', opacity: 0.7 }}>{sumaBrutto.toFixed(2)} zł</td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
                         {badge.label}
@@ -80,10 +122,11 @@ export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, 
               })}
             </tbody>
             <tfoot>
-              <tr style={{ borderTop: '1px solid var(--border)' }}>
+              <tr style={{ borderTop: '2px solid var(--border)' }}>
                 <td colSpan={6} className="px-5 py-3 text-right text-sm font-medium" style={{ color: 'var(--text-2)' }}>Razem netto:</td>
                 <td className="px-5 py-3 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{total.toFixed(2)} zł</td>
-                <td />
+                <td className="px-5 py-3 text-right hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)', opacity: 0.7 }}>{totalBrutto.toFixed(2)} zł</td>
+                <td colSpan={2} />
               </tr>
             </tfoot>
           </table>

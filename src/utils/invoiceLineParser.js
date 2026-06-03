@@ -32,25 +32,50 @@ export function detectColumnMap(headerItems) {
   return colMap
 }
 
-// Assign text items to columns based on X proximity
+// Assign text items to columns based on X position within each column's boundary range.
+// colMap values may be plain numbers (x only) or {x, rightBound} objects.
+// Using rightBound prevents tokens from a narrower column (e.g. JEDNOSTKA) from
+// being assigned to the adjacent wider column (NAZWA) when JEDNOSTKA is not detected.
 function assignToColumn(items, colMap) {
   const result = {}
-  const colEntries = Object.entries(colMap).sort((a, b) => a[1] - b[1])
+  const colEntries = Object.entries(colMap)
+    .map(([col, v]) => {
+      const x = typeof v === 'object' ? v.x : v
+      const rightBound = typeof v === 'object' ? (v.rightBound ?? Infinity) : Infinity
+      return [col, x, rightBound]
+    })
+    .sort((a, b) => a[1] - b[1])
   if (colEntries.length === 0) return result
 
   for (const item of items) {
     let bestCol = null
     let bestDist = Infinity
-    for (const [colName, colX] of colEntries) {
-      const distFromLeft = item.x - colX
-      if (distFromLeft >= -15) {
-        const dist = Math.abs(distFromLeft)
+
+    // Primary: find column whose [x-15, rightBound) range contains the item
+    for (const [colName, colX, rightBound] of colEntries) {
+      if (item.x >= colX - 15 && item.x < rightBound) {
+        const dist = Math.abs(item.x - colX)
         if (dist < bestDist) {
           bestDist = dist
           bestCol = colName
         }
       }
     }
+
+    // Fallback: no column range matched — assign to leftmost valid column (old behaviour)
+    if (!bestCol) {
+      for (const [colName, colX] of colEntries) {
+        const distFromLeft = item.x - colX
+        if (distFromLeft >= -15) {
+          const dist = Math.abs(distFromLeft)
+          if (dist < bestDist) {
+            bestDist = dist
+            bestCol = colName
+          }
+        }
+      }
+    }
+
     if (bestCol) {
       result[bestCol] = result[bestCol] ? result[bestCol] + ' ' + item.text : item.text
     }
@@ -231,19 +256,35 @@ export function parseInvoiceLineData(items, colMap) {
   const ilosRaw = assigned.ilosc || '1'
   const ilosc = normalizePolishNumber(ilosRaw)
   const jednostka = (assigned.jednostka || 'szt').trim().toLowerCase().replace(/\.$/, '')
-  const cenaNetto = normalizePolishNumber(assigned.cenaNetto || '0')
-  const wartoscNettoRaw = assigned.wartoscNetto
-  const wartoscNetto = wartoscNettoRaw
-    ? normalizePolishNumber(wartoscNettoRaw)
-    : (isNaN(ilosc) ? 0 : ilosc) * (isNaN(cenaNetto) ? 0 : cenaNetto)
+
+  // Support both net and gross price columns
+  const cenaNetto   = normalizePolishNumber(assigned.cenaNetto   || '0')
+  const cenaBrutto  = normalizePolishNumber(assigned.cenaBrutto  || '0')
+  const wartoscNettoRaw   = assigned.wartoscNetto
+  const wartoscBruttoRaw  = assigned.wartoscBrutto
 
   const vatRaw = (assigned.vat || '').replace('%', '').trim()
   const vat = normalizeVatRate(vatRaw) ?? 23
 
   const safeIlosc = isNaN(ilosc) ? 1 : ilosc
-  const safeCena = isNaN(cenaNetto) ? 0 : cenaNetto
 
-  if (safeCena <= 0 && isNaN(normalizePolishNumber(assigned.wartoscNetto))) return null
+  // Pick price: prefer brutto when netto is absent (gross-price invoice)
+  const hasNetto   = !isNaN(cenaNetto)  && cenaNetto  > 0
+  const hasBrutto  = !isNaN(cenaBrutto) && cenaBrutto > 0
+  const safeCena   = hasNetto  ? cenaNetto  : (hasBrutto ? cenaBrutto : 0)
+
+  const wartoscNetto = wartoscNettoRaw
+    ? normalizePolishNumber(wartoscNettoRaw)
+    : (!isNaN(cenaNetto) && cenaNetto > 0) ? safeIlosc * cenaNetto : NaN
+
+  const wartoscBrutto = wartoscBruttoRaw
+    ? normalizePolishNumber(wartoscBruttoRaw)
+    : (!isNaN(cenaBrutto) && cenaBrutto > 0) ? safeIlosc * cenaBrutto : NaN
+
+  const hasAnyValue = safeCena > 0 ||
+    (!isNaN(wartoscNetto) && wartoscNetto > 0) ||
+    (!isNaN(wartoscBrutto) && wartoscBrutto > 0)
+  if (!hasAnyValue) return null
 
   const indeks = (assigned.indeks || '').trim() || null
 
@@ -254,8 +295,10 @@ export function parseInvoiceLineData(items, colMap) {
     nazwa,
     ilosc: safeIlosc,
     jednostka: jednostka || 'szt',
-    cenaNetto: safeCena,
-    wartoscNetto: isNaN(wartoscNetto) ? safeIlosc * safeCena : wartoscNetto,
+    cenaNetto:   hasNetto  ? cenaNetto  : (hasBrutto ? 0 : 0),
+    cenaBrutto:  hasBrutto ? cenaBrutto : 0,
+    wartoscNetto:  isNaN(wartoscNetto)  ? 0 : wartoscNetto,
+    wartoscBrutto: isNaN(wartoscBrutto) ? 0 : wartoscBrutto,
     vat,
     confidence: Object.keys(colMap).length >= 4 ? 0.85 : 0.65,
   }

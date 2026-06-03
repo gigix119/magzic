@@ -1,5 +1,6 @@
 import * as pdfjs from 'pdfjs-dist'
 import { normalizePolishNumber, extractWithPatterns, isKsefInvoiceId } from './polishInvoicePatterns.js'
+import { inferPriceModeFromHeaders, calculateFromNet, calculateFromGross, roundMoney } from './invoiceMath.js'
 import { detectInvoiceStructure } from './invoiceStructureDetector.js'
 import { findTableCandidates, chooseBestTableCandidate } from './invoiceTableDetector.js'
 import { parseInvoiceLineData } from './invoiceLineParser.js'
@@ -61,7 +62,7 @@ function parseInvoiceLineByRegex(rowText) {
 }
 
 // detectColumnBoundaries (invoiceTableDetector) returns { LP: {x, rightBound}, NAZWA: {x,…}, … }
-// parseInvoiceLineData / assignToColumn expects { lp: x, nazwa: x, … } (lowercase camelCase, numbers)
+// parseInvoiceLineData / assignToColumn expects { lp: {x, rightBound}, nazwa: {x,…}, … }
 const _COL_KEY_MAP = {
   LP: 'lp', NAZWA: 'nazwa', ILOSC: 'ilosc', JEDNOSTKA: 'jednostka',
   CENA_NETTO: 'cenaNetto', WARTOSC_NETTO: 'wartoscNetto',
@@ -69,14 +70,21 @@ const _COL_KEY_MAP = {
   CENA_BRUTTO: 'cenaBrutto', KOD: 'indeks', RABAT: 'rabat',
 }
 
+// Pass both x and rightBound so assignToColumn can use column range boundaries
+// instead of only the left edge, preventing tokens from leaking into wrong columns.
 function adaptColMap(raw) {
   if (!raw) return {}
   const out = {}
   for (const [k, v] of Object.entries(raw)) {
     const nk = _COL_KEY_MAP[k]
     if (!nk) continue
-    const x = (v !== null && typeof v === 'object') ? v.x : v
-    if (typeof x === 'number' && isFinite(x)) out[nk] = x
+    if (v !== null && typeof v === 'object') {
+      if (typeof v.x === 'number' && isFinite(v.x)) {
+        out[nk] = { x: v.x, rightBound: v.rightBound ?? Infinity }
+      }
+    } else if (typeof v === 'number' && isFinite(v)) {
+      out[nk] = { x: v, rightBound: Infinity }
+    }
   }
   return out
 }
@@ -101,6 +109,9 @@ export function EMPTY_RESULT() {
       suma_brutto: null,
       pozycje: [],
     },
+    priceMode: 'unknown',
+    detectedColumns: [],
+    mathValid: null,
     documentType: 'unknown',
     confidence: 0,
     source: 'manual',
@@ -145,7 +156,9 @@ export function normalizeInvoiceItemUnit(raw) {
 function makeItem(raw) {
   const ilosc = raw.ilosc ?? raw.quantity ?? 1
   const cenaNetto = raw.cenaNetto ?? raw.unitPriceNet ?? 0
+  const cenaBrutto = raw.cenaBrutto ?? raw.unitPriceGross ?? 0
   const wartoscNetto = raw.wartoscNetto ?? raw.totalNet ?? (ilosc * cenaNetto)
+  const wartoscBrutto = raw.wartoscBrutto ?? raw.totalGross ?? (cenaBrutto > 0 ? ilosc * cenaBrutto : 0)
   const rawUnit = raw.jednostka || raw.unit
   const unit = rawUnit ? (normalizeInvoiceItemUnit(rawUnit) || rawUnit) : 'szt'
   return {
@@ -157,9 +170,15 @@ function makeItem(raw) {
     unit,
     cenaNetto,
     unitPriceNet: cenaNetto,
+    cenaBrutto,
+    unitPriceGross: cenaBrutto,
     wartoscNetto,
     totalNet: wartoscNetto,
+    wartoscBrutto,
+    totalGross: wartoscBrutto,
+    vatAmount: raw.vatAmount ?? 0,
     vat: raw.vat ?? null,
+    priceSource: raw.priceSource ?? null,
     confidence: raw.confidence ?? 0.7,
     warnings: raw.warnings || [],
     matchedProductId: null,
@@ -347,14 +366,20 @@ export async function extractFromFile(file) {
       if (best) {
         result.debug.tableSelected = { page: best.pageNum, score: best.headerScore, rows: best.rowCount }
 
-        // Adapt column map format: { LP: {x,rightBound},… } → { lp: x,… }
+        // Adapt column map format: { LP: {x,rightBound},… } → { lp: {x,rightBound},… }
         const adapted = adaptColMap(best.columnMap)
         const colMap = supplierColumnMap || (Object.keys(adapted).length > 1 ? adapted : {})
         result.debug.columnMap = colMap
 
+        // Detect price mode from column header texts
+        const headerTexts = (best.headerLine?.items || []).map(i => i.text || '')
+        result.detectedColumns = headerTexts
+        result.priceMode = inferPriceModeFromHeaders(headerTexts)
+        result.debug.priceMode = result.priceMode
+
         // Merge continuation rows: products split across multiple PDF lines.
         // A continuation row has no letter content near the name column (no product name items).
-        const nomeX = colMap.nazwa
+        const nomeX = typeof colMap.nazwa === 'object' ? colMap.nazwa?.x : colMap.nazwa
         const mergedRows = []
         for (const row of best.rows) {
           const items = row.items || []
@@ -537,6 +562,35 @@ export async function extractFromFile(file) {
       }
     }
     pozycje = filteredPozycje
+
+    // 9.5. For gross-price invoices: compute unitPriceNet / wartoscNetto from brutto.
+    // For net-price invoices: compute unitPriceGross / wartoscBrutto from netto.
+    const priceMode = result.priceMode
+    for (const poz of pozycje) {
+      const qty = poz.ilosc || 1
+      const vat = poz.vat ?? 23
+      if (priceMode === 'gross' && (poz.cenaBrutto > 0 || poz.wartoscBrutto > 0)) {
+        const grossPrice = poz.cenaBrutto || (poz.wartoscBrutto > 0 ? poz.wartoscBrutto / qty : 0)
+        if (grossPrice > 0) {
+          const calc = calculateFromGross(grossPrice, qty, vat)
+          poz.cenaBrutto     = calc.unitPriceGross
+          poz.wartoscBrutto  = calc.lineTotalGross
+          poz.cenaNetto      = calc.unitPriceNet
+          poz.unitPriceNet   = calc.unitPriceNet
+          poz.wartoscNetto   = calc.lineTotalNet
+          poz.totalNet       = calc.lineTotalNet
+          poz.vatAmount      = calc.vatAmount
+          poz.priceSource    = 'gross'
+        }
+      } else if ((priceMode === 'net' || priceMode === 'unknown') && poz.cenaNetto > 0) {
+        const calc = calculateFromNet(poz.cenaNetto, qty, vat)
+        poz.cenaBrutto    = calc.unitPriceGross
+        poz.wartoscBrutto = calc.lineTotalGross
+        poz.vatAmount     = calc.vatAmount
+        poz.priceSource   = 'net'
+      }
+    }
+
     result.fields.pozycje = pozycje
     result.debug.ignoredLines = ignoredLines
     result.debug.ksefMetadataBlocked = ignoredLines.filter(l => l.reason === 'ksef_metadata').length
@@ -779,43 +833,59 @@ function _parseSegment(seg) {
   let totalNet = nums[2] ?? Math.round(qty * unitPriceNet * 100) / 100
   if (qty <= 0 || unitPriceNet <= 0) return null
 
-  // Arithmetic validation: when standard interpretation fails, try thousands recombination.
-  // Root cause: _extractAmounts tokenises by whitespace, so "1 249,00" → [1, 249] (two tokens).
+  // Arithmetic validation: when standard interpretation fails, try recovery strategies.
+  // Root cause: _extractAmounts tokenises by whitespace, so "1 249,00" → [1, 249] (two tokens),
+  // and VAT% value (e.g. "23" for 23%) appears in nums even without the % sign.
+  //
+  // Strategy C (VAT skip): when nums[2] is a standard VAT rate (0,5,8,23) and qty × price ≈ nums[3]
+  //   e.g. nums=[50, 1.16, 23, 58.00] → totalNet should be nums[3]=58, not nums[2]=23.
   // Strategy A: price = nums[1..2] thousands pair (e.g. [1,249]→1249), net = nums[3..4].
-  //   e.g. nums=[1, 1, 249, 1, 249, …] → price=1249, net=1249, 1×1249=1249 ✓
   // Strategy B: price correct (nums[1]), net = nums[2..3] thousands pair.
-  //   e.g. nums=[2, 599.99, 1, 199.98, …] → price=599.99, net=1199.98, 2×599.99=1199.98 ✓
+  const VAT_RATES = new Set([0, 5, 8, 23])
   if (nums.length >= 3 && totalNet > 0) {
     const stdTol = Math.max(0.05, totalNet * 0.015)
     if (Math.abs(qty * unitPriceNet - totalNet) > stdTol) {
-      // Strategy A: nums[1] (whole integer) + nums[2] (3-digit range) = thousands price
-      if (Number.isInteger(nums[1]) && nums[1] >= 1 && nums[1] <= 999
-          && nums[2] >= 100 && nums[2] < 1000) {
-        const pA = nums[1] * 1000 + nums[2]
-        let nA
-        if (nums.length >= 5 && Number.isInteger(nums[3]) && nums[3] >= 1 && nums[3] <= 999
-            && nums[4] >= 0 && nums[4] < 1000) {
-          nA = nums[3] * 1000 + nums[4]
-        } else if (nums.length >= 4) {
-          nA = nums[3]
-        } else {
-          nA = Math.round(qty * pA * 100) / 100
-        }
-        if (nA > 0 && Math.abs(qty * pA - nA) <= Math.max(0.05, nA * 0.015)) {
-          unitPriceNet = pA
-          totalNet = nA
+      // Strategy C: skip embedded VAT rate — nums[2] is a VAT rate, nums[3] is total
+      if (nums.length >= 4 && VAT_RATES.has(nums[2]) && nums[3] > 0) {
+        const expectedC = Math.round(qty * unitPriceNet * 100) / 100
+        const tolC = Math.max(0.05, nums[3] * 0.015)
+        if (Math.abs(expectedC - nums[3]) <= tolC) {
+          totalNet = nums[3]
         }
       }
-      // Strategy B (if A didn't fix it): price correct (nums[1]), net = nums[2..3] thousands pair
-      const remainTol = Math.max(0.05, totalNet * 0.015)
-      if (Math.abs(qty * unitPriceNet - totalNet) > remainTol
-          && nums.length >= 4
-          && Number.isInteger(nums[2]) && nums[2] >= 1 && nums[2] <= 999
-          && nums[3] >= 0 && nums[3] < 1000) {
-        const nB = nums[2] * 1000 + nums[3]
-        if (nB > 0 && Math.abs(qty * nums[1] - nB) <= Math.max(0.05, nB * 0.015)) {
-          unitPriceNet = nums[1]
-          totalNet = nB
+
+      // Re-check after Strategy C
+      const stdTol2 = Math.max(0.05, totalNet * 0.015)
+      if (Math.abs(qty * unitPriceNet - totalNet) > stdTol2) {
+        // Strategy A: nums[1] (whole integer) + nums[2] (3-digit range) = thousands price
+        if (Number.isInteger(nums[1]) && nums[1] >= 1 && nums[1] <= 999
+            && nums[2] >= 100 && nums[2] < 1000) {
+          const pA = nums[1] * 1000 + nums[2]
+          let nA
+          if (nums.length >= 5 && Number.isInteger(nums[3]) && nums[3] >= 1 && nums[3] <= 999
+              && nums[4] >= 0 && nums[4] < 1000) {
+            nA = nums[3] * 1000 + nums[4]
+          } else if (nums.length >= 4) {
+            nA = nums[3]
+          } else {
+            nA = Math.round(qty * pA * 100) / 100
+          }
+          if (nA > 0 && Math.abs(qty * pA - nA) <= Math.max(0.05, nA * 0.015)) {
+            unitPriceNet = pA
+            totalNet = nA
+          }
+        }
+        // Strategy B (if A didn't fix it): price correct (nums[1]), net = nums[2..3] thousands pair
+        const remainTol = Math.max(0.05, totalNet * 0.015)
+        if (Math.abs(qty * unitPriceNet - totalNet) > remainTol
+            && nums.length >= 4
+            && Number.isInteger(nums[2]) && nums[2] >= 1 && nums[2] <= 999
+            && nums[3] >= 0 && nums[3] < 1000) {
+          const nB = nums[2] * 1000 + nums[3]
+          if (nB > 0 && Math.abs(qty * nums[1] - nB) <= Math.max(0.05, nB * 0.015)) {
+            unitPriceNet = nums[1]
+            totalNet = nB
+          }
         }
       }
     }

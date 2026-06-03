@@ -13,15 +13,26 @@ let _lineId = 0
  * @returns {object} ready-to-insert Supabase payload
  */
 export function mapPositionToInsertPayload(poz, fakturaId, wsDataFn = () => ({})) {
+  const ilosc = Number(poz.ilosc ?? poz.quantity ?? 0) || 0
+  const cenaNetto = Number(poz.cena_netto ?? poz.cenaNetto ?? poz.unitPriceNet ?? 0) || 0
+  const cenaBrutto = Number(poz.unit_price_gross ?? poz.cenaBrutto ?? poz.unitPriceGross ?? 0) || 0
+  const vatProcent = Number(poz.vat_procent ?? poz.vat ?? 23) || 23
+  const isService = poz.is_service ?? poz.itemType === 'service_item' ?? false
+
   return {
     faktura_id: fakturaId,
     towar_id: poz._towarId || poz.towar_id || null,
     magazyn_id: poz.magazyn_id || null,
-    ilosc: Number(poz.ilosc ?? poz.quantity ?? 0) || 0,
-    cena_netto: Number(poz.cena_netto ?? poz.cenaNetto ?? poz.unitPriceNet ?? 0) || 0,
-    vat_procent: Number(poz.vat_procent ?? poz.vat ?? 23) || 23,
+    ilosc,
+    cena_netto: cenaNetto,
+    vat_procent: vatProcent,
     jednostka: poz.jednostka || poz.unit || poz.jm || null,
     raw_name: poz.rawName || poz.raw_name || poz.nazwa || null,
+    unit_price_gross: cenaBrutto || null,
+    line_total_net: cenaNetto > 0 ? Math.round(cenaNetto * ilosc * 100) / 100 : null,
+    line_total_gross: cenaBrutto > 0 ? Math.round(cenaBrutto * ilosc * 100) / 100 : null,
+    original_price_type: poz.priceSource ?? (cenaBrutto > 0 && cenaNetto === 0 ? 'gross' : 'net'),
+    is_service: isService,
     ...wsDataFn(),
   }
 }
