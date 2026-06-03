@@ -22,7 +22,14 @@ export default function InvoiceList({
       {faktury.map(fak => {
         const isOpen = expanded === fak.id
         const poz = pozycje[fak.id] || []
-        const total = poz.reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
+        const totalNetto = poz.reduce((s, p) => s + Number(p.ilosc) * Number(p.cena_netto), 0)
+        const totalBrutto = poz.reduce((s, p) => {
+          const net = Number(p.ilosc) * Number(p.cena_netto)
+          return s + net * (1 + Number(p.vat_procent ?? 23) / 100)
+        }, 0)
+        const isGross = fak.price_mode === 'gross'
+        const mainAmount  = isGross ? totalBrutto : totalNetto
+        const altAmount   = isGross ? totalNetto  : totalBrutto
         return (
           <div key={fak.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
             <div className="flex items-center gap-3 px-5 py-4 faktura-card-row" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
@@ -35,6 +42,12 @@ export default function InvoiceList({
                     <span className="font-semibold" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fak.numer}</span>
                     {typBadge(fak.typ)}
                     {statusBadge(fak.status)}
+                    {fak.price_mode === 'gross' && (
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 10 }}>BRUTTO</span>
+                    )}
+                    {fak.price_mode === 'net' && (
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontSize: 10 }}>NETTO</span>
+                    )}
                     {fak.plik_url && <span className="flex items-center gap-1" title="Załączony plik">{fileIcon(fak.plik_url)}</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -45,8 +58,13 @@ export default function InvoiceList({
                 </div>
                 <div className="text-right flex-shrink-0 mr-2">
                   <p className="font-medium text-sm" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>
-                    {total.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł
+                    {mainAmount.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł
                   </p>
+                  {altAmount > 0 && altAmount !== mainAmount && (
+                    <p className="text-xs" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace' }}>
+                      {isGross ? 'netto: ' : 'brutto: '}{altAmount.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł
+                    </p>
+                  )}
                   <p className="text-xs" style={{ color: 'var(--muted)' }}>{poz.length} poz.</p>
                 </div>
                 {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}

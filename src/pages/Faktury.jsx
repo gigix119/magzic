@@ -91,6 +91,7 @@ export default function Faktury() {
   const [nExtractedItems, setNExtractedItems] = useState([])
   const [nShowExtracted, setNShowExtracted] = useState(false)
   const [nExtractionResult, setNExtractionResult] = useState(null)
+  const [nPriceMode, setNPriceMode] = useState('net') // 'net' | 'gross'
   const [qualityMetrics, setQualityMetrics] = useState(null)
   const [extractedResult, setExtractedResult] = useState(null)
   const [showZatwierdzModal, setShowZatwierdzModal] = useState(false)
@@ -452,6 +453,7 @@ export default function Faktury() {
     setNNewProductDupeWarning(null)
     setNContractorNipWarning(null)
     setNDraftZeroPriceConfirmed(false)
+    setNPriceMode('net')
     setShowNModal(true)
   }
 
@@ -849,6 +851,7 @@ export default function Faktury() {
 
         setNAiCount(1)
         setNExtractionResult(result)
+        setNPriceMode(result.priceMode === 'gross' ? 'gross' : 'net')
         setQualityMetrics(calculateInvoiceQualityMetrics(result))
         setExtractedResult(result)
 
@@ -1094,6 +1097,7 @@ export default function Faktury() {
         notatki: nForm.notatki || null,
         plik_url,
         status: 'robocza',
+        price_mode: nPriceMode,
         ...wsData(),
       }]).select().single()
       if (fakErr) throw fakErr
@@ -1492,13 +1496,52 @@ export default function Faktury() {
                       </button>
                     </div>
 
+                    {/* Price mode toggle */}
+                    <div className="flex items-center gap-3 mb-2 px-3 py-2 rounded-lg" style={{ background: 'var(--table-sub)', border: '1px solid var(--border)' }}>
+                      <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Tryb ceny:</span>
+                      <div className="flex rounded-md overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                        <button
+                          type="button"
+                          onClick={() => setNPriceMode('net')}
+                          className="px-3 py-1 text-xs font-medium"
+                          style={{
+                            background: nPriceMode === 'net' ? '#3b82f6' : 'var(--card)',
+                            color: nPriceMode === 'net' ? '#fff' : 'var(--text-2)',
+                            borderRight: '1px solid var(--border)',
+                          }}
+                        >Netto</button>
+                        <button
+                          type="button"
+                          onClick={() => setNPriceMode('gross')}
+                          className="px-3 py-1 text-xs font-medium"
+                          style={{
+                            background: nPriceMode === 'gross' ? '#3b82f6' : 'var(--card)',
+                            color: nPriceMode === 'gross' ? '#fff' : 'var(--text-2)',
+                          }}
+                        >Brutto</button>
+                      </div>
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                        {nExtractionResult?.priceMode === 'gross' && nPriceMode !== 'gross' && '⚠ PDF ma ceny brutto — zalecany tryb: Brutto'}
+                        {nExtractionResult?.priceMode === 'net'   && nPriceMode !== 'net'   && '⚠ PDF ma ceny netto — zalecany tryb: Netto'}
+                        {nExtractionResult?.priceMode === 'gross' && nPriceMode === 'gross' && '✓ Faktura z cenami brutto'}
+                        {nExtractionResult?.priceMode === 'net'   && nPriceMode === 'net'   && '✓ Faktura z cenami netto'}
+                        {!nExtractionResult?.priceMode || nExtractionResult.priceMode === 'unknown' ? 'Wybierz tryb wyświetlania cen' : null}
+                      </span>
+                    </div>
+
                     <div className="space-y-2" style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 2 }}>
                       {nPositions.length === 0 && (
                         <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>
                           Brak pozycji — dodaj ręcznie lub odczytaj przez AI
                         </p>
                       )}
-                      {nPositions.map((p, idx) => (
+                      {nPositions.map((p, idx) => {
+                        const vatRate = Number(p.vat_procent ?? 23)
+                        const netPrice = Number(p.cena_netto ?? 0)
+                        const grossPrice = Math.round(netPrice * (1 + vatRate / 100) * 100) / 100
+                        const displayPrice = nPriceMode === 'gross' ? grossPrice : netPrice
+                        const altPrice = nPriceMode === 'gross' ? netPrice : grossPrice
+                        return (
                         <div
                           key={p._key}
                           className="rounded-lg p-3 space-y-2"
@@ -1544,15 +1587,30 @@ export default function Faktury() {
                               onChange={e => updateNPos(idx, 'jednostka', e.target.value)}
                               style={{ ...IS(), fontSize: 12 }}
                             />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Cena netto"
-                              value={p.cena_netto}
-                              onChange={e => updateNPos(idx, 'cena_netto', e.target.value)}
-                              style={{ ...IS(), fontSize: 12 }}
-                            />
+                            <div>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder={nPriceMode === 'gross' ? 'Cena brutto' : 'Cena netto'}
+                                value={displayPrice || ''}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0
+                                  if (nPriceMode === 'gross') {
+                                    const netto = Math.round(val / (1 + vatRate / 100) * 100) / 100
+                                    updateNPos(idx, 'cena_netto', netto)
+                                  } else {
+                                    updateNPos(idx, 'cena_netto', val)
+                                  }
+                                }}
+                                style={{ ...IS(), fontSize: 12, width: '100%' }}
+                              />
+                              {altPrice > 0 && (
+                                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
+                                  {nPriceMode === 'gross' ? `netto: ${altPrice.toFixed(2)}` : `brutto: ${altPrice.toFixed(2)}`}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <select
                             value={p.magazyn_id}
@@ -1624,7 +1682,8 @@ export default function Faktury() {
                             )
                           })()}
                         </div>
-                      ))}
+                      )
+                      })}
                     </div>
                   </div>
 

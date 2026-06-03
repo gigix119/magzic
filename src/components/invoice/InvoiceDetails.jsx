@@ -25,21 +25,22 @@ export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, 
     return s + net + vat
   }, 0)
 
-  const priceMode = fak?.priceMode ?? 'unknown'
-  const modeBadge = PRICE_MODE_BADGE[priceMode] || PRICE_MODE_BADGE.unknown
+  // price_mode = saved mode (from DB), priceMode = parser-detected (from extraction)
+  const priceMode = fak?.price_mode ?? fak?.priceMode ?? null
+  const modeBadge = PRICE_MODE_BADGE[priceMode] || null
 
   return (
     <div style={{ borderTop: '1px solid var(--border)' }}>
-      {priceMode !== 'unknown' && (
+      {priceMode && priceMode !== 'unknown' && modeBadge && (
         <div className="px-5 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
           <span className="text-xs font-medium px-2 py-0.5 rounded-full"
             style={{ background: modeBadge.bg, color: modeBadge.color, border: `1px solid ${modeBadge.border}` }}>
-            {modeBadge.label}
+            Zapisano: {modeBadge.label}
           </span>
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            {priceMode === 'net' && 'Faktura z cenami netto'}
-            {priceMode === 'gross' && 'Faktura z cenami brutto — wartości netto wyliczone automatycznie'}
-            {priceMode === 'mixed' && 'Faktura z cenami mieszanymi — sprawdź pozycje'}
+            {priceMode === 'net' && 'Ceny netto'}
+            {priceMode === 'gross' && 'Ceny brutto — wartości netto wyliczone automatycznie'}
+            {priceMode === 'mixed' && 'Ceny mieszane'}
           </span>
         </div>
       )}
@@ -123,9 +124,15 @@ export default function InvoiceDetails({ fak, poz, towary, onAddPoz, onEditPoz, 
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid var(--border)' }}>
-                <td colSpan={6} className="px-5 py-3 text-right text-sm font-medium" style={{ color: 'var(--text-2)' }}>Razem netto:</td>
-                <td className="px-5 py-3 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{total.toFixed(2)} zł</td>
-                <td className="px-5 py-3 text-right hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)', opacity: 0.7 }}>{totalBrutto.toFixed(2)} zł</td>
+                <td colSpan={6} className="px-5 py-3 text-right text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+                  {priceMode === 'gross' ? 'Razem brutto:' : 'Razem netto:'}
+                </td>
+                <td className="px-5 py-3 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>
+                  {priceMode === 'gross' ? totalBrutto.toFixed(2) : total.toFixed(2)} zł
+                </td>
+                <td className="px-5 py-3 text-right hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)', opacity: 0.7 }}>
+                  {priceMode === 'gross' ? `netto: ${total.toFixed(2)}` : `brutto: ${totalBrutto.toFixed(2)}`} zł
+                </td>
                 <td colSpan={2} />
               </tr>
             </tfoot>
