@@ -40,6 +40,10 @@ export default function Alerty() {
   const [errors, setErrors] = useState({})
   const [form, setForm] = useState(emptyForm)
 
+  const [showAllInsights, setShowAllInsights] = useState(false)
+  const [showAllStockAlerts, setShowAllStockAlerts] = useState(false)
+  const [showAllPriceAnomalies, setShowAllPriceAnomalies] = useState(false)
+
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
     const ago30 = new Date(Date.now() - 30 * 86400000).toISOString()
@@ -225,7 +229,8 @@ export default function Alerty() {
   const highCount    = allAlerts.filter(a => a.severity === 'high').length
   const mediumCount  = allAlerts.filter(a => a.severity === 'medium').length
   const lowCount     = allAlerts.filter(a => a.severity === 'low').length
-  const topAlerts    = allAlerts.filter(a => a.severity === 'critical' || a.severity === 'high').slice(0, 5)
+  const insightsAll  = allAlerts.filter(a => a.severity === 'critical' || a.severity === 'high')
+  const topAlerts    = showAllInsights ? insightsAll : insightsAll.slice(0, 7)
 
   return (
     <div>
@@ -271,11 +276,12 @@ export default function Alerty() {
       </div>
 
       {/* Smart Insights */}
-      {topAlerts.length > 0 && (
+      {insightsAll.length > 0 && (
         <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2 px-5 py-3" style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
             <Lightbulb size={16} style={{ color: '#f59e0b' }} />
             <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Smart Insights — wymagają uwagi</h2>
+            <Badge variant="yellow">{insightsAll.length}</Badge>
           </div>
           <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
             {topAlerts.map(a => {
@@ -286,7 +292,7 @@ export default function Alerty() {
                     <AlertIcon type={a.type} size={15} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</p>
+                    <p className="text-sm font-medium break-words" style={{ color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{a.towar.nazwa}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{alertMessage(a)}</p>
                   </div>
                   <Badge variant={cfg.badgeVariant}>{SEV_CONFIG[a.severity].label}</Badge>
@@ -294,6 +300,28 @@ export default function Alerty() {
               )
             })}
           </div>
+          {!showAllInsights && insightsAll.length > 7 && (
+            <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+              <button
+                onClick={() => setShowAllInsights(true)}
+                className="w-full py-2.5 text-sm font-medium rounded-xl border transition-colors"
+                style={{ color: '#2563eb', background: 'rgba(59,130,246,0.04)', borderColor: 'rgba(59,130,246,0.2)', minHeight: 44 }}
+              >
+                Pokaż więcej ({insightsAll.length - 7} ukrytych) ↓
+              </button>
+            </div>
+          )}
+          {showAllInsights && insightsAll.length > 7 && (
+            <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+              <button
+                onClick={() => setShowAllInsights(false)}
+                className="w-full py-2.5 text-sm font-medium rounded-xl border transition-colors"
+                style={{ color: 'var(--muted)', background: 'var(--table-sub)', borderColor: 'var(--border)', minHeight: 44 }}
+              >
+                Zwiń ↑
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -313,7 +341,7 @@ export default function Alerty() {
           <>
             {/* Mobile alert cards */}
             <div className="md:hidden divide-y" style={{ borderColor: 'var(--border)' }}>
-              {allAlerts.map(a => {
+              {(showAllStockAlerts ? allAlerts : allAlerts.slice(0, 7)).map(a => {
                 const cfg = SEV_CONFIG[a.severity]
                 return (
                   <div key={a.id} className="flex items-start gap-3 px-4 py-3" style={{ background: cfg.bg }}>
@@ -347,7 +375,7 @@ export default function Alerty() {
                 </tr>
               </thead>
               <tbody>
-                {allAlerts.map((a, idx) => {
+                {(showAllStockAlerts ? allAlerts : allAlerts.slice(0, 7)).map((a, idx) => {
                   const cfg = SEV_CONFIG[a.severity]
                   return (
                     <tr key={a.id} className="table-row" style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}>
@@ -369,6 +397,28 @@ export default function Alerty() {
               </tbody>
             </table>
             </div>
+            {!showAllStockAlerts && allAlerts.length > 7 && (
+              <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setShowAllStockAlerts(true)}
+                  className="w-full py-2.5 text-sm font-medium rounded-xl border transition-colors"
+                  style={{ color: '#2563eb', background: 'rgba(59,130,246,0.04)', borderColor: 'rgba(59,130,246,0.2)', minHeight: 44 }}
+                >
+                  Pokaż więcej ({allAlerts.length - 7} ukrytych) ↓
+                </button>
+              </div>
+            )}
+            {showAllStockAlerts && allAlerts.length > 7 && (
+              <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setShowAllStockAlerts(false)}
+                  className="w-full py-2.5 text-sm font-medium rounded-xl border transition-colors"
+                  style={{ color: 'var(--muted)', background: 'var(--table-sub)', borderColor: 'var(--border)', minHeight: 44 }}
+                >
+                  Zwiń ↑
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -479,7 +529,7 @@ export default function Alerty() {
           <>
             {/* Mobile price alert cards */}
             <div className="md:hidden divide-y" style={{ borderColor: 'var(--border)' }}>
-              {priceAlerts.map(alert => {
+              {(showAllPriceAnomalies ? priceAlerts : priceAlerts.slice(0, 7)).map(alert => {
                 const cfg = SEV_CONFIG[alert.severity] || SEV_CONFIG.low
                 return (
                   <div key={alert.id} className="px-4 py-3" style={{ background: cfg.bg }}>
@@ -538,7 +588,7 @@ export default function Alerty() {
                   </tr>
                 </thead>
                 <tbody>
-                  {priceAlerts.map((alert, idx) => {
+                  {(showAllPriceAnomalies ? priceAlerts : priceAlerts.slice(0, 7)).map((alert, idx) => {
                     const cfg = SEV_CONFIG[alert.severity] || SEV_CONFIG.low
                     return (
                       <tr key={alert.id} className="table-row" style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}>
@@ -565,6 +615,28 @@ export default function Alerty() {
                 </tbody>
               </table>
             </div>
+            {!showAllPriceAnomalies && priceAlerts.length > 7 && (
+              <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setShowAllPriceAnomalies(true)}
+                  className="w-full py-2.5 text-sm font-medium rounded-xl border transition-colors"
+                  style={{ color: '#2563eb', background: 'rgba(59,130,246,0.04)', borderColor: 'rgba(59,130,246,0.2)', minHeight: 44 }}
+                >
+                  Pokaż więcej ({priceAlerts.length - 7} ukrytych) ↓
+                </button>
+              </div>
+            )}
+            {showAllPriceAnomalies && priceAlerts.length > 7 && (
+              <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setShowAllPriceAnomalies(false)}
+                  className="w-full py-2.5 text-sm font-medium rounded-xl border transition-colors"
+                  style={{ color: 'var(--muted)', background: 'var(--table-sub)', borderColor: 'var(--border)', minHeight: 44 }}
+                >
+                  Zwiń ↑
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
