@@ -6,7 +6,7 @@ export default function InvoiceList({
   faktury, pozycje, expanded, towary, magazyny,
   onToggleExpand, onZatwierdz, onCofnij,
   onDeleteFak, onEditFak, onAddPoz,
-  onEditPoz, onDeletePoz,
+  onEditPoz, onDeletePoz, onSavePriceMode,
 }) {
   if (faktury.length === 0) {
     return (
@@ -137,6 +137,7 @@ export default function InvoiceList({
                 onAddPoz={onAddPoz}
                 onEditPoz={onEditPoz}
                 onDeletePoz={onDeletePoz}
+                onSavePriceMode={onSavePriceMode}
               />
             )}
           </div>

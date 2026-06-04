@@ -412,6 +412,17 @@ export default function Faktury() {
     }
   }
 
+  async function handleSavePriceMode(fakId, mode) {
+    try {
+      const { error } = await supabase.from('faktury').update({ price_mode: mode }).eq('id', fakId)
+      if (error) { addToast(`Błąd zmiany trybu: ${error.message}`, 'error'); return }
+      addToast(`Tryb zmieniony na ${mode === 'gross' ? 'BRUTTO' : 'NETTO'}`, 'success')
+      fetchData()
+    } catch (err) {
+      addToast(err.message, 'error')
+    }
+  }
+
   async function handleCofnij(fak) {
     if (!window.confirm(`Cofnąć fakturę "${fak.numer}" do roboczej? Stany magazynowe zostaną odwrócone.`)) return
     const result = await cofnijDoRoboczej(fak.id)
@@ -1318,6 +1329,7 @@ export default function Faktury() {
         onAddPoz={openAddPoz}
         onEditPoz={openEditPoz}
         onDeletePoz={handleDeletePoz}
+        onSavePriceMode={handleSavePriceMode}
       />
 
       {/* ════════════════════════════════════════════════════════════
