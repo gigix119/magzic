@@ -253,26 +253,37 @@ export default function Dashboard() {
           {topAlerts.length === 0 ? (
             <p className="text-sm py-8 text-center" style={{ color: 'var(--muted)' }}>Brak alertów — wszystko OK</p>
           ) : (
-            <div className="space-y-2 max-h-52 overflow-y-auto">
-              {topAlerts.map((a, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2.5"
-                  style={{ background: a.severity === 'critical' ? 'rgba(239,68,68,0.06)' : 'rgba(234,88,12,0.06)' }}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    {a.severity === 'critical'
-                      ? <AlertTriangle size={14} style={{ color: SEV_COLORS.critical, flexShrink: 0 }} />
-                      : <TrendingDown  size={14} style={{ color: SEV_COLORS.high, flexShrink: 0 }} />
-                    }
-                    <div className="min-w-0">
-                      <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-2)' }}>{a.msg}</p>
+            <>
+              <div className="space-y-2 max-h-52 overflow-y-auto">
+                {topAlerts.map((a, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                    style={{ background: a.severity === 'critical' ? 'rgba(239,68,68,0.06)' : 'rgba(234,88,12,0.06)' }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {a.severity === 'critical'
+                        ? <AlertTriangle size={14} style={{ color: SEV_COLORS.critical, flexShrink: 0 }} />
+                        : <TrendingDown  size={14} style={{ color: SEV_COLORS.high, flexShrink: 0 }} />
+                      }
+                      <div className="min-w-0">
+                        <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>{a.msg}</p>
+                      </div>
                     </div>
+                    <Badge variant={SEV_BADGE[a.severity]} style={{ flexShrink: 0, marginLeft: 8 }}>
+                      {SEV_LABELS[a.severity]}
+                    </Badge>
                   </div>
-                  <Badge variant={SEV_BADGE[a.severity]} style={{ flexShrink: 0, marginLeft: 8 }}>
-                    {SEV_LABELS[a.severity]}
-                  </Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              {alertCount > 0 && (
+                <Link
+                  to="/alerty"
+                  className="md:hidden mt-2 flex items-center justify-center gap-1.5 w-full rounded-lg text-sm font-medium"
+                  style={{ color: '#3b82f6', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', minHeight: 44 }}
+                >
+                  Zobacz wszystkie alerty ({alertCount}) →
+                </Link>
+              )}
+            </>
           )}
 
           {stats.fakturyRobocze > 0 && (

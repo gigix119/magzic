@@ -310,40 +310,66 @@ export default function Alerty() {
             <p className="text-sm">Brak aktywnych alertów</p>
           </div>
         ) : (
-          <div className="table-scroll-x">
-          <table className="w-full text-sm" style={{ minWidth: 460 }}>
-            <thead>
-              <tr style={{ background: 'var(--table-sub)' }}>
-                <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
-                <th className="text-left px-5 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Kategoria</th>
-                <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Typ</th>
-                <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Szczegóły</th>
-                <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Priorytet</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allAlerts.map((a, idx) => {
+          <>
+            {/* Mobile alert cards */}
+            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border)' }}>
+              {allAlerts.map(a => {
                 const cfg = SEV_CONFIG[a.severity]
                 return (
-                  <tr key={a.id} className="table-row" style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span style={{ color: cfg.color, flexShrink: 0 }}><AlertIcon type={a.type} size={14} /></span>
-                        <span className="font-medium" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 hidden sm:table-cell text-xs" style={{ color: 'var(--text-2)' }}>{a.towar.kategorie?.nazwa || '—'}</td>
-                    <td className="px-5 py-3 text-xs" style={{ color: cfg.color }}>{alertTypeLabel(a.type)}</td>
-                    <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{alertMessage(a)}</td>
-                    <td className="px-5 py-3 text-center">
+                  <div key={a.id} className="flex items-start gap-3 px-4 py-3" style={{ background: cfg.bg }}>
+                    <span style={{ color: cfg.color, flexShrink: 0, marginTop: 2 }}>
+                      <AlertIcon type={a.type} size={14} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium break-words" style={{ color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {a.towar.nazwa}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{alertMessage(a)}</p>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1 ml-1">
                       <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>
-                    </td>
-                  </tr>
+                      <span className="text-xs font-medium whitespace-nowrap" style={{ color: cfg.color }}>{alertTypeLabel(a.type)}</span>
+                    </div>
+                  </div>
                 )
               })}
-            </tbody>
-          </table>
-          </div>
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block table-scroll-x">
+            <table className="w-full text-sm" style={{ minWidth: 460 }}>
+              <thead>
+                <tr style={{ background: 'var(--table-sub)' }}>
+                  <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
+                  <th className="text-left px-5 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Kategoria</th>
+                  <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Typ</th>
+                  <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Szczegóły</th>
+                  <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Priorytet</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allAlerts.map((a, idx) => {
+                  const cfg = SEV_CONFIG[a.severity]
+                  return (
+                    <tr key={a.id} className="table-row" style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <span style={{ color: cfg.color, flexShrink: 0 }}><AlertIcon type={a.type} size={14} /></span>
+                          <span className="font-medium" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 hidden sm:table-cell text-xs" style={{ color: 'var(--text-2)' }}>{a.towar.kategorie?.nazwa || '—'}</td>
+                      <td className="px-5 py-3 text-xs" style={{ color: cfg.color }}>{alertTypeLabel(a.type)}</td>
+                      <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{alertMessage(a)}</td>
+                      <td className="px-5 py-3 text-center">
+                        <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -450,70 +476,96 @@ export default function Alerty() {
             </p>
           </div>
         ) : (
-          <div className="table-scroll-x">
-            <table className="w-full text-sm" style={{ minWidth: 620 }}>
-              <thead>
-                <tr style={{ background: 'var(--table-sub)' }}>
-                  <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
-                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Faktura</th>
-                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Dostawca</th>
-                  <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Typ alertu</th>
-                  <th className="text-left px-4 py-2.5 font-medium hidden lg:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Opis</th>
-                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena</th>
-                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Różnica %</th>
-                  <th className="text-center px-4 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Priorytet</th>
-                  <th className="px-3 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {priceAlerts.map((alert, idx) => {
-                  const cfg = SEV_CONFIG[alert.severity] || SEV_CONFIG.low
-                  return (
-                    <tr
-                      key={alert.id}
-                      className="table-row"
-                      style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}
-                    >
-                      <td className="px-5 py-3 font-medium" style={{ color: 'var(--text)' }}>
-                        {alert.towary?.nazwa || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-xs hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
-                        {alert.faktury?.numer || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-xs hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>
-                        {alert.kontrahenci?.nazwa || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-xs font-medium" style={{ color: cfg.color }}>
-                        {alert.title}
-                      </td>
-                      <td className="px-4 py-3 text-xs hidden lg:table-cell" style={{ color: 'var(--text-2)', maxWidth: 260 }}>
-                        {alert.description}
-                      </td>
-                      <td className="px-4 py-3 text-right text-xs hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>
-                        {alert.cena_aktualna != null ? `${Number(alert.cena_aktualna).toFixed(2)} zł` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right text-xs hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: alert.roznica_procent > 0 ? '#dc2626' : '#16a34a' }}>
-                        {alert.roznica_procent != null ? `${Number(alert.roznica_procent).toFixed(1)}%` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <button
-                          onClick={() => markPriceAlertRead(alert.id)}
-                          className="p-1.5 rounded-lg"
-                          style={{ color: '#22c55e' }}
-                          title="Oznacz jako przeczytane"
-                        >
-                          <CheckCheck size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile price alert cards */}
+            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border)' }}>
+              {priceAlerts.map(alert => {
+                const cfg = SEV_CONFIG[alert.severity] || SEV_CONFIG.low
+                return (
+                  <div key={alert.id} className="px-4 py-3" style={{ background: cfg.bg }}>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium break-words" style={{ color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {alert.towary?.nazwa || '—'}
+                        </p>
+                        <p className="text-xs mt-0.5 font-medium whitespace-nowrap" style={{ color: cfg.color }}>{alert.title}</p>
+                        {(alert.faktury?.numer || alert.kontrahenci?.nazwa) && (
+                          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-2)' }}>
+                            {[alert.faktury?.numer, alert.kontrahenci?.nazwa].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>
+                          {alert.cena_aktualna != null && (
+                            <span className="text-xs" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>
+                              {Number(alert.cena_aktualna).toFixed(2)} zł
+                            </span>
+                          )}
+                          {alert.roznica_procent != null && (
+                            <span className="text-xs font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: alert.roznica_procent > 0 ? '#dc2626' : '#16a34a' }}>
+                              {alert.roznica_procent > 0 ? '+' : ''}{Number(alert.roznica_procent).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => markPriceAlertRead(alert.id)}
+                        className="flex-shrink-0 flex items-center justify-center rounded-lg"
+                        style={{ color: '#22c55e', minWidth: 44, minHeight: 44 }}
+                        title="Oznacz jako przeczytane"
+                      >
+                        <CheckCheck size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block table-scroll-x">
+              <table className="w-full text-sm" style={{ minWidth: 620 }}>
+                <thead>
+                  <tr style={{ background: 'var(--table-sub)' }}>
+                    <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
+                    <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Faktura</th>
+                    <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Dostawca</th>
+                    <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Typ alertu</th>
+                    <th className="text-left px-4 py-2.5 font-medium hidden lg:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Opis</th>
+                    <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Cena</th>
+                    <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell" style={{ color: 'var(--muted)', fontSize: 12 }}>Różnica %</th>
+                    <th className="text-center px-4 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Priorytet</th>
+                    <th className="px-3 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceAlerts.map((alert, idx) => {
+                    const cfg = SEV_CONFIG[alert.severity] || SEV_CONFIG.low
+                    return (
+                      <tr key={alert.id} className="table-row" style={{ background: idx % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)', borderTop: '1px solid var(--border)' }}>
+                        <td className="px-5 py-3 font-medium" style={{ color: 'var(--text)' }}>{alert.towary?.nazwa || '—'}</td>
+                        <td className="px-4 py-3 text-xs hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{alert.faktury?.numer || '—'}</td>
+                        <td className="px-4 py-3 text-xs hidden sm:table-cell" style={{ color: 'var(--text-2)' }}>{alert.kontrahenci?.nazwa || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-medium" style={{ color: cfg.color }}>{alert.title}</td>
+                        <td className="px-4 py-3 text-xs hidden lg:table-cell" style={{ color: 'var(--text-2)', maxWidth: 260 }}>{alert.description}</td>
+                        <td className="px-4 py-3 text-right text-xs hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>
+                          {alert.cena_aktualna != null ? `${Number(alert.cena_aktualna).toFixed(2)} zł` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs hidden md:table-cell" style={{ fontFamily: 'DM Mono, monospace', color: alert.roznica_procent > 0 ? '#dc2626' : '#16a34a' }}>
+                          {alert.roznica_procent != null ? `${Number(alert.roznica_procent).toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center"><Badge variant={cfg.badgeVariant}>{cfg.label}</Badge></td>
+                        <td className="px-3 py-3 text-center">
+                          <button onClick={() => markPriceAlertRead(alert.id)} className="p-1.5 rounded-lg" style={{ color: '#22c55e' }} title="Oznacz jako przeczytane">
+                            <CheckCheck size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

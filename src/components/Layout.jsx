@@ -186,7 +186,7 @@ export default function Layout() {
             <button
               onClick={handleSignOut}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"
-              style={{ color: '#ef4444' }}
+              style={{ color: '#ef4444', minHeight: 44 }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
               onMouseLeave={e => e.currentTarget.style.background = ''}
             >
