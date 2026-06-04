@@ -46,7 +46,7 @@ body {
   margin: 0;
   padding: 0;
   transition: background-color 0.2s, color 0.2s;
-  overflow-x: hidden;
+  /* NOTE: overflow-x:hidden on body breaks iOS Safari scroll in child containers — DO NOT ADD */
 }
 
 /* Table row hover */
@@ -90,7 +90,11 @@ body {
   .page-header .page-header-btn { align-self: stretch; justify-content: center; }
 }
 
-/* Reduce panel main padding on mobile */
+/* Reduce panel main padding on mobile + ensure iOS smooth scroll */
+.panel-main {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
 @media (max-width: 767px) {
   .panel-main { padding: 12px !important; }
 }
@@ -206,9 +210,12 @@ body {
   .auth-name-grid { grid-template-columns: 1fr !important; }
 }
 
-/* ── Sidebar — zawsze pełna wysokość z safe-area ── */
+/* ── Sidebar — pełna wysokość przez inset-y-0 (top:0/bottom:0) ── */
+/* NIE ustawiamy height:100dvh — na iOS Safari dvh bywa niepoprawny dla fixed elementów.
+   position:fixed + inset-y-0 determinuje wysokość przez top:0 i bottom:0, co zawsze
+   odpowiada dokładnie widocznej przestrzeni ekranu. */
 .sidebar-panel {
-  height: 100dvh;
+  overflow: hidden;
 }
 
 .sidebar-footer {

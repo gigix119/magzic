@@ -108,7 +108,6 @@ export default function Layout() {
         className={`fixed lg:static inset-y-0 left-0 z-30 flex flex-col sidebar-panel ${sidebarOpen ? '' : 'sidebar-panel-closed'}`}
         style={{
           width: 220,
-          height: '100dvh',
           background: 'var(--sidebar)',
           borderRight: '1px solid var(--sidebar-border)',
           transition: 'transform 0.2s',
