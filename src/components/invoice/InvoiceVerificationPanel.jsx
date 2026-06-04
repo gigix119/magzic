@@ -231,7 +231,7 @@ export default function InvoiceVerificationPanel({
                 <option value="">{item.shouldAffectInventory === false ? '— koszt / nie dotyczy —' : '— brak dopasowania —'}</option>
                 {towary.map(t => <option key={t.id} value={t.id}>{t.nazwa}</option>)}
               </select>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: item.suggestedQuantity && item.suggestedQuantity !== item.quantity ? 2 : 6 }}>
                 <input
                   type="number" min="0" step="0.001"
                   value={item.quantity}
@@ -249,6 +249,15 @@ export default function InvoiceVerificationPanel({
                 />
                 <span style={{ color: 'var(--muted)', fontSize: 11 }}>zł</span>
               </div>
+              {item.suggestedQuantity && item.suggestedQuantity !== item.quantity && (
+                <div style={{ fontSize: 10, color: '#d97706', marginBottom: 4 }}>
+                  ⚡ Sugerowana ilość: {item.suggestedQuantity}
+                  <button type="button" onClick={() => onExtractedItemChange(idx, 'quantity', item.suggestedQuantity)}
+                    style={{ marginLeft: 6, fontSize: 10, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                    Zastosuj
+                  </button>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {!item.skipped && item.itemType !== 'service_item' && (
                   <button type="button" onClick={() => onMarkService(idx)}
@@ -436,6 +445,18 @@ export default function InvoiceVerificationPanel({
                       onChange={e => onExtractedItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
                       style={{ ...IS(), fontSize: 11, padding: '4px 8px', width: 72, textAlign: 'right' }}
                     />
+                    {item.suggestedQuantity && item.suggestedQuantity !== item.quantity && (
+                      <div style={{ fontSize: 10, color: '#d97706', marginTop: 2 }}>
+                        ⚡ {item.suggestedQuantity}
+                        <button
+                          type="button"
+                          onClick={() => onExtractedItemChange(idx, 'quantity', item.suggestedQuantity)}
+                          style={{ marginLeft: 4, fontSize: 10, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                        >
+                          Zastosuj
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {(() => {

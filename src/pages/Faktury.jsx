@@ -43,6 +43,7 @@ import InvoiceApproveModal from '../components/invoice/InvoiceApproveModal'
 import InvoiceDeleteRollbackModal from '../components/invoice/InvoiceDeleteRollbackModal'
 import InvoiceScoringPanel from '../components/invoice/InvoiceScoringPanel'
 import InvoiceVerificationPanel from '../components/invoice/InvoiceVerificationPanel'
+import MultiInvoiceSelector from '../components/invoice/MultiInvoiceSelector'
 
 export default function Faktury() {
   const { addToast } = useToast()
@@ -102,6 +103,7 @@ export default function Faktury() {
   const [nNewProductSaving, setNNewProductSaving] = useState(false)
   const [nNewProductDupeWarning, setNNewProductDupeWarning] = useState(null)
   const [nContractorNipWarning, setNContractorNipWarning] = useState(null)
+  const [nMultiPreviews, setNMultiPreviews] = useState(null)
 
   // ── Cofnij-i-usuń modal ───────────────────────────────────────
   const [showCofnijDeleteModal, setShowCofnijDeleteModal] = useState(false)
@@ -762,8 +764,27 @@ export default function Faktury() {
     const _extractionStartMs = Date.now()
 
     try {
-      const { extractFromFile } = await import('../utils/invoiceExtractor')
+      const { extractFromFile, extractPdfTextWithLayout, splitMultiInvoicePdf, quickParseInvoiceHeader } = await import('../utils/invoiceExtractor')
       setNExtractStatus('Odczytuję tekst z dokumentu…')
+
+      // Multi-invoice detection: check for multiple invoices before full parsing
+      try {
+        const layout = await extractPdfTextWithLayout(nFile)
+        if (layout?.fullText) {
+          const segments = splitMultiInvoicePdf(layout.fullText)
+          if (segments.length > 1) {
+            const previews = segments.map((seg, idx) => ({
+              ...quickParseInvoiceHeader(seg),
+              segmentText: seg,
+              index: idx,
+            }))
+            setNMultiPreviews(previews)
+            setNAiLoading(false)
+            setNExtractStatus('')
+            return
+          }
+        }
+      } catch { /* fall through to normal extractFromFile */ }
 
       const result = await extractFromFile(nFile)
       result._fileName = nFile.name
@@ -1035,6 +1056,44 @@ export default function Faktury() {
 
   function updateNPos(idx, field, value) {
     setNPositions(ps => ps.map((p, i) => i === idx ? { ...p, [field]: value } : p))
+  }
+
+  async function batchSaveDraftInvoices(selectedPreviews) {
+    const { parseInvoiceItemsLP } = await import('../utils/invoiceExtractor')
+    const { extractWithPatterns } = await import('../utils/polishInvoicePatterns')
+    let savedCount = 0
+    for (const preview of selectedPreviews) {
+      try {
+        const patterns = extractWithPatterns(preview.segmentText)
+        const { data: fakData, error: fakErr } = await supabase.from('faktury').insert([{
+          numer: preview.invoiceNumber || patterns.numer || 'Numer z PDF',
+          kontrahent_id: null,
+          data_zakupu: preview.invoiceDate || patterns.data || null,
+          typ: preview.docType === 'paragon' ? 'paragon' : 'zakup',
+          plik_url: null,
+          status: 'robocza',
+          price_mode: preview.priceMode === 'gross' ? 'gross' : 'net',
+          notatki: `Zaimportowano z pliku wielofakturowego${nFile?.name ? ` (${nFile.name})` : ''}`,
+          ...wsData(),
+        }]).select().single()
+        if (fakErr) throw fakErr
+
+        const items = parseInvoiceItemsLP(preview.segmentText)
+        for (const item of items) {
+          const payload = mapPositionToInsertPayload(
+            { ...item, _towarId: null, _isDraft: true },
+            fakData.id,
+            wsData
+          )
+          const { error: posErr } = await supabase.from('pozycje_faktury').insert([payload])
+          if (posErr) console.warn('[multi-invoice] position save error:', posErr)
+        }
+        savedCount++
+      } catch (err) {
+        console.error('[multi-invoice] save error:', preview.invoiceNumber, err)
+      }
+    }
+    return savedCount
   }
 
   async function handleSaveNew() {
@@ -1338,10 +1397,27 @@ export default function Faktury() {
       {showNModal && (
         <Modal
           title="Nowa faktura"
-          onClose={() => setShowNModal(false)}
-          maxWidth={nShowForm ? 'min(1100px, calc(100vw - 48px))' : nShowExtracted ? 'min(900px, calc(100vw - 48px))' : 560}
+          onClose={() => { setShowNModal(false); setNMultiPreviews(null) }}
+          maxWidth={nShowForm ? 'min(1100px, calc(100vw - 48px))' : nMultiPreviews ? 'min(680px, calc(100vw - 48px))' : nShowExtracted ? 'min(900px, calc(100vw - 48px))' : 560}
         >
-          {!nShowForm && !nShowExtracted ? (
+          {nMultiPreviews ? (
+            /* Phase 0: Multi-invoice selector */
+            <MultiInvoiceSelector
+              previews={nMultiPreviews}
+              onCancel={() => setNMultiPreviews(null)}
+              onSelect={async (selected) => {
+                setNMultiPreviews(null)
+                setNAiLoading(true)
+                setNExtractStatus(`Zapisuję ${selected.length} faktur jako robocze…`)
+                const count = await batchSaveDraftInvoices(selected)
+                setNAiLoading(false)
+                setNExtractStatus('')
+                setShowNModal(false)
+                await fetchData()
+                addToast(`Zaimportowano ${count} ${count === 1 ? 'fakturę' : count < 5 ? 'faktury' : 'faktur'} jako robocze`, 'success')
+              }}
+            />
+          ) : !nShowForm && !nShowExtracted ? (
             /* Phase 1: Upload zone */
             <InvoiceUpload
               file={nFile}

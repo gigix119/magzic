@@ -1,6 +1,7 @@
 import * as pdfjs from 'pdfjs-dist'
 import { normalizePolishNumber, extractWithPatterns, isKsefInvoiceId } from './polishInvoicePatterns.js'
 import { inferPriceModeFromHeaders, calculateFromNet, calculateFromGross, roundMoney } from './invoiceMath.js'
+import { parseParagon } from './invoiceParagonParser.js'
 import { detectInvoiceStructure } from './invoiceStructureDetector.js'
 import { findTableCandidates, chooseBestTableCandidate } from './invoiceTableDetector.js'
 import { parseInvoiceLineData } from './invoiceLineParser.js'
@@ -144,6 +145,61 @@ export function splitMultiInvoicePdf(fullText) {
   return segments.length > 0 ? segments : [fullText.trim()]
 }
 
+// Fast header preview extraction — used by multi-invoice selector to build
+// the invoice list before full parsing. Does not call PDF.js.
+export function quickParseInvoiceHeader(segmentText) {
+  if (!segmentText) return { invoiceNumber: '', sellerName: '', sellerNip: '', totalAmount: 0, priceMode: 'unknown', docType: 'invoice', invoiceDate: '' }
+
+  // Invoice number from "FAKTURA VAT [NR] ..."
+  let invoiceNumber = ''
+  const numM = segmentText.match(/FAKTURA\s+VAT\s+(?:NR\s+)?(.+?)[\n\r]/i)
+  if (numM) invoiceNumber = numM[1].trim()
+
+  // Paragon number
+  if (!invoiceNumber && /PARAGON\s+FISKALNY/i.test(segmentText)) {
+    const paM = segmentText.match(/Nr\s+Sys\.?\s*:\s*(.+)/i)
+    invoiceNumber = paM ? paM[1].trim() : 'Paragon'
+  }
+
+  // Seller NIP — first NIP-like sequence in text
+  let sellerNip = ''
+  const nipM = segmentText.match(/NIP[:\s]+(\d[\d -]{8,12}\d)/)
+  if (nipM) sellerNip = nipM[1].replace(/[\s-]/g, '')
+
+  // Seller name — line after "Sprzedawca:"
+  let sellerName = ''
+  const sellerM = segmentText.match(/Sprzedawca:\s*\n\s*(.+)/i)
+  if (sellerM) sellerName = sellerM[1].trim()
+
+  // Total amount — various formats
+  let totalAmount = 0
+  const kwoM = segmentText.match(/Kwota\s+nale[żz]no[śs]ci\s+og[óo][łl]em[:\s]+([\d\s,]+)\s*PLN/i)
+  if (kwoM) totalAmount = normalizePolishNumber(kwoM[1].replace(/\s+/g, '')) || 0
+  if (!totalAmount) {
+    const zapM = segmentText.match(/(?:DO\s+ZAP[ŁL]ATY|SUMA)[:\s]*(?:PLN\s*)?([\d\s,]+)/i)
+    if (zapM) totalAmount = normalizePolishNumber(zapM[1].replace(/\s+/g, '')) || 0
+  }
+  if (!totalAmount) {
+    const brM = segmentText.match(/(?:Razem\s+brutto|Warto[śs][ćc]\s+brutto)[:\s]+([\d\s,.]+)/i)
+    if (brM) totalAmount = normalizePolishNumber(brM[1].replace(/\s+/g, '')) || 0
+  }
+
+  // Price mode from column headers
+  let priceMode = 'unknown'
+  if (/cena\s+jdn\.?\s+brutto|warto[śs][ćc]\s+brutto/i.test(segmentText)) priceMode = 'gross'
+  else if (/cena\s+jdn\.?\s+netto|warto[śs][ćc]\s+netto/i.test(segmentText)) priceMode = 'net'
+  else if (/PARAGON/i.test(segmentText)) priceMode = 'gross'
+
+  const docType = /PARAGON\s+FISKALNY/i.test(segmentText) ? 'paragon' : 'invoice'
+
+  // Date
+  let invoiceDate = ''
+  const dateM = segmentText.match(/Data\s+(?:i\s+miejsce\s+)?wystawienia[:\s]*([\d./-]+)/i)
+  if (dateM) invoiceDate = dateM[1]
+
+  return { invoiceNumber, sellerName, sellerNip, totalAmount, priceMode, docType, invoiceDate }
+}
+
 export function EMPTY_RESULT() {
   return {
     rawText: '',
@@ -213,6 +269,14 @@ function makeItem(raw) {
   const wartoscBrutto = raw.wartoscBrutto ?? raw.totalGross ?? (cenaBrutto > 0 ? ilosc * cenaBrutto : 0)
   const rawUnit = raw.jednostka || raw.unit
   const unit = rawUnit ? (normalizeInvoiceItemUnit(rawUnit) || rawUnit) : 'szt'
+
+  // Quantity suggestion: when parser sees qty=1 but total ÷ unitPrice gives a whole number > 1
+  let suggestedQuantity = null
+  if (ilosc === 1 && cenaNetto > 0 && wartoscNetto > cenaNetto * 1.5) {
+    const s = Math.round(wartoscNetto / cenaNetto)
+    if (s > 1 && Math.abs(s * cenaNetto - wartoscNetto) <= 0.02) suggestedQuantity = s
+  }
+
   return {
     rawName: raw.rawName || raw.nazwa || '',
     normalizedName: (raw.rawName || raw.nazwa || '').toLowerCase().trim(),
@@ -236,6 +300,7 @@ function makeItem(raw) {
     matchedProductId: null,
     itemType: raw.itemType ?? null,
     shouldAffectInventory: raw.shouldAffectInventory ?? null,
+    ...(suggestedQuantity !== null ? { suggestedQuantity } : {}),
   }
 }
 
@@ -305,6 +370,26 @@ export async function extractFromFile(file) {
 
     if (layout.fullText.length < 50) {
       result.warnings.push('PDF nie zawiera warstwy tekstowej (skan). Wypełnij dane ręcznie.')
+      return result
+    }
+
+    // Paragon fiskalny — parse with dedicated receipt parser
+    if (/PARAGON\s+FISKALNY/i.test(layout.fullText)) {
+      const pr = parseParagon(layout.fullText)
+      result.documentType = 'paragon'
+      result.priceMode = 'gross'
+      result.source = 'pdf_text'
+      result.confidence = pr.confidence
+      result.fields.numer = pr.invoiceNumber
+      result.fields.data_zakupu = pr.invoiceDate || null
+      result.fields.data_wystawienia = pr.invoiceDate || null
+      result.fields.kontrahent_nip = pr.sellerNip || null
+      result.fields.kontrahent_nazwa = pr.sellerName || null
+      result.fields.sprzedawca_nip = pr.sellerNip || null
+      result.fields.sprzedawca_nazwa = pr.sellerName || null
+      result.fields.suma_brutto = pr.totalGross
+      result.fields.suma_netto = pr.totalNet
+      result.fields.pozycje = pr.lines.map(line => makeItem(line))
       return result
     }
 
