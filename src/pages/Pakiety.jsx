@@ -196,7 +196,43 @@ export default function Pakiety() {
             const isOpen = expanded === pak.id
             return (
               <div key={pak.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-3 px-5 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
+                {/* ── Mobile card header (< md) ── */}
+                <div className="md:hidden px-4 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg flex-shrink-0 flex items-center justify-center" style={{ width: 40, height: 40, background: 'rgba(139,92,246,0.1)' }}>
+                      <Sparkles size={18} style={{ color: '#8b5cf6' }} />
+                    </div>
+                    <div className="flex-1 min-w-0" onClick={() => setExpanded(isOpen ? null : pak.id)} style={{ cursor: 'pointer' }}>
+                      <p className="font-semibold break-words" style={{ color: 'var(--text)', lineHeight: 1.35 }}>{pak.nazwa}</p>
+                      {pak.opis && (
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{pak.opis}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center flex-shrink-0">
+                      <button onClick={() => openEdit(pak)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 38, minHeight: 38 }} title="Edytuj"><Pencil size={13} /></button>
+                      <button onClick={() => handleDelete(pak)} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 38, minHeight: 38 }} title="Usuń"><Trash2 size={13} /></button>
+                      <button onClick={() => setExpanded(isOpen ? null : pak.id)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--muted)', minWidth: 38, minHeight: 38 }}>
+                        {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3" style={{ paddingLeft: 52 }}>
+                    <div className="flex items-center gap-1.5">
+                      {max > 0 ? <CheckCircle2 size={13} style={{ color: '#16a34a' }} /> : <XCircle size={13} style={{ color: '#dc2626' }} />}
+                      <span className="font-bold text-base" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{max}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-2)' }}>realizacji</span>
+                    </div>
+                    <Badge variant={pak.aktywny ? 'green' : 'zinc'}>{pak.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge>
+                    {pak.aktywny && (
+                      <button onClick={() => openExec(pak)} className="ml-auto flex items-center gap-1.5 px-4 rounded-lg text-xs font-medium text-white" style={{ background: '#8b5cf6', minHeight: 44 }}>
+                        <PlayCircle size={13} /> Wykonaj
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Desktop card header (≥ md) ── */}
+                <div className="hidden md:flex items-center gap-3 px-5 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
                   <button className="flex-1 flex items-center gap-4 text-left min-w-0" onClick={() => setExpanded(isOpen ? null : pak.id)}>
                     <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, background: 'rgba(139,92,246,0.1)' }}>
                       <Sparkles size={18} style={{ color: '#8b5cf6' }} />

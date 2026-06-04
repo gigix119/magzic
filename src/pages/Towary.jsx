@@ -312,7 +312,8 @@ export default function Towary() {
         </label>
       </div>
 
-      <div className="rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
+      {/* ── Desktop table ── */}
+      <div className="hidden md:block rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
         <table className="w-full text-sm" style={{ minWidth: 560 }}>
           <thead>
             <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
@@ -604,6 +605,220 @@ export default function Towary() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Mobile card list ── */}
+      <div className="md:hidden space-y-2">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--muted)' }}>
+            <Package size={32} className="mx-auto mb-2 opacity-30" />
+            <p>Brak towarów</p>
+          </div>
+        ) : (
+          filtered.map(item => {
+            const total = stanMap[item.id] || 0
+            const isExpanded = expandedRow === item.id
+            const perMag = stanyPerMag.filter(s => s.towar_id === item.id && Number(s.ilosc) > 0)
+            const ruchy = rowRuchy[item.id] || []
+            const tab = rowTab[item.id] || 'stany'
+            const period = rowPeriod[item.id] || '30d'
+            const hist = rowHistoria[item.id]
+            return (
+              <div key={item.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                {/* Card header */}
+                <div className="px-4 pt-3 pb-2" onClick={() => toggleRow(item.id)} style={{ cursor: 'pointer' }}>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {isExpanded
+                          ? <ChevronUp size={12} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+                          : <ChevronDown size={12} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
+                        <p className="font-medium break-words" style={{ color: item.archived_at ? 'var(--muted)' : 'var(--text)', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {item.nazwa}
+                        </p>
+                      </div>
+                      {item.sku && (
+                        <p className="text-xs mt-0.5 ml-4" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace' }}>{item.sku}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1 ml-4 flex-wrap">
+                        {item.kategorie?.nazwa && (
+                          <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                            {item.kategorie.nazwa}
+                          </span>
+                        )}
+                        {item.typ && <span className="text-xs" style={{ color: 'var(--text-2)' }}>{item.typ}</span>}
+                        {item.archived_at && (
+                          <span style={{ fontSize: 10, padding: '1px 6px', background: '#f1f5f9', color: '#64748b', borderRadius: 4 }}>Zarchiwizowany</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)', fontSize: 15 }}>
+                        {total} <span className="text-xs font-normal" style={{ color: 'var(--text-2)' }}>{item.jednostka || ''}</span>
+                      </p>
+                      <div className="mt-1">{stanBadge(total, item.stan_minimalny)}</div>
+                    </div>
+                  </div>
+                </div>
+                {/* Actions row */}
+                <div className="flex items-center gap-1.5 px-3 pb-3" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => openAction('add', item)} className="flex-1 flex items-center justify-center rounded-lg" style={{ color: '#16a34a', background: 'rgba(34,197,94,0.08)', minHeight: 44, border: '1px solid rgba(34,197,94,0.2)' }} title="Dodaj"><Plus size={16} /></button>
+                  <button onClick={() => openAction('issue', item)} className="flex-1 flex items-center justify-center rounded-lg" style={{ color: '#dc2626', background: 'rgba(239,68,68,0.08)', minHeight: 44, border: '1px solid rgba(239,68,68,0.2)' }} title="Wydaj"><Minus size={16} /></button>
+                  <button onClick={() => openAction('transfer', item)} className="flex-1 flex items-center justify-center rounded-lg" style={{ color: '#3b82f6', background: 'rgba(59,130,246,0.08)', minHeight: 44, border: '1px solid rgba(59,130,246,0.2)' }} title="Transfer"><ArrowLeftRight size={14} /></button>
+                  <button onClick={() => openAction('korekta', item)} className="flex-1 flex items-center justify-center rounded-lg" style={{ color: '#f59e0b', background: 'rgba(245,158,11,0.08)', minHeight: 44, border: '1px solid rgba(245,158,11,0.2)' }} title="Korekta"><SlidersHorizontal size={14} /></button>
+                  <div style={{ width: 1, height: 24, background: 'var(--border)', flexShrink: 0 }} />
+                  <button onClick={() => openEdit(item)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 44, minHeight: 44 }} title="Edytuj"><Pencil size={14} /></button>
+                  <button onClick={() => handleDelete(item)} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 44, minHeight: 44 }} title="Usuń"><Trash2 size={14} /></button>
+                </div>
+                {/* Expanded section */}
+                {isExpanded && (
+                  <div style={{ borderTop: '1px solid var(--border)', background: 'var(--table-sub)' }}>
+                    <div className="tab-bar-scroll" style={{ display: 'flex', borderBottom: '1px solid var(--border)', paddingLeft: 12 }}>
+                      {[['stany', 'Stany i ruchy'], ['historia', 'Historia zakupów']].map(([key, label]) => (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setRowTab(t => ({ ...t, [item.id]: key }))
+                            if (key === 'historia') {
+                              const cur = rowHistoria[item.id]
+                              if (!cur || cur.period !== period) fetchHistoria(item.id, period)
+                            }
+                          }}
+                          style={{
+                            padding: '7px 14px', fontSize: 12,
+                            fontWeight: tab === key ? 600 : 400,
+                            color: tab === key ? '#3b82f6' : 'var(--text-2)',
+                            borderBottom: `2px solid ${tab === key ? '#3b82f6' : 'transparent'}`,
+                            background: 'none', cursor: 'pointer', marginBottom: -1,
+                          }}
+                        >{label}</button>
+                      ))}
+                    </div>
+                    {tab === 'stany' && (
+                      <div style={{ padding: '12px 16px' }}>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Warehouse size={13} style={{ color: 'var(--muted)' }} />
+                          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Stany w magazynach</span>
+                        </div>
+                        {perMag.length === 0 ? (
+                          <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>Brak stanów</p>
+                        ) : (
+                          <div className="space-y-1 mb-3">
+                            {perMag.map(s => (
+                              <div key={s.id} className="flex items-center justify-between rounded px-2.5 py-1.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                                <span className="text-xs" style={{ color: 'var(--text-2)' }}>{s.magazyny?.nazwa || '—'}</span>
+                                <span className="text-xs font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{Number(s.ilosc)} {item.jednostka || ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Clock size={13} style={{ color: 'var(--muted)' }} />
+                          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Ostatnie ruchy</span>
+                        </div>
+                        {rowLoading === item.id ? (
+                          <p className="text-xs" style={{ color: 'var(--muted)' }}>Ładowanie...</p>
+                        ) : ruchy.length === 0 ? (
+                          <p className="text-xs" style={{ color: 'var(--muted)' }}>Brak ruchów</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {ruchy.map(r => (
+                              <div key={r.id} className="flex items-center justify-between rounded px-2.5 py-1.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: RUCH_COLORS[r.typ] || 'var(--text-2)' }}>{RUCH_LABELS[r.typ] || r.typ}</span>
+                                  <span className="text-xs truncate" style={{ color: 'var(--muted)' }}>
+                                    {r.powod || (r.mz?.nazwa && r.md?.nazwa ? `${r.mz.nazwa} → ${r.md.nazwa}` : r.mz?.nazwa || r.md?.nazwa || '')}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                  <span className="text-xs" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{Number(r.ilosc)}</span>
+                                  <span className="text-xs" style={{ color: 'var(--muted)' }}>{new Date(r.created_at).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {tab === 'historia' && (
+                      <div style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                          {HIST_PERIODS.map(p => (
+                            <button
+                              key={p.key}
+                              onClick={() => {
+                                setRowPeriod(rp => ({ ...rp, [item.id]: p.key }))
+                                fetchHistoria(item.id, p.key)
+                              }}
+                              style={{
+                                padding: '3px 10px', fontSize: 11, borderRadius: 6,
+                                fontWeight: period === p.key ? 600 : 400,
+                                background: period === p.key ? '#3b82f6' : 'var(--card)',
+                                color: period === p.key ? '#fff' : 'var(--text-2)',
+                                border: `1px solid ${period === p.key ? '#3b82f6' : 'var(--border)'}`,
+                                cursor: 'pointer',
+                              }}
+                            >{p.label}</button>
+                          ))}
+                        </div>
+                        {(!hist || hist.loading) && <p className="text-xs" style={{ color: 'var(--muted)' }}>Ładowanie...</p>}
+                        {hist && !hist.loading && hist.error && <p className="text-xs" style={{ color: '#ef4444' }}>Błąd: {hist.error}</p>}
+                        {hist && !hist.loading && !hist.error && (
+                          <>
+                            {hist.suppliers.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                                {hist.suppliers.map((s, si) => (
+                                  <div key={s.id} style={{ border: `1px solid ${si === 0 ? '#16a34a' : 'var(--border)'}`, borderRadius: 8, padding: '8px 12px', background: 'var(--card)', minWidth: 140, flex: '1 1 140px' }}>
+                                    <p className="text-xs font-semibold mb-1 truncate" style={{ color: 'var(--text)' }}>{s.nazwa}</p>
+                                    <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+                                      {s.avgPrice.toFixed(2)} zł{' '}
+                                      <span style={{ fontSize: 11, fontWeight: 400, color: s.trend === 'up' ? '#ef4444' : s.trend === 'down' ? '#16a34a' : 'var(--muted)' }}>
+                                        {s.trend === 'up' ? '↑' : s.trend === 'down' ? '↓' : '='}
+                                      </span>
+                                    </p>
+                                    <p className="text-xs" style={{ color: 'var(--muted)' }}>{s.count} faktur · {s.lastDate || '—'}</p>
+                                    {si === 0 && <p className="text-xs mt-1" style={{ color: '#16a34a', fontWeight: 600 }}>Najlepsza cena</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {hist.data.length === 0 ? (
+                              <p className="text-xs" style={{ color: 'var(--muted)' }}>Brak faktur zakupu w wybranym okresie.</p>
+                            ) : (
+                              <div className="table-scroll-x">
+                                <table className="w-full text-xs" style={{ minWidth: 400, borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                      {['Data', 'Numer', 'Kontrahent', 'Ilość', 'Cena', 'Suma'].map(h => (
+                                        <th key={h} className="text-left py-1.5 px-2 font-semibold" style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {hist.data.map((row, ri) => (
+                                      <tr key={ri} style={{ borderBottom: '1px solid var(--border)', background: ri % 2 === 0 ? 'var(--table-even)' : 'var(--table-odd)' }}>
+                                        <td className="py-1.5 px-2" style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{row.faktury?.data_zakupu ? new Date(row.faktury.data_zakupu).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }) : '—'}</td>
+                                        <td className="py-1.5 px-2" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>{row.faktury?.numer || '—'}</td>
+                                        <td className="py-1.5 px-2" style={{ color: 'var(--text-2)' }}>{row.faktury?.kontrahenci?.nazwa || '—'}</td>
+                                        <td className="py-1.5 px-2 text-right" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap' }}>{Number(row.ilosc)} {item.jednostka || ''}</td>
+                                        <td className="py-1.5 px-2 text-right" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap' }}>{Number(row.cena_netto).toFixed(2)} zł</td>
+                                        <td className="py-1.5 px-2 text-right" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap' }}>{(Number(row.ilosc) * Number(row.cena_netto)).toFixed(2)} zł</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
       </div>
 
       {/* ── ACTION MODAL ──────────────────────────────────────── */}

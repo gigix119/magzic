@@ -295,7 +295,7 @@ export default function AssistantChat() {
             background: 'var(--input-bg)',
             border: '1px solid var(--border)',
             color: 'var(--text)',
-            minHeight: 38,
+            minHeight: 44,
             maxHeight: 120,
             lineHeight: '1.5',
             overflowY: 'auto',
@@ -313,8 +313,8 @@ export default function AssistantChat() {
             background: input.trim() && !isLoading ? '#3b82f6' : 'var(--table-sub)',
             color: input.trim() && !isLoading ? '#ffffff' : 'var(--muted)',
             border: '1px solid var(--border)',
-            minHeight: 38,
-            minWidth: 38,
+            minHeight: 44,
+            minWidth: 44,
           }}
           title="Wyślij (Enter)"
         >

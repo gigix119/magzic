@@ -235,9 +235,9 @@ export default function Alerty() {
       </div>
 
       {/* Summary chips */}
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3 mb-6">
         {allAlerts.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-lg px-4 py-3" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+          <div className="col-span-2 sm:col-auto flex items-center gap-2 rounded-lg px-4 py-3" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
             <span className="text-sm font-medium" style={{ color: '#16a34a' }}>Wszystkie stany OK</span>
           </div>
         ) : (
@@ -411,13 +411,13 @@ export default function Alerty() {
 
       {/* ── Alerty cenowe z zakupów ── */}
       <div className="rounded-xl overflow-hidden mt-6" style={{ border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-5 py-3" style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2">
-            <TrendingUp size={16} style={{ color: '#3b82f6' }} />
-            <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Wykryte anomalie cenowe w zakupach</h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3" style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <TrendingUp size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
+            <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Wykryte anomalie cenowe</h2>
             {priceAlerts.length > 0 && <Badge variant="blue">{priceAlerts.length} nieprzeczytanych</Badge>}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {priceAlerts.length > 1 && (
               <button
                 onClick={markAllPriceAlertsRead}

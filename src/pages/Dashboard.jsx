@@ -223,7 +223,15 @@ export default function Dashboard() {
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={isMobile ? 160 : 220}>
               <BarChart data={chartData} barCategoryGap="30%">
-                <XAxis dataKey="name" tick={{ fill: 'var(--text-2)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: 'var(--text-2)', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  angle={isMobile ? -35 : 0}
+                  textAnchor={isMobile ? 'end' : 'middle'}
+                  height={isMobile ? 52 : 30}
+                />
                 <YAxis tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>

@@ -178,7 +178,44 @@ export default function Kontrahenci() {
         </select>
       </div>
 
-      <div className="rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
+      {/* ── Mobile card list ── */}
+      <div className="md:hidden space-y-2">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--muted)' }}>
+            <Users size={32} className="mx-auto mb-2 opacity-30" />
+            <p>Brak kontrahentów</p>
+          </div>
+        ) : (
+          filtered.map(item => (
+            <div key={item.id} className="rounded-xl px-4 py-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium break-words" style={{ color: item.aktywny !== false ? 'var(--text)' : 'var(--muted)' }}>
+                    {item.nazwa}
+                  </p>
+                  {item.nip && (
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace' }}>NIP: {item.nip}</p>
+                  )}
+                  {item.adres && (
+                    <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-2)' }}>{item.adres}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <Badge variant={fakturyCount[item.id] ? 'blue' : 'zinc'}>{fakturyCount[item.id] || 0} {fakturyCount[item.id] === 1 ? 'faktura' : 'faktur'}</Badge>
+                    <Badge variant={item.aktywny !== false ? 'green' : 'zinc'}>{item.aktywny !== false ? 'Aktywny' : 'Nieaktywny'}</Badge>
+                  </div>
+                </div>
+                <div className="flex items-center flex-shrink-0">
+                  <button onClick={() => openEdit(item)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 44, minHeight: 44 }} title="Edytuj"><Pencil size={14} /></button>
+                  <button onClick={() => handleDelete(item)} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 44, minHeight: 44 }} title="Usuń"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── Desktop table ── */}
+      <div className="hidden md:block rounded-xl overflow-hidden table-scroll-x" style={{ border: '1px solid var(--border)' }}>
         <table className="w-full text-sm" style={{ minWidth: 480 }}>
           <thead>
             <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border)' }}>

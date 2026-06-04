@@ -293,51 +293,78 @@ export default function Magazyny() {
                     {items.length === 0 ? (
                       <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>Brak towarów w tym magazynie</p>
                     ) : (
-                      <div className="table-scroll-x">
-                        <table className="w-full text-sm" style={{ minWidth: 500 }}>
-                          <thead>
-                            <tr style={{ background: 'var(--table-sub)' }}>
-                              <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
-                              <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Kategoria</th>
-                              <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Ilość</th>
-                              <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Jedn.</th>
-                              <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Min.</th>
-                              <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
-                              <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Akcje</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.map(s => (
-                              <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                                <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{s.towary?.nazwa || '—'}</td>
-                                <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{s.towary?.kategorie?.nazwa || '—'}</td>
-                                <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{Number(s.ilosc)}</td>
-                                <td className="px-5 py-3 text-right" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || '—'}</td>
-                                <td className="px-5 py-3 text-right" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace', fontSize: 12 }}>{s.towary?.stan_minimalny ?? '—'}</td>
-                                <td className="px-5 py-3 text-center">
-                                  <StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} />
-                                </td>
-                                <td className="px-5 py-3">
-                                  <div className="flex items-center justify-center gap-1 flex-wrap">
-                                    <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
-                                      <PackagePlus size={13} />
-                                    </button>
-                                    <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-                                      <PackageMinus size={13} />
-                                    </button>
-                                    <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
-                                      <ArrowLeftRight size={13} />
-                                    </button>
-                                    <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
-                                      <SlidersHorizontal size={13} />
-                                    </button>
-                                  </div>
-                                </td>
+                      <>
+                        {/* Mobile cards */}
+                        <div className="md:hidden space-y-2 p-3">
+                          {items.map(s => (
+                            <div key={s.id} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium break-words" style={{ color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                    {s.towary?.nazwa || '—'}
+                                  </p>
+                                  {s.towary?.kategorie?.nazwa && (
+                                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{s.towary.kategorie.nazwa}</p>
+                                  )}
+                                </div>
+                                <div className="flex-shrink-0 text-right">
+                                  <p className="font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6', fontSize: 15 }}>
+                                    {Number(s.ilosc)} <span className="text-xs font-normal" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || ''}</span>
+                                  </p>
+                                  {s.towary?.stan_minimalny != null && (
+                                    <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>min: {s.towary.stan_minimalny}</p>
+                                  )}
+                                  <div className="mt-1"><StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} /></div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-2.5">
+                                <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="flex-1 flex items-center justify-center rounded-lg" style={{ background: 'rgba(34,197,94,0.08)', color: '#22c55e', minHeight: 44, border: '1px solid rgba(34,197,94,0.2)' }}><PackagePlus size={14} /></button>
+                                <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="flex-1 flex items-center justify-center rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', minHeight: 44, border: '1px solid rgba(239,68,68,0.2)' }}><PackageMinus size={14} /></button>
+                                <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="flex-1 flex items-center justify-center rounded-lg" style={{ background: 'rgba(59,130,246,0.08)', color: '#3b82f6', minHeight: 44, border: '1px solid rgba(59,130,246,0.2)' }}><ArrowLeftRight size={14} /></button>
+                                <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="flex-1 flex items-center justify-center rounded-lg" style={{ background: 'rgba(245,158,11,0.08)', color: '#f59e0b', minHeight: 44, border: '1px solid rgba(245,158,11,0.2)' }}><SlidersHorizontal size={14} /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Desktop table */}
+                        <div className="hidden md:block table-scroll-x">
+                          <table className="w-full text-sm" style={{ minWidth: 500 }}>
+                            <thead>
+                              <tr style={{ background: 'var(--table-sub)' }}>
+                                <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Towar</th>
+                                <th className="text-left px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Kategoria</th>
+                                <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Ilość</th>
+                                <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Jedn.</th>
+                                <th className="text-right px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Min.</th>
+                                <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Status</th>
+                                <th className="text-center px-5 py-2.5 font-medium" style={{ color: 'var(--muted)', fontSize: 12 }}>Akcje</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {items.map(s => (
+                                <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                                  <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{s.towary?.nazwa || '—'}</td>
+                                  <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{s.towary?.kategorie?.nazwa || '—'}</td>
+                                  <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{Number(s.ilosc)}</td>
+                                  <td className="px-5 py-3 text-right" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || '—'}</td>
+                                  <td className="px-5 py-3 text-right" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace', fontSize: 12 }}>{s.towary?.stan_minimalny ?? '—'}</td>
+                                  <td className="px-5 py-3 text-center">
+                                    <StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} />
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <div className="flex items-center justify-center gap-1 flex-wrap">
+                                      <button title="Przyjmij" onClick={() => openAction('add', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}><PackagePlus size={13} /></button>
+                                      <button title="Wydaj" onClick={() => openAction('issue', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}><PackageMinus size={13} /></button>
+                                      <button title="Przenieś" onClick={() => openAction('transfer', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}><ArrowLeftRight size={13} /></button>
+                                      <button title="Korekta" onClick={() => openAction('korekta', s, mag)} className="p-1.5 rounded-md table-action-btn" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}><SlidersHorizontal size={13} /></button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                     {mag.opis && (
                       <div className="px-5 py-3 text-sm" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>{mag.opis}</div>
