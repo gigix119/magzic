@@ -92,6 +92,58 @@ function adaptColMap(raw) {
 pdfjs.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
+// Regex markers that identify the start of a new invoice within a multi-invoice PDF.
+// Ordered from most-specific to least-specific so earlier markers take priority on dedup.
+const _MULTI_INVOICE_MARKERS = [
+  // KSeF podgląd header (appears before each invoice in SaldeoSMART exports)
+  /Podgl[ąa]d\s+wygenerowany\s+na\s+podstawie\s+danych\s+pobranych\s+z\s+KSeF/i,
+  // Standard "FAKTURA VAT" followed by invoice number or NR keyword
+  /FAKTURA\s+VAT\s+(?:NR\s+)?\S/i,
+  // Older-style "Faktura Nr ..."
+  /Faktura\s+Nr\s+\S/i,
+  // Fiscal receipt
+  /PARAGON\s+FISKALNY/i,
+]
+
+// Patterns in the first 300 chars of a segment that indicate junk/non-invoice pages.
+const _JUNK_SECTION_PATTERNS = [
+  /wizualizacja\s+faktury\s+pochodzi\s+z\s+saldeo/i,
+  /^ad\.\d+\s*\.\s*$/m,
+]
+
+// Split a full PDF text (possibly containing multiple invoices) into individual invoice texts.
+// Returns an array of segment strings — one per detected invoice.
+// Returns [fullText] when only one invoice is found.
+export function splitMultiInvoicePdf(fullText) {
+  if (!fullText || fullText.length < 50) return fullText ? [fullText.trim()] : []
+
+  const positions = []
+  for (const re of _MULTI_INVOICE_MARKERS) {
+    const gRe = new RegExp(re.source, 'gi')
+    let m
+    while ((m = gRe.exec(fullText)) !== null) {
+      const pos = m.index
+      // Deduplicate: skip if within 5 chars of an existing marker (two patterns both matching same spot)
+      if (!positions.some(p => Math.abs(p - pos) < 5)) positions.push(pos)
+    }
+  }
+  positions.sort((a, b) => a - b)
+
+  if (positions.length <= 1) return [fullText.trim()]
+
+  const segments = []
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i]
+    const end = i + 1 < positions.length ? positions[i + 1] : fullText.length
+    const seg = fullText.substring(start, end).trim()
+    if (seg.length < 50) continue
+    // Check only the opening ~80 chars: junk segments START with junk, valid invoices start with "FAKTURA VAT..."
+    if (_JUNK_SECTION_PATTERNS.some(p => p.test(seg.slice(0, 80)))) continue
+    segments.push(seg)
+  }
+  return segments.length > 0 ? segments : [fullText.trim()]
+}
+
 export function EMPTY_RESULT() {
   return {
     rawText: '',
@@ -908,6 +960,21 @@ function _parseSegment(seg) {
           if (nB > 0 && Math.abs(qty * nums[1] - nB) <= Math.max(0.05, nB * 0.015)) {
             unitPriceNet = nums[1]
             totalNet = nB
+          }
+        }
+
+        // Strategy D: VAT rate at nums[2], total is thousands-split at nums[3..4]
+        // e.g. [4, 295, 23, 1, 180] → qty=4 price=295 vat=23 total=1180
+        const remainTol2 = Math.max(0.05, totalNet * 0.015)
+        if (Math.abs(qty * unitPriceNet - totalNet) > remainTol2
+            && nums.length >= 5
+            && VAT_RATES.has(nums[2])
+            && Number.isInteger(nums[3]) && nums[3] >= 1 && nums[3] <= 999
+            && nums[4] >= 0 && nums[4] < 1000) {
+          const nD = nums[3] * 1000 + nums[4]
+          const tolD = Math.max(0.05, nD * 0.015)
+          if (nD > 0 && Math.abs(qty * unitPriceNet - nD) <= tolD) {
+            totalNet = nD
           }
         }
       }

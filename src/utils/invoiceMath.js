@@ -80,6 +80,59 @@ export function validateLineMath(line) {
   return { valid: diff <= 0.02, expectedTotal, actualTotal: totalNet, diff }
 }
 
+// Detect the column schema from an invoice header row (plain text or joined tokens).
+// Returns metadata used by the right-to-left line parser:
+//   priceType      – 'net' | 'gross' | 'mixed' | 'unknown'
+//   hasLp          – Lp. column present
+//   hasJdn         – unit (Jdn./Jm.) column present
+//   hasDiscount    – Rabat column present
+//   hasVat         – VAT column present
+//   numericColumnsFromRight – extraction order from right edge of a data row
+//
+// Known schemas (all must work):
+//   1. Net  + Jdn + Discount:  ['total','vat','discount','unitPrice','qty']  priceType:'net'
+//   2. Gross + no-Jdn + Discount: same order, priceType:'gross'
+//   3. Gross + Jdn + Discount:    same order, priceType:'gross'
+//   4. Gross + Jdn + no-Discount: ['total','vat','unitPrice','qty'],          priceType:'gross'
+//   5. Net  + no-Jdn + no-Discount: ['total','vat','unitPrice','qty'],        priceType:'net'
+export function detectColumnSchema(headerText) {
+  if (!headerText) {
+    return { hasLp: false, hasJdn: false, hasDiscount: false, hasVat: false, priceType: 'unknown', numericColumnsFromRight: ['total', 'unitPrice', 'qty'] }
+  }
+  const norm = String(headerText).toLowerCase()
+    .replace(/ą/g,'a').replace(/ć/g,'c').replace(/ę/g,'e').replace(/ł/g,'l')
+    .replace(/ń/g,'n').replace(/ó/g,'o').replace(/ś/g,'s').replace(/ź/g,'z').replace(/ż/g,'z')
+
+  const hasLp = /\bl\.?p\.?\b/.test(norm)
+
+  // "jdn." appears in two contexts:
+  //   (a) standalone unit column header:  "Jdn."
+  //   (b) abbreviation in price column:   "Cena jdn. netto" / "Cena jdn. brutto"
+  // hasJdn is true only when there is a standalone unit column (a).
+  // Strategy: count standalone "jdn." occurrences vs. occurrences inside "cena jdn." phrase.
+  // If there are MORE standalone occurrences than "cena jdn." occurrences → dedicated unit column.
+  const jdnTotalCount   = (norm.match(/(?:^|\s)(jdn\.?)(?=[\s,])/gi) || []).length
+  const jdnInCenaCount  = (norm.match(/\bcena\s+jdn/gi) || []).length
+  const hasJdn = (jdnTotalCount > jdnInCenaCount)
+              || /\bjednostk|\bj\.?m\.?\b|\bjm\.?\b/.test(norm)
+
+  const hasDiscount = /\brabat\b/.test(norm)
+  const hasVat      = /\bvat\b|\bstawka\b/.test(norm)
+
+  let priceType = 'unknown'
+  if (/brutto/.test(norm) && !/netto/.test(norm))      priceType = 'gross'
+  else if (/netto/.test(norm) && !/brutto/.test(norm)) priceType = 'net'
+  else if (/brutto/.test(norm) && /netto/.test(norm))  priceType = 'mixed'
+
+  const numericColumnsFromRight = ['total']
+  if (hasVat)      numericColumnsFromRight.push('vat')
+  if (hasDiscount) numericColumnsFromRight.push('discount')
+  numericColumnsFromRight.push('unitPrice')
+  numericColumnsFromRight.push('qty')
+
+  return { hasLp, hasJdn, hasDiscount, hasVat, priceType, numericColumnsFromRight }
+}
+
 export function validateInvoiceTotals(lines, summaryTotals) {
   let sumNet = 0, sumGross = 0, sumVat = 0
   for (const l of (lines || [])) {
