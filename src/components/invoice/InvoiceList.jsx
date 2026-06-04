@@ -41,14 +41,15 @@ export default function InvoiceList({
         const altAmount   = isGross ? totalNetto  : totalBrutto
         return (
           <div key={fak.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-            <div className="flex items-center gap-3 px-5 py-4 faktura-card-row" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
-              <button className="flex-1 flex items-center gap-3 text-left min-w-0" onClick={() => onToggleExpand(fak.id)}>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 sm:py-4 faktura-card-row" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
+              {/* Content button — full width on xs, flex-1 on sm+ */}
+              <button className="flex-none w-full sm:flex-1 sm:w-auto flex items-center gap-3 text-left min-w-0" onClick={() => onToggleExpand(fak.id)}>
                 <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 38, height: 38, background: 'rgba(59,130,246,0.1)' }}>
                   <FileText size={16} style={{ color: '#3b82f6' }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fak.numer}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-semibold faktura-numer" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fak.numer}</span>
                     {typBadge(fak.typ)}
                     {statusBadge(fak.status)}
                     {fak.price_mode === 'gross' && (
@@ -65,7 +66,7 @@ export default function InvoiceList({
                     <span className="text-xs" style={{ color: 'var(--text-2)' }}>{fak.data_zakupu}</span>
                   </div>
                 </div>
-                <div className="text-right flex-shrink-0 mr-2">
+                <div className="text-right flex-shrink-0 ml-auto sm:ml-0 mr-1">
                   <p className="font-medium text-sm" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>
                     {mainAmount.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł
                   </p>
@@ -76,40 +77,41 @@ export default function InvoiceList({
                   )}
                   <p className="text-xs" style={{ color: 'var(--muted)' }}>{poz.length} poz.</p>
                 </div>
-                {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)' }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)' }} />}
+                {isOpen ? <ChevronUp size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} /> : <ChevronDown size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
               </button>
 
-              <div className="flex items-center gap-1 flex-shrink-0 faktura-row-actions">
+              {/* Actions — full width on xs (wraps below button), inline on sm+ */}
+              <div className="flex items-center gap-1.5 w-full sm:w-auto sm:flex-shrink-0 faktura-row-actions">
                 {fak.status === 'robocza' && (
                   <>
-                    <button onClick={() => onZatwierdz(fak)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#22c55e', minHeight: 36 }} title="Zatwierdź fakturę">
-                      <CheckCircle2 size={12} /> Zatwierdź
+                    <button onClick={() => onZatwierdz(fak)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white" style={{ background: '#22c55e', minHeight: 44 }} title="Zatwierdź fakturę">
+                      <CheckCircle2 size={13} /> Zatwierdź
                     </button>
                     <button onClick={() => onAddPoz(fak)} className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }} title="Dodaj pozycję">
                       <Plus size={12} /> Dodaj poz.
                     </button>
                     {fak.plik_url && (
-                      <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center justify-center" style={{ color: '#3b82f6', minHeight: 36, minWidth: 36 }} title="Pobierz plik">
+                      <a href={fak.plik_url} target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg" style={{ color: '#3b82f6', minHeight: 44, minWidth: 44 }} title="Pobierz plik">
                         <Download size={13} />
                       </a>
                     )}
-                    <button onClick={() => onEditFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                    <button onClick={() => onDeleteFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                    <button onClick={() => onEditFak(fak)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 44, minHeight: 44 }} title="Edytuj"><Pencil size={13} /></button>
+                    <button onClick={() => onDeleteFak(fak)} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 44, minHeight: 44 }} title="Usuń"><Trash2 size={13} /></button>
                   </>
                 )}
                 {fak.status === 'zatwierdzona' && (
                   <>
                     <button
                       onClick={() => onToggleExpand(fak.id)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                      style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 36 }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium flex-1 sm:flex-none justify-center sm:justify-start"
+                      style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 44 }}
                     >
-                      {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Pozycje
+                      {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Pozycje
                     </button>
                     <button
                       onClick={() => onCofnij(fak)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                      style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid #fcd34d', minHeight: 36 }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium flex-1 sm:flex-none justify-center sm:justify-start"
+                      style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid #fcd34d', minHeight: 44 }}
                       title="Cofnij do roboczej i odwróć stany magazynowe"
                     >
                       Cofnij
@@ -119,11 +121,11 @@ export default function InvoiceList({
                 {fak.status === 'anulowana' && (
                   <>
                     {fak.plik_url && (
-                      <a href={fak.plik_url} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg flex items-center justify-center" style={{ color: '#3b82f6', minHeight: 36, minWidth: 36 }} title="Pobierz plik">
+                      <a href={fak.plik_url} target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg" style={{ color: '#3b82f6', minHeight: 44, minWidth: 44 }} title="Pobierz plik">
                         <Download size={13} />
                       </a>
                     )}
-                    <button onClick={() => onDeleteFak(fak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                    <button onClick={() => onDeleteFak(fak)} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 44, minHeight: 44 }} title="Usuń"><Trash2 size={13} /></button>
                   </>
                 )}
               </div>

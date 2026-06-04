@@ -177,11 +177,10 @@ body {
   }
 }
 
-/* Faktury — przyciski w wierszu faktury wrap na mobile */
+/* Faktury — actions row is full-width on mobile (wraps below content) */
 @media (max-width: 640px) {
   .faktura-row-actions {
-    flex-wrap: wrap !important;
-    gap: 4px !important;
+    flex-wrap: wrap;
   }
 }
 
