@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { findTableCandidates, chooseBestTableCandidate, detectColumnBoundaries } from './invoiceTableDetector'
 import { parseInvoiceLineData } from './invoiceLineParser'
 import { detectInvoiceStructure } from './invoiceStructureDetector'
@@ -1329,5 +1329,128 @@ describe('splitMergedCenaIlosc — 3-token cenaNetto (qty + thousands price)', (
     expect(parsed.cenaNetto).toBeCloseTo(1249, 0)
     expect(parsed.ilosc).toBe(2)
     expect(parsed.wartoscNetto).toBeCloseTo(2498, 0)
+  })
+})
+
+// ── FV 00867/2026 — KSeF net invoice (Layout A: Lp|Nazwa|Jdn|Ilość|Cena|Rabat|VAT|Wartość) ──
+// Real invoice from SaldeoSMART/KSeF. Quantities in Polish KSeF format: "50.000" = 50 units.
+// Bug: parser was putting "SZT 50.000" into product name, returning qty=1 for every item.
+describe('FV 00867/2026 — KSeF net invoice via LP parser', () => {
+  const FV_00867_TEXT = `FAKTURA VAT FV 00867/2026
+Lp. Nazwa towaru/usługi Jdn. Ilość Cena jdn. netto Rabat [PLN] VAT Wartość netto
+1 rolka 57/15 termo SZT 50.000 1,16 0,00 23 58,00
+2 rolka 57/20m szt 50.000 1,24 0,00 23 62,00
+3 zakreślacz GRANIT szt 10.000 2,39 0,00 23 23,90
+4 notes samp. 76/127 szt 12.000 2,94 0,00 23 35,28
+5 płyn do usuwania etykiet 400ml szt 1.000 19,31 0,00 23 19,31
+PODSUMOWANIE
+VAT Wartość netto Kwota podatku VAT Wartość brutto
+23% 198,49 45,65 244,14
+Kwota należności ogółem: 244,14 PLN`
+
+  let items
+
+  beforeAll(() => {
+    items = parseInvoiceItemsLP(FV_00867_TEXT)
+  })
+
+  it('detects exactly 5 line items', () => {
+    expect(items.length).toBe(5)
+  })
+
+  it('quantities are [50, 50, 10, 12, 1] — NOT all 1', () => {
+    const qtys = items.map(i => i.ilosc)
+    expect(qtys[0]).toBe(50)
+    expect(qtys[1]).toBe(50)
+    expect(qtys[2]).toBe(10)
+    expect(qtys[3]).toBe(12)
+    expect(qtys[4]).toBe(1)
+  })
+
+  it('item[0]: name "rolka 57/15 termo", NOT contaminated with SZT/50.000', () => {
+    const i = items[0]
+    expect(i.rawName || i.nazwa).toMatch(/rolka\s+57\/15\s+termo/i)
+    expect(i.rawName || i.nazwa).not.toMatch(/SZT/i)
+    expect(i.rawName || i.nazwa).not.toMatch(/50\.000/)
+  })
+
+  it('item[3]: name "notes samp. 76/127" — slash-number pattern stays in name', () => {
+    const i = items[3]
+    expect(i.rawName || i.nazwa).toMatch(/notes.*76\/127/i)
+    expect(i.rawName || i.nazwa).not.toMatch(/12\.000/)
+  })
+
+  it('item[4]: name contains "400ml" — measurement stays in name', () => {
+    const i = items[4]
+    expect(i.rawName || i.nazwa).toMatch(/400ml/)
+    expect(i.rawName || i.nazwa).not.toMatch(/1\.000/)
+  })
+
+  it('sum of wartoscNetto = 198.49', () => {
+    const sum = items.reduce((s, i) => s + (i.wartoscNetto || 0), 0)
+    expect(sum).toBeCloseTo(198.49, 1)
+  })
+
+  it('prices: [1.16, 1.24, 2.39, 2.94, 19.31]', () => {
+    expect(items[0].cenaNetto).toBeCloseTo(1.16, 2)
+    expect(items[1].cenaNetto).toBeCloseTo(1.24, 2)
+    expect(items[2].cenaNetto).toBeCloseTo(2.39, 2)
+    expect(items[3].cenaNetto).toBeCloseTo(2.94, 2)
+    expect(items[4].cenaNetto).toBeCloseTo(19.31, 2)
+  })
+})
+
+// ── KSeF contamination repair: unit+qty in name → extractInvoiceExtractor repairss ──
+// Tests the regex repair logic for column-parsed rows where "SZT 50.000" leaks into name.
+describe('KSeF contamination regex repair', () => {
+  const KSEF_CONTAM_RE = /\s+(szt\.?|kpl\.?|usł\.?|usl\.?|op\.?)\s+(\d+)\.0{3,}\s*$/i
+
+  it('"rolka 57/15 termo SZT 50.000" — extracts qty=50, cleans name', () => {
+    const name = 'rolka 57/15 termo SZT 50.000'
+    const m = name.match(KSEF_CONTAM_RE)
+    expect(m).not.toBeNull()
+    expect(parseInt(m[2])).toBe(50)
+    const clean = name.slice(0, name.length - m[0].length).trim()
+    expect(clean).toBe('rolka 57/15 termo')
+  })
+
+  it('"rolka 57/20m szt 50.000" — extracts qty=50', () => {
+    const name = 'rolka 57/20m szt 50.000'
+    const m = name.match(KSEF_CONTAM_RE)
+    expect(m).not.toBeNull()
+    expect(parseInt(m[2])).toBe(50)
+    const clean = name.slice(0, name.length - m[0].length).trim()
+    expect(clean).toBe('rolka 57/20m')
+  })
+
+  it('"notes samp. 76/127 szt 12.000" — extracts qty=12, preserves slash-numbers', () => {
+    const name = 'notes samp. 76/127 szt 12.000'
+    const m = name.match(KSEF_CONTAM_RE)
+    expect(m).not.toBeNull()
+    expect(parseInt(m[2])).toBe(12)
+    const clean = name.slice(0, name.length - m[0].length).trim()
+    expect(clean).toBe('notes samp. 76/127')
+  })
+
+  it('"płyn do usuwania etykiet 400ml szt 1.000" — matches szt 1.000 not ml in 400ml', () => {
+    const name = 'płyn do usuwania etykiet 400ml szt 1.000'
+    const m = name.match(KSEF_CONTAM_RE)
+    expect(m).not.toBeNull()
+    expect(m[1].toLowerCase()).toMatch(/^szt/)   // unit is "szt", not "ml"
+    const clean = name.slice(0, name.length - m[0].length).trim()
+    expect(clean).toMatch(/400ml/)  // "400ml" stays in name
+  })
+
+  it('"zakreślacz GRANIT szt 10.000" → qty=10', () => {
+    const name = 'zakreślacz GRANIT szt 10.000'
+    const m = name.match(KSEF_CONTAM_RE)
+    expect(m).not.toBeNull()
+    expect(parseInt(m[2])).toBe(10)
+  })
+
+  it('"KABEL BASEUS 60W 1M CZARNY" — no match (no unit+qty suffix)', () => {
+    const name = 'KABEL BASEUS 60W 1M CZARNY'
+    const m = name.match(KSEF_CONTAM_RE)
+    expect(m).toBeNull()  // no contamination — normal product name
   })
 })

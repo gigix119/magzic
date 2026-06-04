@@ -427,6 +427,29 @@ export async function extractFromFile(file) {
               }
             }
 
+            // KSeF contamination repair: when the JEDNOSTKA column is missing or misaligned,
+            // unit token (e.g. "SZT") and KSeF quantity ("50.000") land in the product name.
+            // Signature: name ends with " UNIT DIGIT.000..." (KSeF format for integers).
+            // Extract qty and unit, clean the name.
+            if (parsed && parsed.nazwa) {
+              const ksefMatch = parsed.nazwa.match(
+                /\s+(szt\.?|kpl\.?|usł\.?|usl\.?|op\.?)\s+(\d+)\.0{3,}\s*$/i
+              )
+              if (ksefMatch) {
+                const qty = parseInt(ksefMatch[2], 10)
+                if (qty > 0) {
+                  const unit = ksefMatch[1].toLowerCase().replace(/\.$/, '')
+                  parsed = {
+                    ...parsed,
+                    nazwa: parsed.nazwa.slice(0, parsed.nazwa.length - ksefMatch[0].length).trim(),
+                    ilosc: qty,
+                    jednostka: parsed.jednostka && parsed.jednostka !== 'szt' ? parsed.jednostka : unit,
+                  }
+                  result.debug.ksefContamRepairs = (result.debug.ksefContamRepairs || 0) + 1
+                }
+              }
+            }
+
             if (parsed && parsed.nazwa && (parsed.cenaNetto > 0 || parsed.wartoscNetto > 0)) {
               pozycje.push(makeItem({ ...parsed, rawName: parsed.nazwa }))
             }
@@ -716,9 +739,10 @@ const _TABLE_END_LP = /^(razem|do\s*zap[łl]at|p[łl]atno[śs][ćc]|termin|numer
 // are handled correctly — plain \b doesn't work for non-ASCII chars.
 // Longer tokens (ml, m2, m3) appear before shorter overlapping ones (l, m).
 const _UNIT_TOKEN = /(?<!\p{L})(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|m3|m³|kg|g|ml|litr[wy]?|l|godz\.?|h|usł\.?|usl\.?|para|pary|rolk[ai]|zest\.?|pcs|pc)(?!\p{L})/iu
-// Broader set for the LP false-positive guard — also covers measurement specs
-// (e.g. "806 lm", "32 mm", "31 cl") so they're not treated as new LP items.
-const _UNIT_TOKEN_LP = /(?<!\p{L})(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|m3|m³|mm|cm|dm|km|lm|cl|dl|kg|g|mg|ml|litr[wy]?|l|godz\.?|h|kw|kva|usł\.?|usl\.?|para|pary|rolk[ai]|zest\.?|pcs|pc)(?!\p{L})/iu
+// Broader set for the LP false-positive guard — measurement-only tokens.
+// Excludes product-name-like words (rolka, para, zest) that are also common
+// product names: "2 rolka ..." is a valid LP=2 followed by product name "rolka".
+const _UNIT_TOKEN_LP = /(?<!\p{L})(szt\.?|opak\.?|op\.?|kpl\.?|mb|m2|m²|m3|m³|mm|cm|dm|km|lm|cl|dl|kg|g|mg|ml|litr[wy]?|l|godz\.?|h|kw|kva|usł\.?|usl\.?|pcs|pc)(?!\p{L})/iu
 
 function _isTableEndLP(line) {
   return _TABLE_END_LP.test(line.trim().toLowerCase())
