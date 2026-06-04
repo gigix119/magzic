@@ -94,18 +94,18 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg)' }}>
-      {/* Mobile overlay */}
+      {/* Mobile overlay — z-[45] aby przykryć bottom nav (z-40) gdy sidebar jest otwarty */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-20 lg:hidden"
+          className="fixed inset-0 z-[45] lg:hidden"
           style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — z-50 aby być nad bottom nav (z-40) i overlay (z-[45]) */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-30 flex flex-col sidebar-panel ${sidebarOpen ? '' : 'sidebar-panel-closed'}`}
+        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col sidebar-panel ${sidebarOpen ? '' : 'sidebar-panel-closed'}`}
         style={{
           width: 220,
           background: 'var(--sidebar)',
