@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
           .eq('id', sessionUser.id)
           .maybeSingle(),
         supabase.from('workspaces')
-          .select('id, name, owner_user_id')
+          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name')
           .eq('owner_user_id', sessionUser.id)
           .maybeSingle(),
       ])
@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
         const { data: created, error: createErr } = await supabase
           .from('workspaces')
           .insert({ owner_user_id: sessionUser.id, name: 'Mój magazyn' })
-          .select('id, name, owner_user_id')
+          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name')
           .single()
         if (createErr) {
           console.error('[AuthContext] auto-create workspace failed:', createErr)
@@ -54,6 +54,18 @@ export function AuthProvider({ children }) {
         } else {
           setWorkspace(created)
         }
+      }
+      // Upsert user_consents from registration metadata on first login (ignoreDuplicates keeps existing consent)
+      const metadata = sessionUser.user_metadata || {}
+      if (metadata.terms_accepted) {
+        supabase.from('user_consents').upsert({
+          user_id: sessionUser.id,
+          marketing_consent: metadata.marketing_consent || false,
+          accepted_terms_at: new Date().toISOString(),
+          accepted_privacy_at: new Date().toISOString(),
+        }, { onConflict: 'user_id', ignoreDuplicates: true }).then(() => {}).catch(err => {
+          console.error('[AuthContext] user_consents upsert error:', err)
+        })
       }
     } catch (err) {
       console.error('[AuthContext] loadUserData error:', err)
@@ -129,11 +141,11 @@ export function AuthProvider({ children }) {
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password })
 
-  const signUp = (email, password, firstName, lastName) =>
+  const signUp = (email, password, firstName, lastName, marketingConsent = false) =>
     supabase.auth.signUp({
       email,
       password,
-      options: { data: { first_name: firstName, last_name: lastName } },
+      options: { data: { first_name: firstName, last_name: lastName, terms_accepted: true, marketing_consent: marketingConsent } },
     })
 
   const signOut = () => supabase.auth.signOut()

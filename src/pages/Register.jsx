@@ -28,6 +28,8 @@ export default function Register() {
   const [confirm, setConfirm] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [marketingConsent, setMarketingConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState('')
@@ -56,6 +58,9 @@ export default function Register() {
     if (password && confirm && password !== confirm) {
       e.confirm = 'Hasła nie są takie same.'
     }
+    if (!termsAccepted) {
+      e.termsAccepted = 'Musisz zaakceptować Regulamin i Politykę Prywatności.'
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -65,7 +70,7 @@ export default function Register() {
     setServerError('')
     if (!validate()) return
     setLoading(true)
-    const { error: err } = await signUp(email.trim(), password, firstName.trim(), lastName.trim())
+    const { error: err } = await signUp(email.trim(), password, firstName.trim(), lastName.trim(), marketingConsent)
     if (err) {
       const msg = err.message || ''
       if (msg.includes('already registered') || msg.includes('User already registered')) {
@@ -221,6 +226,39 @@ export default function Register() {
                   {eyeBtn(showConfirm, () => setShowConfirm(v => !v))}
                 </div>
                 <FieldError msg={errors.confirm} />
+              </div>
+
+              {/* Zgody */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={e => setTermsAccepted(e.target.checked)}
+                    style={{ marginTop: 2, flexShrink: 0, accentColor: '#3b82f6' }}
+                  />
+                  <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>
+                    Akceptuję{' '}
+                    <a href="/regulamin" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Regulamin</a>
+                    {' '}i{' '}
+                    <a href="/polityka-prywatnosci" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Politykę Prywatności</a>
+                    {' '}<span style={{ color: '#dc2626' }}>*</span>
+                  </span>
+                </label>
+                {errors.termsAccepted && (
+                  <p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>{errors.termsAccepted}</p>
+                )}
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={marketingConsent}
+                    onChange={e => setMarketingConsent(e.target.checked)}
+                    style={{ marginTop: 2, flexShrink: 0, accentColor: '#3b82f6' }}
+                  />
+                  <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>
+                    Zgadzam się na komunikację marketingową
+                  </span>
+                </label>
               </div>
 
               <button

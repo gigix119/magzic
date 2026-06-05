@@ -19,6 +19,9 @@ import Kontrahenci from './pages/Kontrahenci'
 import Faktury from './pages/Faktury'
 import Pakiety from './pages/Pakiety'
 import Alerty from './pages/Alerty'
+import Regulamin from './pages/Regulamin'
+import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
+import BusinessOnboarding from './components/BusinessOnboarding'
 import BackendLayout from './pages/backend/BackendLayout'
 import BackendIndex from './pages/backend/BackendIndex'
 import BackendUsers from './pages/backend/BackendUsers'
@@ -53,10 +56,13 @@ export default function App() {
         <AuthProvider>
           <WorkspaceProvider>
             <BrowserRouter>
+              <BusinessOnboarding />
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/regulamin" element={<Regulamin />} />
+                <Route path="/polityka-prywatnosci" element={<PolitykaPrywatnosci />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

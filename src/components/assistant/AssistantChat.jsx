@@ -7,16 +7,7 @@ import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 import AssistantCommandHelp from './AssistantCommandHelp'
 import { supabase } from '../../supabase'
-
-const BASE_PROMPTS = [
-  'Pokaż dashboard zakupów',
-  'Co najbardziej podrożało?',
-  'Porównaj dwie ostatnie faktury',
-  'Pokaż niskie stany',
-  'Co powinienem zamówić?',
-  'Pokaż faktury do weryfikacji',
-  'Porównaj dostawców',
-]
+import { getQuickPromptsFor } from '../../config/businessTypes'
 
 let msgCounter = 0
 function nextId() { return ++msgCounter }
@@ -36,7 +27,7 @@ function AssistantAvatar() {
 }
 
 export default function AssistantChat() {
-  const { workspaceId } = useWorkspace()
+  const { workspaceId, getBusinessCategory } = useWorkspace()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -62,18 +53,13 @@ export default function AssistantChat() {
   }, [workspaceId])
 
   const quickPrompts = useMemo(() => {
-    const prompts = [...BASE_PROMPTS]
+    const categoryPrompts = getQuickPromptsFor(getBusinessCategory())
     if (sampleProduct) {
       const short = sampleProduct.length > 20 ? sampleProduct.slice(0, 20) + '…' : sampleProduct
-      prompts.push(`Historia ceny ${short}`)
-      prompts.push(`Znajdź towar ${short}`)
-      prompts.push(`Ustaw alert na ${short} 15%`)
-    } else {
-      prompts.push('Znajdź towar (wpisz nazwę)')
-      prompts.push('Ustaw alert cenowy (wpisz nazwę)')
+      return [...categoryPrompts, `Historia ceny ${short}`, `Znajdź towar ${short}`, `Ustaw alert na ${short} 15%`]
     }
-    return prompts
-  }, [sampleProduct])
+    return [...categoryPrompts, 'Znajdź towar (wpisz nazwę)', 'Ustaw alert cenowy (wpisz nazwę)']
+  }, [sampleProduct, getBusinessCategory])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
