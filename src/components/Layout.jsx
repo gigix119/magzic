@@ -18,15 +18,16 @@ const BOTTOM_NAV = [
   { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
 ]
 
-const STATIC_NAV = [
+const CORE_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/towary', icon: Package, label: 'Towary' },
   { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
   { to: '/kontrahenci', icon: Users, label: 'Kontrahenci' },
   { to: '/faktury', icon: FileText, label: 'Faktury' },
-  { to: '/pakiety', icon: Sparkles, label: 'Pakiety sprzątania' },
   { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
 ]
+
+const CLEANING_CATEGORIES = ['cleaning_facility', 'hospitality']
 
 const ROUTE_TRACKING = {
   '/dashboard':   { module: 'dashboard',   action: 'dashboard_opened' },
@@ -48,12 +49,17 @@ export default function Layout() {
   const location = useLocation()
   const dark = theme === 'dark'
 
-  const showCleaning = ['cleaning_facility', 'hospitality'].includes(getBusinessCategory())
+  const businessCategory = getBusinessCategory()
 
-  const navItems = [
-    ...STATIC_NAV.filter(item => item.to !== '/pakiety' || showCleaning),
-    ...(isOwner(profile) ? [{ to: '/backend', icon: Shield, label: 'Backend', isBackend: true }] : []),
-  ]
+  const businessItems = CLEANING_CATEGORIES.includes(businessCategory)
+    ? [{ to: '/pakiety', icon: Sparkles, label: 'Pakiety sprzątania' }]
+    : []
+
+  const adminItems = isOwner(profile)
+    ? [{ to: '/backend', icon: Shield, label: 'Backend', isBackend: true }]
+    : []
+
+  const navItems = [...CORE_NAV, ...businessItems, ...adminItems]
 
   // Page view tracking on navigation
   useEffect(() => {

@@ -239,9 +239,9 @@ export default function Register() {
                   />
                   <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>
                     Akceptuję{' '}
-                    <a href="/regulamin" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Regulamin</a>
+                    <a href="/regulamin" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }} onClick={e => e.stopPropagation()}>Regulamin</a>
                     {' '}i{' '}
-                    <a href="/polityka-prywatnosci" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Politykę Prywatności</a>
+                    <a href="/polityka-prywatnosci" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }} onClick={e => e.stopPropagation()}>Politykę Prywatności</a>
                     {' '}<span style={{ color: '#dc2626' }}>*</span>
                   </span>
                 </label>
