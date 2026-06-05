@@ -16,6 +16,8 @@ const QUICK_PROMPTS = [
   'Pokaż faktury do weryfikacji',
   'Historia ceny Domestos',
   'Porównaj dostawców',
+  'Znajdź towar Domestos',
+  'Ustaw alert na Domestos 15%',
 ]
 
 let msgCounter = 0
@@ -58,7 +60,7 @@ export default function AssistantChat() {
     setMessages(prev => [...prev, userMsg])
     setInput('')
 
-    const parsed = parseAssistantIntent(trimmed)
+    const parsed = parseAssistantIntent(trimmed, messages)
     const loadingId = nextId()
     setIsLoading(true)
     setMessages(prev => [...prev, { id: loadingId, role: 'assistant', text: '', loading: true, intent: parsed.intent }])
@@ -67,7 +69,7 @@ export default function AssistantChat() {
       const result = await runAssistantIntent({ intentResult: parsed, workspaceId })
       setMessages(prev => prev.map(m =>
         m.id === loadingId
-          ? { ...m, loading: false, text: result.text, structuredData: result.structuredData }
+          ? { ...m, loading: false, text: result.text, structuredData: result.structuredData, intent: result.intent }
           : m
       ))
     } catch (err) {

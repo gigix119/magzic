@@ -7,6 +7,8 @@ import OrderRecommendationResult from './results/OrderRecommendationResult'
 import InvoicesNeedingReviewResult from './results/InvoicesNeedingReviewResult'
 import ProductPriceHistoryResult from './results/ProductPriceHistoryResult'
 import SupplierComparisonResult from './results/SupplierComparisonResult'
+import ProductSearchResult from './results/ProductSearchResult'
+import CreatePriceAlertResult from './results/CreatePriceAlertResult'
 
 const INTENT_LABELS = {
   purchase_dashboard: 'Dashboard zakupów',
@@ -17,6 +19,8 @@ const INTENT_LABELS = {
   invoices_needing_review: 'Faktury do weryfikacji',
   low_stock: 'Niskie stany',
   order_recommendation: 'Rekomendacja zamówień',
+  product_search: 'Wyszukiwarka towarów',
+  create_price_alert: 'Alert cenowy',
   unknown: null,
 }
 
@@ -30,6 +34,8 @@ export default function AssistantResult({ intent, text, structuredData }) {
     if (intent === 'invoices_needing_review') return <InvoicesNeedingReviewResult review={structuredData} text={text} />
     if (intent === 'product_price_history') return <ProductPriceHistoryResult history={structuredData} text={text} />
     if (intent === 'compare_suppliers') return <SupplierComparisonResult comparison={structuredData} text={text} />
+    if (intent === 'product_search') return <ProductSearchResult data={structuredData} />
+    if (intent === 'create_price_alert') return <CreatePriceAlertResult data={structuredData} />
   }
 
   const label = INTENT_LABELS[intent]

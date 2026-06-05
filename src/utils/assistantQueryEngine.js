@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { buildTfIdfIndex, queryTfIdf } from './invoiceTfIdf'
 
 export async function fetchAssistantOrderRecommendationData({ workspaceId }) {
   return fetchAssistantLowStockData({ workspaceId })
@@ -322,6 +323,58 @@ export async function fetchAssistantInvoiceComparisonData({ workspaceId, invoice
     invoiceBLines: safe.filter(l => l.faktura_id === invoiceB.id),
     errors,
   }
+}
+
+export async function fetchAssistantProductSearchData({ workspaceId, query }) {
+  if (!workspaceId) {
+    return { results: [], query, errors: ['Brak aktywnego workspace'] }
+  }
+
+  const errors = []
+
+  const { data: products, error: e1 } = await supabase
+    .from('towary')
+    .select('id, nazwa, jednostka, stan_minimalny, kategorie(nazwa)')
+    .eq('workspace_id', workspaceId)
+    .eq('aktywny', true)
+    .order('nazwa')
+    .limit(500)
+
+  if (e1) {
+    errors.push(`Błąd pobierania towarów: ${e1.message}`)
+    return { results: [], query, errors }
+  }
+
+  const safeProducts = products ?? []
+  if (safeProducts.length === 0) return { results: [], query, errors }
+
+  const { data: stockRows, error: e2 } = await supabase
+    .from('stany_magazynowe')
+    .select('towar_id, ilosc, magazyn_id, magazyny(id, nazwa)')
+    .eq('workspace_id', workspaceId)
+    .limit(2000)
+
+  if (e2) errors.push(`Błąd pobierania stanów: ${e2.message}`)
+  const safeStock = stockRows ?? []
+
+  const stockByProduct = {}
+  for (const row of safeStock) {
+    if (!stockByProduct[row.towar_id]) stockByProduct[row.towar_id] = []
+    stockByProduct[row.towar_id].push(row)
+  }
+
+  const index = buildTfIdfIndex(safeProducts)
+  const topMatches = queryTfIdf(query, index, 5)
+
+  const results = topMatches
+    .filter(m => m.score > 0.05)
+    .map(m => ({
+      product: m.product,
+      score: m.score,
+      stock: stockByProduct[m.product?.id] ?? [],
+    }))
+
+  return { results, query, errors }
 }
 
 export async function fetchAssistantPurchaseDashboardData({ workspaceId, dateRange = {} }) {

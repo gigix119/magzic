@@ -160,3 +160,120 @@ describe('getAssistantResponse', () => {
     expect(r).toContain('Na razie')
   })
 })
+
+import { resolveTimeRef } from './assistantIntentParser.js'
+
+describe('fuzzy matching — literówki', () => {
+  it('typo: "co podrozalo" → latest_price_changes', () => {
+    const r = parseAssistantIntent('co podrozalo')
+    expect(r.intent).toBe('latest_price_changes')
+  })
+
+  it('typo: "niski stany" → low_stock', () => {
+    const r = parseAssistantIntent('niski stany')
+    expect(r.intent).toBe('low_stock')
+  })
+
+  it('typo: "co zamowic" → order_recommendation', () => {
+    const r = parseAssistantIntent('co zamowic')
+    expect(r.intent).toBe('order_recommendation')
+  })
+})
+
+describe('invoice number extraction', () => {
+  it('wyciąga dwa numery faktur', () => {
+    const r = parseAssistantIntent('porównaj FV/001/2024 z FV/012/2023')
+    expect(r.intent).toBe('compare_invoices')
+    expect(r.entities.invoiceNumbers).toHaveLength(2)
+    expect(r.entities.invoiceNumbers[0]).toContain('FV')
+  })
+})
+
+describe('time ranges — dateRange', () => {
+  it('dashboard zakupów za ostatni tydzień → dateRange.from = 7 dni temu', () => {
+    const r = parseAssistantIntent('dashboard zakupów za ostatni tydzień')
+    expect(r.intent).toBe('purchase_dashboard')
+    expect(r.entities.dateRange).toBeTruthy()
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    expect(r.entities.dateRange.from).toBe(weekAgo)
+  })
+
+  it('co podrożało w tym roku → dateRange 365 dni', () => {
+    const r = parseAssistantIntent('co podrożało w tym roku')
+    expect(r.intent).toBe('latest_price_changes')
+    expect(r.entities.dateRange).toBeTruthy()
+    const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
+    expect(r.entities.dateRange.from).toBe(yearAgo)
+  })
+})
+
+describe('resolveTimeRef', () => {
+  it('tydzień → 7 dni', () => {
+    const dr = resolveTimeRef('tydzień')
+    expect(dr).toBeTruthy()
+    const expected = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    expect(dr.from).toBe(expected)
+  })
+
+  it('miesiąc → 30 dni', () => {
+    const dr = resolveTimeRef('miesiąc')
+    const expected = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    expect(dr.from).toBe(expected)
+  })
+
+  it('null → null', () => {
+    expect(resolveTimeRef(null)).toBeNull()
+  })
+})
+
+describe('product_search intent', () => {
+  it('znajdź towar LED → product_search + searchQuery = "LED"', () => {
+    const r = parseAssistantIntent('znajdź towar LED')
+    expect(r.intent).toBe('product_search')
+    expect(r.entities.searchQuery).toBe('LED')
+  })
+
+  it('czy mamy Domestos → product_search + searchQuery = "Domestos"', () => {
+    const r = parseAssistantIntent('czy mamy Domestos')
+    expect(r.intent).toBe('product_search')
+    expect(r.entities.searchQuery).toBe('Domestos')
+  })
+
+  it('ile mamy papieru → product_search', () => {
+    const r = parseAssistantIntent('ile mamy papieru toaletowego')
+    expect(r.intent).toBe('product_search')
+  })
+})
+
+describe('create_price_alert intent', () => {
+  it('ustaw alert na Domestos 15% → create_price_alert + alertProduct + alertThreshold=15', () => {
+    const r = parseAssistantIntent('ustaw alert na Domestos 15%')
+    expect(r.intent).toBe('create_price_alert')
+    expect(r.entities.alertProduct).toBeTruthy()
+    expect(r.entities.alertThreshold).toBe(15)
+  })
+
+  it('dodaj alert cenowy dla rękawic 10% → create_price_alert + threshold=10', () => {
+    const r = parseAssistantIntent('dodaj alert cenowy dla rękawic 10%')
+    expect(r.intent).toBe('create_price_alert')
+    expect(r.entities.alertThreshold).toBe(10)
+  })
+
+  it('brak % → domyślny threshold=10', () => {
+    const r = parseAssistantIntent('ustaw alert na Domestos')
+    expect(r.intent).toBe('create_price_alert')
+    expect(r.entities.alertThreshold).toBe(10)
+  })
+})
+
+describe('multi-turn context', () => {
+  it('follow-up "a za ostatni tydzień" dziedziczy poprzedni intent', () => {
+    const history = [
+      { role: 'user', text: 'co podrożało?' },
+      { role: 'assistant', text: 'Oto zmiany cen...', intent: 'latest_price_changes' },
+    ]
+    const r = parseAssistantIntent('a za ostatni tydzień', history)
+    expect(r.intent).toBe('latest_price_changes')
+    expect(r.entities.dateRange).toBeTruthy()
+  })
+})

@@ -7,6 +7,7 @@ import {
   fetchAssistantInvoicesNeedingReviewData,
   fetchAssistantProductPriceHistoryData,
   fetchAssistantSupplierComparisonData,
+  fetchAssistantProductSearchData,
 } from './assistantQueryEngine'
 import { buildPurchaseDashboard } from './purchaseAnalyticsEngine'
 import { buildLatestPriceChanges } from './priceAnalyticsEngine'
@@ -28,8 +29,11 @@ import {
 } from './assistantResponseFormatter'
 import { getAssistantResponse } from './assistantIntentParser'
 
-async function handlePurchaseDashboard({ workspaceId }) {
-  const rawData = await fetchAssistantPurchaseDashboardData({ workspaceId })
+async function handlePurchaseDashboard({ workspaceId, entities }) {
+  const rawData = await fetchAssistantPurchaseDashboardData({
+    workspaceId,
+    dateRange: entities?.dateRange ?? {},
+  })
   if (rawData.errors.length > 0) {
     return { text: `Błąd pobierania danych: ${rawData.errors.join(' ')}`, structuredData: null }
   }
@@ -40,8 +44,11 @@ async function handlePurchaseDashboard({ workspaceId }) {
   return { text: formatPurchaseDashboardResponse(dashboard), structuredData: dashboard }
 }
 
-async function handleLatestPriceChanges({ workspaceId }) {
-  const rawData = await fetchAssistantPriceChangesData({ workspaceId })
+async function handleLatestPriceChanges({ workspaceId, entities }) {
+  const rawData = await fetchAssistantPriceChangesData({
+    workspaceId,
+    dateRange: entities?.dateRange ?? {},
+  })
   if (rawData.errors.length > 0) {
     return { text: `Błąd pobierania danych: ${rawData.errors.join(' ')}`, structuredData: null }
   }
@@ -52,8 +59,11 @@ async function handleLatestPriceChanges({ workspaceId }) {
   return { text: formatLatestPriceChangesResponse(priceChanges), structuredData: priceChanges }
 }
 
-async function handleCompareInvoices({ workspaceId }) {
-  const rawData = await fetchAssistantInvoiceComparisonData({ workspaceId })
+async function handleCompareInvoices({ workspaceId, entities }) {
+  const rawData = await fetchAssistantInvoiceComparisonData({
+    workspaceId,
+    invoiceNumbers: entities?.invoiceNumbers ?? null,
+  })
   if (rawData.errors.length > 0) {
     return { text: `Błąd pobierania danych: ${rawData.errors.join(' ')}`, structuredData: null }
   }
@@ -127,6 +137,48 @@ async function handleSupplierComparison({ workspaceId, entities }) {
   return { text: formatSupplierComparisonResponse(comparison), structuredData: comparison }
 }
 
+async function handleProductSearch({ workspaceId, entities }) {
+  const query = entities?.searchQuery
+  if (!query) return { text: 'Podaj nazwę towaru do wyszukania.', structuredData: null }
+  const rawData = await fetchAssistantProductSearchData({ workspaceId, query })
+  if (rawData.errors.length > 0) {
+    return { text: `Błąd pobierania danych: ${rawData.errors.join(' ')}`, structuredData: null }
+  }
+  if (!rawData.results.length) {
+    return { text: `Nie znalazłem towaru pasującego do „${query}".`, structuredData: { results: [], query } }
+  }
+  return {
+    text: `Znalazłem ${rawData.results.length} towarów pasujących do „${query}".`,
+    structuredData: { results: rawData.results, query },
+  }
+}
+
+async function handleCreatePriceAlert({ workspaceId, entities }) {
+  const alertProduct = entities?.alertProduct
+  if (!alertProduct) return { text: 'Podaj nazwę towaru, dla którego chcesz ustawić alert cenowy.', structuredData: null }
+  const threshold = entities?.alertThreshold ?? 10
+  const rawData = await fetchAssistantProductSearchData({ workspaceId, query: alertProduct })
+  if (rawData.errors.length > 0) {
+    return { text: `Błąd pobierania danych: ${rawData.errors.join(' ')}`, structuredData: null }
+  }
+  const top = rawData.results[0]
+  if (!top || top.score < 0.2) {
+    return {
+      text: `Nie znalazłem towaru „${alertProduct}". Sprawdź nazwę.`,
+      structuredData: null,
+    }
+  }
+  return {
+    text: `Znalazłem: ${top.product.nazwa}. Możesz ustawić alert cenowy przy zmianie o ${threshold}%.`,
+    structuredData: {
+      matchedProduct: top.product,
+      threshold,
+      confirmed: false,
+      workspaceId,
+    },
+  }
+}
+
 const HANDLERS = {
   purchase_dashboard: handlePurchaseDashboard,
   latest_price_changes: handleLatestPriceChanges,
@@ -136,6 +188,8 @@ const HANDLERS = {
   invoices_needing_review: handleInvoicesNeedingReview,
   product_price_history: handleProductPriceHistory,
   compare_suppliers: handleSupplierComparison,
+  product_search: handleProductSearch,
+  create_price_alert: handleCreatePriceAlert,
 }
 
 export async function runAssistantIntent({ intentResult, workspaceId }) {

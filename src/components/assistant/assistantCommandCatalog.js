@@ -95,6 +95,30 @@ export const ASSISTANT_COMMANDS = [
     ],
     requiresProductQuery: false,
   },
+  {
+    intent: 'product_search',
+    title: 'Wyszukiwarka towarów',
+    description: 'Znajdź towar w magazynie po nazwie — stan, magazyn, jednostka.',
+    badge: 'Magazyn',
+    examples: [
+      'Znajdź towar Domestos',
+      'Czy mamy rękawice nitrylowe?',
+      'Ile mamy papieru toaletowego?',
+    ],
+    requiresProductQuery: true,
+  },
+  {
+    intent: 'create_price_alert',
+    title: 'Alert cenowy',
+    description: 'Ustaw powiadomienie gdy cena towaru zmieni się o podany procent.',
+    badge: 'Ceny',
+    examples: [
+      'Ustaw alert na Domestos 15%',
+      'Dodaj alert cenowy dla rękawic 10%',
+      'Powiadom gdy cena wzrośnie o 20%',
+    ],
+    requiresProductQuery: true,
+  },
 ]
 
 export const BADGE_COLORS = {
@@ -103,4 +127,5 @@ export const BADGE_COLORS = {
   Magazyn:  { bg: 'rgba(34,197,94,0.10)',   color: '#16a34a' },
   Faktury:  { bg: 'rgba(139,92,246,0.10)',  color: '#7c3aed' },
   Dostawcy: { bg: 'rgba(20,184,166,0.10)',  color: '#0d9488' },
+  Szukaj:   { bg: 'rgba(99,102,241,0.10)',  color: '#6366f1' },
 }
