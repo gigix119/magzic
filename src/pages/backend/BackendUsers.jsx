@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Search, ChevronRight, Users, UserCheck, Calendar, RefreshCw } from 'lucide-react'
 import { supabase } from '../../supabase'
 import { trackAdminAudit, formatDate, timeAgo, ROLE_LABELS, STATUS_LABELS } from '../../utils/adminHelpers'
+import { getCategoryLabel } from '../../config/businessTypes'
 
 const ROLE_COLORS   = { owner: '#7c3aed', admin: '#3b82f6', user: '#6b7280' }
 const STATUS_COLORS = { active: '#16a34a', blocked: '#ef4444', pending: '#d97706' }
@@ -60,11 +61,17 @@ export default function BackendUsers() {
   async function loadUsers() {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, email, first_name, last_name, display_name, role, status, created_at, last_login_at, last_seen_at')
-        .order('created_at', { ascending: false })
-      setUsers(data ?? [])
+      const [{ data: profs }, { data: wks }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name, display_name, role, status, created_at, last_login_at, last_seen_at')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('workspaces')
+          .select('owner_user_id, company_name, business_category, business_profile_completed'),
+      ])
+      const wksByOwner = Object.fromEntries((wks ?? []).map(w => [w.owner_user_id, w]))
+      setUsers((profs ?? []).map(p => ({ ...p, workspace: wksByOwner[p.id] ?? null })))
     } catch (err) {
       console.error('[BackendUsers] loadUsers error:', err)
     } finally {
@@ -239,7 +246,7 @@ export default function BackendUsers() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Email', 'Imię i nazwisko', 'Rola', 'Status', 'Konto założone', 'Ostatnie logowanie', 'Ostatnia aktywność', ''].map(h => (
+                  {['Email', 'Imię i nazwisko', 'Firma', 'Branża', 'Rola', 'Status', 'Konto założone', 'Ostatnie logowanie', 'Ostatnia aktywność', ''].map(h => (
                     <th
                       key={h}
                       className="px-4 py-2.5 text-left font-medium whitespace-nowrap"
@@ -259,6 +266,16 @@ export default function BackendUsers() {
                   >
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text)' }}>{u.email}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-2)' }}>{displayName(u)}</td>
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{u.workspace?.company_name || '—'}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                      {u.workspace
+                        ? <>{u.workspace.business_profile_completed
+                            ? <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold mr-1" style={{ background: '#16a34a18', color: '#16a34a' }}>✓</span>
+                            : <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold mr-1" style={{ background: '#d9770618', color: '#d97706' }}>—</span>
+                          }{getCategoryLabel(u.workspace.business_category)}</>
+                        : '—'
+                      }
+                    </td>
                     <td className="px-4 py-3">
                       <Badge label={ROLE_LABELS[u.role] ?? u.role} color={ROLE_COLORS[u.role] ?? '#6b7280'} />
                     </td>

@@ -10,6 +10,7 @@ import {
   ROLE_LABELS, STATUS_LABELS, MODULES,
 } from '../../utils/adminHelpers'
 import { useToast } from '../../context/ToastContext'
+import { getCategoryById } from '../../config/businessTypes'
 
 const ROLE_COLORS   = { owner: '#7c3aed', admin: '#3b82f6', user: '#6b7280' }
 const STATUS_COLORS = { active: '#16a34a', blocked: '#ef4444', pending: '#d97706' }
@@ -40,12 +41,14 @@ export default function BackendUserDetail() {
   const navigate = useNavigate()
   const { addToast } = useToast()
 
-  const [profile, setProfile]       = useState(null)
-  const [, setPerms]                 = useState([])
-  const [activity, setActivity]     = useState([])
-  const [auditLog, setAuditLog]     = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [tab, setTab]               = useState('activity')
+  const [profile, setProfile]             = useState(null)
+  const [, setPerms]                       = useState([])
+  const [activity, setActivity]           = useState([])
+  const [auditLog, setAuditLog]           = useState([])
+  const [workspaceInfo, setWorkspaceInfo] = useState(null)
+  const [consent, setConsent]             = useState(null)
+  const [loading, setLoading]             = useState(true)
+  const [tab, setTab]                     = useState('activity')
   const [saving, setSaving]         = useState(false)
   const [localPerms, setLocalPerms] = useState({})
 
@@ -57,6 +60,8 @@ export default function BackendUserDetail() {
         { data: perms },
         { data: events },
         { data: audit },
+        { data: wk },
+        { data: cons },
       ] = await Promise.all([
         supabase.from('profiles')
           .select('id, email, first_name, last_name, display_name, role, status, created_at, last_login_at, last_seen_at')
@@ -74,12 +79,22 @@ export default function BackendUserDetail() {
           .eq('target_user_id', id)
           .order('created_at', { ascending: false })
           .limit(30),
+        supabase.from('workspaces')
+          .select('company_name, nip, business_category, business_subcategory, business_profile_completed, onboarding_completed_at')
+          .eq('owner_user_id', id)
+          .maybeSingle(),
+        supabase.from('user_consents')
+          .select('accepted_terms_at, accepted_privacy_at, marketing_consent, created_at')
+          .eq('user_id', id)
+          .maybeSingle(),
       ])
 
       setProfile(prof)
       setPerms(perms ?? [])
       setActivity(events ?? [])
       setAuditLog(audit ?? [])
+      setWorkspaceInfo(wk ?? null)
+      setConsent(cons ?? null)
 
       const permsMap = {}
       for (const p of perms ?? []) {
@@ -254,7 +269,7 @@ export default function BackendUserDetail() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4">
-        {[['activity', 'Historia aktywności'], ['permissions', 'Uprawnienia'], ['admin-log', 'Zmiany administratora']].map(([key, label]) => (
+        {[['activity', 'Historia aktywności'], ['permissions', 'Uprawnienia'], ['admin-log', 'Zmiany administratora'], ['business', 'Profil biznesowy']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
             style={tab === key
@@ -388,6 +403,51 @@ export default function BackendUserDetail() {
             </table>
           )}
         </div>
+      )}
+
+      {/* Business profile tab */}
+      {tab === 'business' && (
+        <Section title="Profil biznesowy">
+          {!workspaceInfo ? (
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>Brak danych workspace dla tego użytkownika.</p>
+          ) : (() => {
+            const catObj = getCategoryById(workspaceInfo.business_category)
+            const subLabel = (catObj?.subcategories ?? []).find(s => s.id === workspaceInfo.business_subcategory)?.label
+            return (
+              <div>
+                {[
+                  ['Nazwa firmy',           workspaceInfo.company_name || '—'],
+                  ['NIP',                   workspaceInfo.nip || '—'],
+                  ['Branża',                `${catObj?.icon ?? ''} ${catObj?.label ?? workspaceInfo.business_category ?? '—'}`],
+                  ['Podkategoria',          subLabel || workspaceInfo.business_subcategory || '—'],
+                  ['Profil uzupełniony',    null, workspaceInfo.business_profile_completed
+                    ? { label: 'Tak', color: '#16a34a' }
+                    : { label: 'Nie', color: '#d97706' }],
+                  ['Onboarding ukończony',  workspaceInfo.onboarding_completed_at ? formatDate(workspaceInfo.onboarding_completed_at) : 'Nie ukończono'],
+                  ['Konto założone',        formatDate(profile?.created_at)],
+                  ['Zgoda na regulamin',    consent?.accepted_terms_at ? formatDate(consent.accepted_terms_at) : '—'],
+                  ['Zgoda marketingowa',    null, consent?.marketing_consent
+                    ? { label: 'Tak', color: '#16a34a' }
+                    : { label: 'Nie', color: '#6b7280' }],
+                ].map(([label, value, badge]) => (
+                  <div key={label} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
+                    style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span className="text-xs font-medium" style={{ color: 'var(--muted)', minWidth: 190, flexShrink: 0 }}>
+                      {label}
+                    </span>
+                    {badge
+                      ? <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                          style={{ background: `${badge.color}18`, color: badge.color }}>
+                          {badge.label}
+                        </span>
+                      : <span className="text-sm" style={{ color: 'var(--text)' }}>{value}</span>
+                    }
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </Section>
       )}
     </div>
   )

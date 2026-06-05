@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -18,9 +19,18 @@ const IS = (err) => ({
 const emptyItem = { towar_id: '', ilosc: '' }
 const emptyForm = { nazwa: '', opis: '', aktywny: true }
 
+const CLEANING_CATEGORIES = ['cleaning_facility', 'hospitality']
+
 export default function Pakiety() {
   const { addToast } = useToast()
-  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData, workspace } = useWorkspace()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (workspace && !CLEANING_CATEGORIES.includes(workspace.business_category || 'general')) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [workspace, navigate])
   const [pakiety, setPakiety] = useState([])
   const [elementy, setElementy] = useState({})
   const [stany, setStany] = useState({})

@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../supabase'
 import { isOwner, trackEvent } from '../utils/adminHelpers'
+import { useWorkspace } from '../context/WorkspaceContext'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
   Sparkles, Bell, Menu, X, Sun, Moon, LogOut, Shield,
@@ -42,12 +43,15 @@ export default function Layout() {
   const [alertCount, setAlertCount] = useState(0)
   const { theme, toggleTheme } = useTheme()
   const { user, profile, signOut } = useAuth()
+  const { getBusinessCategory } = useWorkspace()
   const navigate = useNavigate()
   const location = useLocation()
   const dark = theme === 'dark'
 
+  const showCleaning = ['cleaning_facility', 'hospitality'].includes(getBusinessCategory())
+
   const navItems = [
-    ...STATIC_NAV,
+    ...STATIC_NAV.filter(item => item.to !== '/pakiety' || showCleaning),
     ...(isOwner(profile) ? [{ to: '/backend', icon: Shield, label: 'Backend', isBackend: true }] : []),
   ]
 
