@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react'
 
 function Step1({ onNext, onSkip, loading }) {
   return (
-    <div style={{ textAlign: 'center', padding: '4px 0 4px' }}>
+    <div className="mgz-step1-center">
       <div style={{
         position: 'relative', height: 130,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -38,7 +38,11 @@ function Step1({ onNext, onSkip, loading }) {
         Skonfiguruj Magzic w 30 sekund.
       </p>
 
-      <button onClick={onNext} className="mgz-btn-primary" style={{ width: '100%', marginBottom: 18, fontSize: 16, boxShadow: '0 4px 16px rgba(59,130,246,0.38)' }}>
+      <button
+        onClick={onNext}
+        className="mgz-btn-primary"
+        style={{ marginBottom: 18, fontSize: 16, boxShadow: '0 4px 16px rgba(59,130,246,0.38)' }}
+      >
         Zaczynamy →
       </button>
 
@@ -61,8 +65,7 @@ function Step2({ selectedCategory, selectedSubcategory, subcategories, isGeneral
         Dopasujemy alerty i asystenta do Twojej branży.
       </p>
 
-      {/* Category grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+      <div className="mgz-cat-grid">
         {BUSINESS_CATEGORIES.map(cat => {
           const active = selectedCategory === cat.id
           return (
@@ -84,7 +87,6 @@ function Step2({ selectedCategory, selectedSubcategory, subcategories, isGeneral
         })}
       </div>
 
-      {/* Subcategory chips — slide in after selecting */}
       {selectedCategory && !isGeneral && subcategories.length > 0 && (
         <div style={{ marginTop: 14, animation: 'mgzSlide 0.22s ease' }}>
           <p style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>
@@ -130,7 +132,7 @@ function Step2({ selectedCategory, selectedSubcategory, subcategories, isGeneral
 function Step3({ companyName, nip, selectedCategoryObj, selectedSubcategoryObj, onChangeCompany, onChangeNip, onChangeBiz, onSave, onSkip, loading, error, success }) {
   if (success) {
     return (
-      <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
+      <div style={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px 0 16px' }}>
         <div style={{ fontSize: 52, marginBottom: 16, animation: 'mgzPop 0.52s cubic-bezier(0.34,1.56,0.64,1) both' }}>
           ✅
         </div>
@@ -138,13 +140,6 @@ function Step3({ companyName, nip, selectedCategoryObj, selectedSubcategoryObj, 
         <div style={{ fontSize: 14, color: '#6b7280' }}>Uruchamiam Magzic…</div>
       </div>
     )
-  }
-
-  const inputStyle = {
-    width: '100%', padding: '10px 14px', fontSize: 14,
-    border: '1px solid #d1d5db', borderRadius: 10, outline: 'none',
-    background: '#fff', color: '#111827', boxSizing: 'border-box',
-    fontFamily: 'DM Sans, sans-serif',
   }
 
   return (
@@ -156,7 +151,6 @@ function Step3({ companyName, nip, selectedCategoryObj, selectedSubcategoryObj, 
         Możesz to zmienić później w ustawieniach.
       </p>
 
-      {/* Summary badge with change link */}
       {selectedCategoryObj && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -193,7 +187,6 @@ function Step3({ companyName, nip, selectedCategoryObj, selectedSubcategoryObj, 
           onChange={e => onChangeCompany(e.target.value)}
           placeholder="np. Restauracja Pod Lipą"
           className="mgz-input"
-          style={inputStyle}
         />
       </div>
 
@@ -207,7 +200,6 @@ function Step3({ companyName, nip, selectedCategoryObj, selectedSubcategoryObj, 
           onChange={e => onChangeNip(e.target.value)}
           placeholder="np. 1234567890"
           className="mgz-input"
-          style={inputStyle}
         />
       </div>
 
@@ -218,11 +210,11 @@ function Step3({ companyName, nip, selectedCategoryObj, selectedSubcategoryObj, 
         disabled={loading}
         className="mgz-btn-primary"
         style={{
-          width: '100%', marginBottom: 14, fontSize: 15,
+          marginBottom: 14, fontSize: 15,
           boxShadow: loading ? 'none' : '0 4px 14px rgba(59,130,246,0.3)',
           opacity: loading ? 0.75 : 1,
           cursor: loading ? 'not-allowed' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          gap: 7,
         }}
       >
         {loading
@@ -244,23 +236,22 @@ export default function BusinessOnboarding() {
   const { workspace, refreshWorkspace } = useAuth()
   const navigate = useNavigate()
 
-  const [step, setStep]                       = useState(1)
-  const [fade, setFade]                       = useState(true)
-  const [mounted, setMounted]                 = useState(false)
+  const [step, setStep]                             = useState(1)
+  const [fade, setFade]                             = useState(true)
+  const [mounted, setMounted]                       = useState(false)
   const [selectedCategory, setSelectedCategory]     = useState('')
   const [selectedSubcategory, setSelectedSubcategory] = useState('')
-  const [companyName, setCompanyName]         = useState('')
-  const [nip, setNip]                         = useState('')
-  const [loading, setLoading]                 = useState(false)
-  const [error, setError]                     = useState('')
-  const [success, setSuccess]                 = useState(false)
+  const [companyName, setCompanyName]               = useState('')
+  const [nip, setNip]                               = useState('')
+  const [loading, setLoading]                       = useState(false)
+  const [error, setError]                           = useState('')
+  const [success, setSuccess]                       = useState(false)
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true))
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // Pre-fill company name once workspace loads
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (workspace?.name) setCompanyName(p => p || workspace.name) }, [workspace])
 
@@ -293,8 +284,7 @@ export default function BusinessOnboarding() {
         onboarding_completed_at: new Date().toISOString(),
       }).eq('id', workspace.id)
       await refreshWorkspace()
-    } catch (err) {
-      console.error('[BusinessOnboarding] skip error:', err)
+    } catch (_) {
       await refreshWorkspace()
     }
     navigate('/dashboard', { replace: true })
@@ -320,44 +310,26 @@ export default function BusinessOnboarding() {
       setSuccess(true)
       await refreshWorkspace()
       setTimeout(() => navigate('/dashboard', { replace: true }), 900)
-    } catch (err) {
-      console.error('[BusinessOnboarding] save error:', err)
+    } catch (_) {
       setError('Wystąpił błąd. Spróbuj ponownie.')
       setLoading(false)
     }
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(15,23,42,0.68)',
-      backdropFilter: 'blur(6px)',
-      WebkitBackdropFilter: 'blur(6px)',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-      padding: '20px 16px 40px',
-      overflowY: 'auto',
-      fontFamily: 'DM Sans, sans-serif',
-    }}>
-      <div style={{
-        background: '#fff', borderRadius: 24,
-        width: '100%', maxWidth: 520,
-        margin: 'auto',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.24)',
-        padding: '28px 24px 24px',
-        transform: mounted ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.97)',
-        opacity: mounted ? 1 : 0,
-        transition: 'transform 0.38s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease',
-      }}>
+    <div
+      className="mgz-overlay"
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, fontFamily: 'DM Sans, sans-serif' }}
+    >
+      <div className={`mgz-card-wrapper${mounted ? ' mgz-card-wrapper--mounted' : ''}`}>
 
-        {/* Progress dots */}
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 26 }}>
+        {/* Progress dots — 12px circles */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 26 }}>
           {[1, 2, 3].map(n => (
-            <div key={n} style={{
-              height: 6, borderRadius: 3,
-              width: n === step ? 22 : 7,
-              background: n === step ? '#3b82f6' : n < step ? '#93c5fd' : '#e5e7eb',
-              transition: 'all 0.35s cubic-bezier(0.4,0,0.2,1)',
-            }} />
+            <div
+              key={n}
+              className={`mgz-dot${n === step ? ' mgz-dot--active' : n < step ? ' mgz-dot--done' : ' mgz-dot--pending'}`}
+            />
           ))}
         </div>
 
@@ -366,6 +338,7 @@ export default function BusinessOnboarding() {
           opacity: fade ? 1 : 0,
           transform: fade ? 'translateY(0)' : 'translateY(5px)',
           transition: 'opacity 0.19s ease, transform 0.19s ease',
+          flex: 1, display: 'flex', flexDirection: 'column',
         }}>
           {step === 1 && (
             <Step1 onNext={() => goToStep(2)} onSkip={handleSkip} loading={loading} />
@@ -429,12 +402,96 @@ export default function BusinessOnboarding() {
           to { transform: rotate(360deg); }
         }
 
-        /* Category cards */
+        /* ── Layout: mobile-first full-screen white ── */
+        .mgz-overlay {
+          display: flex;
+          flex-direction: column;
+          background: #fff;
+          overflow-y: auto;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .mgz-card-wrapper {
+          flex: 1;
+          width: 100%;
+          padding: 24px 20px 36px;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          opacity: 0;
+          transition: opacity 0.28s ease;
+        }
+        .mgz-card-wrapper--mounted {
+          opacity: 1;
+        }
+
+        /* ── Desktop: dark backdrop + centered floating card ── */
+        @media (min-width: 640px) {
+          .mgz-overlay {
+            background: rgba(15,23,42,0.68);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 20px 16px 40px;
+          }
+          .mgz-card-wrapper {
+            flex: unset;
+            flex-shrink: 0;
+            max-width: 520px;
+            width: 100%;
+            margin: auto;
+            background: #fff;
+            border-radius: 24px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.24);
+            padding: 28px 24px 24px;
+            transform: translateY(16px) scale(0.97);
+            transition: opacity 0.38s cubic-bezier(0.16,1,0.3,1), transform 0.38s cubic-bezier(0.16,1,0.3,1);
+          }
+          .mgz-card-wrapper--mounted {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        /* ── Progress dots: 12px circles ── */
+        .mgz-dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          transition: background 0.3s ease;
+          flex-shrink: 0;
+        }
+        .mgz-dot--active  { background: #3b82f6; }
+        .mgz-dot--done    { background: #93c5fd; }
+        .mgz-dot--pending { background: #e5e7eb; }
+
+        /* ── Step 1: vertically centered in full-screen mobile ── */
+        .mgz-step1-center {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          text-align: center;
+          padding: 4px 0;
+        }
+
+        /* ── Category grid ── */
+        .mgz-cat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+          gap: 8px;
+        }
+
+        /* ── Category cards ── */
         .mgz-card {
           position: relative; cursor: pointer; text-align: left;
           border-radius: 12px; padding: 12px 10px;
           border: 1.5px solid #e5e7eb; background: #fafafa;
-          outline: none; width: 100%; font-family: DM Sans, sans-serif;
+          outline: none; width: 100%;
+          font-family: DM Sans, sans-serif;
+          min-height: 44px;
           transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease, background 0.14s ease;
         }
         .mgz-card:hover {
@@ -455,64 +512,95 @@ export default function BusinessOnboarding() {
           display: flex; align-items: center; justify-content: center;
         }
 
-        /* Subcategory chips */
+        /* ── Subcategory chips: scroll-snap, iOS-optimized ── */
         .mgz-chips {
           display: flex; gap: 6px;
-          overflow-x: auto; padding-bottom: 2px;
+          overflow-x: auto; padding-bottom: 4px;
           scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x mandatory;
         }
         .mgz-chips::-webkit-scrollbar { display: none; }
         .mgz-chip {
           cursor: pointer; white-space: nowrap;
-          border-radius: 20px; padding: 6px 12px;
-          font-size: 12px; font-weight: 500; line-height: 1.4;
+          border-radius: 20px; padding: 0 14px;
+          min-height: 44px;
+          font-size: 14px; font-weight: 500; line-height: 1.4;
           border: 1.5px solid #e5e7eb; background: #f9fafb; color: #374151;
           transition: all 0.12s ease; flex-shrink: 0;
           font-family: DM Sans, sans-serif; outline: none;
+          scroll-snap-align: start;
+          display: inline-flex; align-items: center;
         }
         .mgz-chip:hover { border-color: #93c5fd; background: #f0f9ff; color: #0369a1; }
         .mgz-chip--active { border-color: #3b82f6 !important; background: #eff6ff !important; color: #1d4ed8 !important; }
 
-        /* Buttons */
+        /* ── Buttons: 48px height, full-width ── */
         .mgz-btn-primary {
-          padding: 12px 20px; background: #3b82f6; color: #fff;
+          min-height: 48px;
+          width: 100%;
+          padding: 0 20px;
+          background: #3b82f6; color: #fff;
           border: none; border-radius: 11px;
-          font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+          font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
           font-family: DM Sans, sans-serif;
           transition: opacity 0.15s, box-shadow 0.15s;
           cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          box-sizing: border-box;
         }
         .mgz-btn-primary:hover:not(:disabled) { opacity: 0.9; }
         .mgz-btn-secondary {
-          padding: 11px 16px; background: #f9fafb; color: #374151;
+          min-height: 48px;
+          padding: 0 16px;
+          background: #f9fafb; color: #374151;
           border: 1.5px solid #e5e7eb; border-radius: 11px;
-          font-size: 14px; font-weight: 500; font-family: DM Sans, sans-serif;
+          font-size: 14px; font-weight: 500;
+          font-family: DM Sans, sans-serif;
           cursor: pointer; flex-shrink: 0; outline: none;
           transition: background 0.12s;
+          display: inline-flex; align-items: center;
+          box-sizing: border-box;
         }
         .mgz-btn-secondary:hover { background: #f3f4f6; }
 
-        /* Skip link */
+        /* ── Skip link: 44px tap target ── */
         .mgz-skip {
           background: none; border: none; color: #9ca3af;
-          font-size: 13px; cursor: pointer; padding: 0;
-          text-decoration: underline; font-family: DM Sans, sans-serif;
+          font-size: 13px; cursor: pointer;
+          padding: 12px 8px; min-height: 44px;
+          text-decoration: underline;
+          font-family: DM Sans, sans-serif;
           transition: color 0.1s; line-height: 1.5;
         }
         .mgz-skip:hover { color: #6b7280; }
         .mgz-skip:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* Input focus */
+        /* ── Input: 16px prevents iOS auto-zoom ── */
+        .mgz-input {
+          width: 100%;
+          padding: 12px 14px;
+          font-size: 16px;
+          border: 1px solid #d1d5db;
+          border-radius: 10px;
+          outline: none;
+          background: #fff;
+          color: #111827;
+          box-sizing: border-box;
+          font-family: DM Sans, sans-serif;
+          min-height: 48px;
+          -webkit-appearance: none;
+        }
         .mgz-input:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important; }
 
-        /* Error message */
+        /* ── Error message ── */
         .mgz-error {
           padding: 8px 12px; background: #fef2f2;
           border: 1px solid #fecaca; border-radius: 8px;
           color: #dc2626; font-size: 13px; line-height: 1.5; margin: 0;
         }
 
-        /* 1-line text truncation */
+        /* ── 1-line text clamp ── */
         .mgz-clamp1 {
           overflow: hidden;
           display: -webkit-box;
