@@ -27,8 +27,10 @@ export default function FirstUseSteps() {
   const { workspaceId, wsQuery, addWsFilter, getBusinessCategory } = useWorkspace()
   const navigate = useNavigate()
 
+  const { workspace } = useWorkspace()
   const categoryId = getBusinessCategory()
   const flow = getFirstUseFlowFor(categoryId)
+  const customCategoryName = workspace?.custom_category_name || null
 
   const storageKey = workspaceId ? `magzic_fus_dismissed_${workspaceId}` : null
 
@@ -114,7 +116,7 @@ export default function FirstUseSteps() {
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>
-          🚀 {flow.title}
+          🚀 {customCategoryName ? `Pierwsze kroki dla ${customCategoryName}` : flow.title}
         </h2>
         <div className="flex items-center gap-3">
           <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--hover-bg)', overflow: 'hidden' }}>

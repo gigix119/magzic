@@ -15,6 +15,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Zarządzaj towarami, stanami i fakturami w jednym miejscu.',
+    searchAliases: ['magazyn', 'ogólny', 'uniwersalny', 'firma', 'biuro', 'inne'],
   },
   {
     id: 'gastronomy',
@@ -38,6 +39,7 @@ export const BUSINESS_CATEGORIES = [
       'Sprawdź faktury od dostawców żywności',
     ],
     helperDescription: 'Kontroluj zaplecze kuchni, dostawy i stany produktów spożywczych.',
+    searchAliases: ['kebab', 'bar', 'kawiarnia', 'piekarnia', 'catering', 'pizza', 'sushi', 'restauracja', 'fast food', 'jedzenie', 'kuchnia', 'food truck', 'bistro', 'cukiernia'],
   },
   {
     id: 'retail',
@@ -67,6 +69,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj stanów, rotacji i cen w sklepie.',
+    searchAliases: ['sklep', 'odzież', 'spożywczy', 'elektronika', 'zabawki', 'kiosk', 'warzywniak', 'kosmetyki', 'zoologiczny', 'delikatesy', 'market'],
   },
   {
     id: 'ecommerce',
@@ -90,6 +93,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Kontroluj stany magazynowe i ceny dla sprzedaży online.',
+    searchAliases: ['allegro', 'sklep online', 'ecommerce', 'marketplace', 'shopify', 'woocommerce', 'olx', 'wysyłka', 'kompletacja', 'e-commerce'],
   },
   {
     id: 'beauty',
@@ -115,6 +119,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj zapasów kosmetyków, materiałów jednorazowych i produktów do sprzedaży.',
+    searchAliases: ['fryzjer', 'kosmetyczka', 'paznokcie', 'barber', 'salon', 'spa', 'masaż', 'tatuaż', 'stylizacja', 'beauty', 'uroda'],
   },
   {
     id: 'floristry_decor',
@@ -135,6 +140,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Zarządzaj zapasami kwiatów, dekoracji i materiałów sezonowych.',
+    searchAliases: ['kwiaty', 'dekoracje', 'florystyka', 'kwiaciarnia', 'bukiety', 'kompozycje', 'ślub', 'event', 'ozdoby'],
   },
   {
     id: 'hospitality',
@@ -158,6 +164,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Kontroluj zapasy chemii, pościeli, ręczników i wyposażenia obiektu.',
+    searchAliases: ['apartamenty', 'wynajem', 'pensjonat', 'hotel', 'hostel', 'noclegi', 'airbnb', 'booking', 'turystyka', 'obiekt'],
   },
   {
     id: 'workshop_service',
@@ -182,6 +189,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj części, materiałów eksploatacyjnych i stanów w serwisie.',
+    searchAliases: ['warsztat', 'serwis', 'mechanik', 'rower', 'IT', 'GSM', 'naprawa', 'instalacja', 'elektryk', 'hydraulik'],
   },
   {
     id: 'cleaning_facility',
@@ -205,6 +213,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Kontroluj zapasy chemii, rękawiczek, worków i środków czystości.',
+    searchAliases: ['sprzątanie', 'pralnia', 'cleaning', 'housekeeping', 'czystość', 'firma sprzątająca', 'biuro', 'obiekt'],
   },
   {
     id: 'production_craft',
@@ -227,6 +236,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Zarządzaj surowcami, półproduktami i materiałami do produkcji.',
+    searchAliases: ['drukarnia', 'stolarnia', 'szycie', 'handmade', 'rękodzieło', 'produkcja', 'szwalnia', 'meble', 'drewno'],
   },
   {
     id: 'construction',
@@ -248,6 +258,7 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj materiałów budowlanych, narzędzi i zapasów na projekty.',
+    searchAliases: ['budowa', 'remont', 'wykończenie', 'materiały budowlane', 'skład', 'płytki', 'farby', 'cement', 'instalacje'],
   },
   {
     id: 'health_care',
@@ -271,6 +282,7 @@ export const BUSINESS_CATEGORIES = [
       'Co podrożało u dostawców?',
     ],
     helperDescription: 'Kontroluj materiały jednorazowe, środki dezynfekcji i zapasy gabinetu.',
+    searchAliases: ['gabinet', 'stomatolog', 'fizjo', 'weterynarz', 'optyk', 'lekarz', 'klinika', 'przychodnia', 'apteka', 'medyczny'],
   },
   {
     id: 'fitness_recreation',
@@ -293,6 +305,7 @@ export const BUSINESS_CATEGORIES = [
       'Co najbardziej podrożało?',
     ],
     helperDescription: 'Zarządzaj zapasami sprzętu, środków czystości i akcesoriów w obiekcie.',
+    searchAliases: ['siłownia', 'klub', 'wypożyczalnia', 'rowery', 'sport', 'basen', 'taniec', 'fitness', 'joga', 'trening'],
   },
 ]
 

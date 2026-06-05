@@ -80,11 +80,11 @@ export default function BackendUserDetail() {
           .order('created_at', { ascending: false })
           .limit(30),
         supabase.from('workspaces')
-          .select('company_name, nip, business_category, business_subcategory, business_profile_completed, onboarding_completed_at')
+          .select('id, company_name, nip, business_category, business_subcategory, business_profile_completed, onboarding_completed_at, custom_category_name, custom_category_description, custom_category_base_type')
           .eq('owner_user_id', id)
           .maybeSingle(),
         supabase.from('user_consents')
-          .select('accepted_terms_at, accepted_privacy_at, marketing_consent, created_at')
+          .select('accepted_terms_at, terms_version, accepted_privacy_at, privacy_policy_version, marketing_consent, cookies_consent, created_at')
           .eq('user_id', id)
           .maybeSingle(),
       ])
@@ -406,49 +406,75 @@ export default function BackendUserDetail() {
       )}
 
       {/* Business profile tab */}
-      {tab === 'business' && (
-        <Section title="Profil biznesowy">
-          {!workspaceInfo ? (
-            <p className="text-sm" style={{ color: 'var(--muted)' }}>Brak danych workspace dla tego użytkownika.</p>
-          ) : (() => {
-            const catObj = getCategoryById(workspaceInfo.business_category)
-            const subLabel = (catObj?.subcategories ?? []).find(s => s.id === workspaceInfo.business_subcategory)?.label
-            return (
-              <div>
-                {[
-                  ['Nazwa firmy',           workspaceInfo.company_name || '—'],
-                  ['NIP',                   workspaceInfo.nip || '—'],
-                  ['Branża',                `${catObj?.icon ?? ''} ${catObj?.label ?? workspaceInfo.business_category ?? '—'}`],
-                  ['Podkategoria',          subLabel || workspaceInfo.business_subcategory || '—'],
-                  ['Profil uzupełniony',    null, workspaceInfo.business_profile_completed
-                    ? { label: 'Tak', color: '#16a34a' }
-                    : { label: 'Nie', color: '#d97706' }],
-                  ['Onboarding ukończony',  workspaceInfo.onboarding_completed_at ? formatDate(workspaceInfo.onboarding_completed_at) : 'Nie ukończono'],
-                  ['Konto założone',        formatDate(profile?.created_at)],
-                  ['Zgoda na regulamin',    consent?.accepted_terms_at ? formatDate(consent.accepted_terms_at) : '—'],
-                  ['Zgoda marketingowa',    null, consent?.marketing_consent
-                    ? { label: 'Tak', color: '#16a34a' }
-                    : { label: 'Nie', color: '#6b7280' }],
-                ].map(([label, value, badge]) => (
-                  <div key={label} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
-                    style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span className="text-xs font-medium" style={{ color: 'var(--muted)', minWidth: 190, flexShrink: 0 }}>
-                      {label}
-                    </span>
-                    {badge
-                      ? <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                          style={{ background: `${badge.color}18`, color: badge.color }}>
-                          {badge.label}
-                        </span>
-                      : <span className="text-sm" style={{ color: 'var(--text)' }}>{value}</span>
-                    }
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </Section>
-      )}
+      {tab === 'business' && (() => {
+        function Row({ label, value, badge }) {
+          return (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <span className="text-xs font-medium" style={{ color: 'var(--muted)', minWidth: 200, flexShrink: 0 }}>{label}</span>
+              {badge
+                ? <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: `${badge.color}18`, color: badge.color }}>{badge.label}</span>
+                : <span className="text-sm" style={{ color: 'var(--text)' }}>{value ?? '—'}</span>
+              }
+            </div>
+          )
+        }
+
+        const catObj   = workspaceInfo ? getCategoryById(workspaceInfo.business_category) : null
+        const baseObj  = workspaceInfo?.custom_category_base_type ? getCategoryById(workspaceInfo.custom_category_base_type) : null
+        const subLabel = catObj ? (catObj.subcategories ?? []).find(s => s.id === workspaceInfo.business_subcategory)?.label : null
+
+        return (
+          <>
+            {/* Sekcja: Dane osobowe */}
+            <Section title="Dane osobowe">
+              <Row label="Imię"     value={profile?.first_name || '—'} />
+              <Row label="Nazwisko" value={profile?.last_name || '—'} />
+              <Row label="Email"    value={profile?.email || '—'} />
+            </Section>
+
+            {/* Sekcja: Firma i branża */}
+            <Section title="Firma i branża">
+              {!workspaceInfo ? (
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>Brak danych workspace dla tego użytkownika.</p>
+              ) : (
+                <>
+                  <Row label="Nazwa firmy / magazynu" value={workspaceInfo.company_name || workspaceInfo.name || '—'} />
+                  <Row label="NIP"                    value={workspaceInfo.nip || '—'} />
+                  <Row label="Workspace ID"           value={workspaceInfo.id} />
+                  <Row label="Branża (kod)"           value={workspaceInfo.business_category || '—'} />
+                  <Row label="Branża (po polsku)"     value={catObj ? `${catObj.icon} ${catObj.label}` : (workspaceInfo.business_category || '—')} />
+                  <Row label="Podkategoria"           value={subLabel || workspaceInfo.business_subcategory || '—'} />
+                  <Row label="Custom category name"   value={workspaceInfo.custom_category_name || '—'} />
+                  <Row label="Custom category opis"   value={workspaceInfo.custom_category_description || '—'} />
+                  <Row label="Custom base type"       value={baseObj ? `${baseObj.icon} ${baseObj.label}` : (workspaceInfo.custom_category_base_type || '—')} />
+                </>
+              )}
+            </Section>
+
+            {/* Sekcja: Onboarding */}
+            <Section title="Onboarding">
+              {!workspaceInfo ? (
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>Brak danych workspace.</p>
+              ) : (
+                <>
+                  <Row label="Profil ukończony"  badge={workspaceInfo.business_profile_completed ? { label: 'Tak', color: '#16a34a' } : { label: 'Nie', color: '#d97706' }} />
+                  <Row label="Data ukończenia"   value={workspaceInfo.onboarding_completed_at ? formatDate(workspaceInfo.onboarding_completed_at) : 'Nie ukończono'} />
+                </>
+              )}
+            </Section>
+
+            {/* Sekcja: Zgody prawne */}
+            <Section title="Zgody prawne">
+              <Row label="Regulamin — data"              value={consent?.accepted_terms_at ? formatDate(consent.accepted_terms_at) : 'Nie zaakceptowano'} />
+              <Row label="Regulamin — wersja"            value={consent?.terms_version || '—'} />
+              <Row label="Polityka prywatności — data"   value={consent?.accepted_privacy_at ? formatDate(consent.accepted_privacy_at) : 'Nie zaakceptowano'} />
+              <Row label="Polityka prywatności — wersja" value={consent?.privacy_policy_version || '—'} />
+              <Row label="Zgoda marketingowa"            badge={consent?.marketing_consent ? { label: 'Tak', color: '#16a34a' } : { label: 'Nie', color: '#6b7280' }} />
+              <Row label="Zgoda cookies"                 badge={consent?.cookies_consent ? { label: 'Tak', color: '#16a34a' } : { label: 'Nie', color: '#6b7280' }} />
+            </Section>
+          </>
+        )
+      })()}
     </div>
   )
 }

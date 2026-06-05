@@ -68,7 +68,7 @@ export default function BackendUsers() {
           .order('created_at', { ascending: false }),
         supabase
           .from('workspaces')
-          .select('owner_user_id, company_name, business_category, business_profile_completed'),
+          .select('owner_user_id, company_name, business_category, business_subcategory, business_profile_completed, custom_category_name, created_at'),
       ])
       const wksByOwner = Object.fromEntries((wks ?? []).map(w => [w.owner_user_id, w]))
       setUsers((profs ?? []).map(p => ({ ...p, workspace: wksByOwner[p.id] ?? null })))
@@ -246,7 +246,7 @@ export default function BackendUsers() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Email', 'Imię i nazwisko', 'Firma', 'Branża', 'Rola', 'Status', 'Konto założone', 'Ostatnie logowanie', 'Ostatnia aktywność', ''].map(h => (
+                  {['Email', 'Imię i nazwisko', 'Firma', 'Branża', 'Custom', 'Onboarding', 'Rola', 'Status', 'Konto założone', 'Ostatnie logowanie', 'Ostatnia aktywność', ''].map(h => (
                     <th
                       key={h}
                       className="px-4 py-2.5 text-left font-medium whitespace-nowrap"
@@ -269,11 +269,26 @@ export default function BackendUsers() {
                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{u.workspace?.company_name || '—'}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
                       {u.workspace
-                        ? <>{u.workspace.business_profile_completed
-                            ? <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold mr-1" style={{ background: '#16a34a18', color: '#16a34a' }}>✓</span>
-                            : <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold mr-1" style={{ background: '#d9770618', color: '#d97706' }}>—</span>
-                          }{getCategoryLabel(u.workspace.business_category)}</>
+                        ? <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: '#3b82f618', color: '#1d4ed8' }}>
+                            {getCategoryLabel(u.workspace.business_category)}
+                          </span>
                         : '—'
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-2)', maxWidth: 140 }}>
+                      {u.workspace?.custom_category_name
+                        ? <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={u.workspace.custom_category_name}>
+                            {u.workspace.custom_category_name}
+                          </span>
+                        : '—'
+                      }
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.workspace
+                        ? u.workspace.business_profile_completed
+                          ? <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: '#16a34a18', color: '#16a34a' }}>✓ Tak</span>
+                          : <span className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: '#d9770618', color: '#d97706' }}>✗ Nie</span>
+                        : <span style={{ color: 'var(--muted)' }}>—</span>
                       }
                     </td>
                     <td className="px-4 py-3">

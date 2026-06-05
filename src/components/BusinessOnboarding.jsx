@@ -55,70 +55,206 @@ function Step1({ onNext, onSkip, loading }) {
 
 // ─── Step 2: Category selection ──────────────────────────────────────────
 
-function Step2({ selectedCategory, selectedSubcategory, subcategories, isGeneral, onSelectCategory, onSelectSubcategory, onNext, onBack, onSkip, loading, error }) {
+function Step2({ selectedCategory, selectedSubcategory, subcategories, isGeneral, onSelectCategory, onSelectSubcategory, onNext, onBack, onSkip, loading, error, onCustomSave }) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showCustomForm, setShowCustomForm] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customDesc, setCustomDesc] = useState('')
+  const [customBaseType, setCustomBaseType] = useState('')
+  const [customError, setCustomError] = useState('')
+
+  const q = searchQuery.toLowerCase().trim()
+  const filteredCategories = !q ? BUSINESS_CATEGORIES : BUSINESS_CATEGORIES.filter(cat =>
+    cat.label.toLowerCase().includes(q) ||
+    cat.description.toLowerCase().includes(q) ||
+    (cat.searchAliases || []).some(alias => alias.toLowerCase().includes(q))
+  )
+  const noResults = !!q && filteredCategories.length === 0
+
+  function handleCustomSubmit() {
+    if (!customName.trim()) { setCustomError('Podaj nazwę swojej branży.'); return }
+    if (!customBaseType) { setCustomError('Wybierz typ bazowy.'); return }
+    setCustomError('')
+    onCustomSave(customName.trim(), customDesc.trim(), customBaseType)
+  }
+
   return (
     <div>
       <h2 style={{ fontSize: 19, fontWeight: 700, color: '#111827', margin: '0 0 4px', letterSpacing: '-0.3px' }}>
         Czym zajmuje się Twoja firma?
       </h2>
-      <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 16px', lineHeight: 1.5 }}>
+      <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 12px', lineHeight: 1.5 }}>
         Dopasujemy alerty i asystenta do Twojej branży.
       </p>
 
-      <div className="mgz-cat-grid">
-        {BUSINESS_CATEGORIES.map(cat => {
-          const active = selectedCategory === cat.id
-          return (
-            <button
-              key={cat.id}
-              onClick={() => onSelectCategory(cat.id)}
-              className={`mgz-card${active ? ' mgz-card--active' : ''}`}
-            >
-              {active && <span className="mgz-card__check">✓</span>}
-              <span style={{ fontSize: 20, lineHeight: 1, marginBottom: 4, display: 'block' }}>{cat.icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: active ? '#1d4ed8' : '#374151', lineHeight: 1.35, marginBottom: 2, display: 'block' }}>
-                {cat.label}
-              </span>
-              <span className="mgz-clamp1" style={{ fontSize: 10, color: '#9ca3af', lineHeight: 1.3, display: 'block' }}>
-                {cat.description}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      {/* Search */}
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={e => { setSearchQuery(e.target.value); setShowCustomForm(false); setCustomError('') }}
+        placeholder="Szukaj branży..."
+        className="mgz-input"
+        style={{ marginBottom: 12, fontSize: 16 }}
+      />
 
-      {selectedCategory && !isGeneral && subcategories.length > 0 && (
-        <div style={{ marginTop: 14, animation: 'mgzSlide 0.22s ease' }}>
-          <p style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>
-            Rodzaj działalności
+      {noResults ? (
+        /* No results state */
+        <div>
+          <p style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', margin: '0 0 14px' }}>
+            Nie znaleziono branży „{searchQuery}"
           </p>
-          <div className="mgz-chips">
-            {subcategories.map(sub => (
+          {!showCustomForm ? (
+            <div style={{ textAlign: 'center', padding: '20px 16px', background: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb' }}>
+              <p style={{ color: '#374151', fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>Nie widzisz swojej branży?</p>
+              <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 16px', lineHeight: 1.5 }}>
+                Utwórz własną kategorię i dopasuj<br />Magzic do swojego biznesu.
+              </p>
               <button
-                key={sub.id}
-                onClick={() => onSelectSubcategory(sub.id)}
-                className={`mgz-chip${selectedSubcategory === sub.id ? ' mgz-chip--active' : ''}`}
+                onClick={() => setShowCustomForm(true)}
+                className="mgz-btn-primary"
+                style={{ maxWidth: 280, margin: '0 auto' }}
               >
-                {sub.label}
+                🏢 Utwórz własną kategorię
               </button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            /* Custom category form */
+            <div style={{ background: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb', padding: '16px' }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#111827', margin: '0 0 14px' }}>
+                🏢 Twoja własna kategoria
+              </p>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
+                  Nazwa Twojej branży <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={e => setCustomName(e.target.value)}
+                  placeholder="np. Klimatyzacja i wentylacja"
+                  className="mgz-input"
+                  style={{ fontSize: 16 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
+                  Krótki opis <span style={{ color: '#9ca3af', fontWeight: 400 }}>— opcjonalnie</span>
+                </label>
+                <input
+                  type="text"
+                  value={customDesc}
+                  onChange={e => setCustomDesc(e.target.value)}
+                  placeholder="np. Montaż i serwis klimatyzacji"
+                  className="mgz-input"
+                  style={{ fontSize: 16 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+                  Najbliższy typ bazowy <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 6px', lineHeight: 1.4 }}>
+                  Wybierz typ najbliższy do Twojego biznesu — od niego zależą funkcje i alerty.
+                </p>
+                <select
+                  value={customBaseType}
+                  onChange={e => setCustomBaseType(e.target.value)}
+                  className="mgz-input"
+                  style={{ cursor: 'pointer', fontSize: 16 }}
+                >
+                  <option value="">Wybierz typ bazowy...</option>
+                  {BUSINESS_CATEGORIES.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {customError && <p className="mgz-error" style={{ marginBottom: 12 }}>{customError}</p>}
+
+              <button
+                onClick={handleCustomSubmit}
+                disabled={loading}
+                className="mgz-btn-primary"
+                style={{ opacity: loading ? 0.75 : 1, cursor: loading ? 'not-allowed' : 'pointer', gap: 7 }}
+              >
+                {loading
+                  ? <><Loader2 size={16} style={{ animation: 'mgzSpin 1s linear infinite', flexShrink: 0 }} />Zapisuję…</>
+                  : 'Zapisz i kontynuuj →'
+                }
+              </button>
+            </div>
+          )}
         </div>
+      ) : (
+        /* Normal category grid */
+        <>
+          <div className="mgz-cat-grid">
+            {filteredCategories.map(cat => {
+              const active = selectedCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => onSelectCategory(cat.id)}
+                  className={`mgz-card${active ? ' mgz-card--active' : ''}`}
+                >
+                  {active && <span className="mgz-card__check">✓</span>}
+                  <span style={{ fontSize: 20, lineHeight: 1, marginBottom: 4, display: 'block' }}>{cat.icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: active ? '#1d4ed8' : '#374151', lineHeight: 1.35, marginBottom: 2, display: 'block' }}>
+                    {cat.label}
+                  </span>
+                  <span className="mgz-clamp1" style={{ fontSize: 10, color: '#9ca3af', lineHeight: 1.3, display: 'block' }}>
+                    {cat.description}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {selectedCategory && !isGeneral && subcategories.length > 0 && (
+            <div style={{ marginTop: 14, animation: 'mgzSlide 0.22s ease' }}>
+              <p style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>
+                Rodzaj działalności
+              </p>
+              <div className="mgz-chips">
+                {subcategories.map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => onSelectSubcategory(sub.id)}
+                    className={`mgz-chip${selectedSubcategory === sub.id ? ' mgz-chip--active' : ''}`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {error && <p className="mgz-error" style={{ marginTop: 12 }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-        <button onClick={onBack} className="mgz-btn-secondary">← Wstecz</button>
-        <button
-          onClick={onNext}
-          disabled={!selectedCategory || loading}
-          className="mgz-btn-primary"
-          style={{ flex: 1, opacity: (!selectedCategory || loading) ? 0.4 : 1, cursor: (!selectedCategory || loading) ? 'not-allowed' : 'pointer' }}
-        >
-          Dalej →
-        </button>
-      </div>
+      {!noResults && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+          <button onClick={onBack} className="mgz-btn-secondary">← Wstecz</button>
+          <button
+            onClick={onNext}
+            disabled={!selectedCategory || loading}
+            className="mgz-btn-primary"
+            style={{ flex: 1, opacity: (!selectedCategory || loading) ? 0.4 : 1, cursor: (!selectedCategory || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            Dalej →
+          </button>
+        </div>
+      )}
+
+      {noResults && !showCustomForm && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button onClick={onBack} className="mgz-btn-secondary">← Wstecz</button>
+        </div>
+      )}
 
       <p style={{ textAlign: 'center', marginTop: 14, marginBottom: 0 }}>
         <button onClick={onSkip} disabled={loading} className="mgz-skip">Pomiń konfigurację</button>
@@ -274,6 +410,29 @@ export default function BusinessOnboarding() {
     setError('')
   }
 
+  async function handleCustomSave(customName, customDesc, customBaseType) {
+    setError('')
+    setLoading(true)
+    try {
+      const { error: updateErr } = await supabase.from('workspaces').update({
+        business_category: customBaseType,
+        business_subcategory: null,
+        custom_category_name: customName || null,
+        custom_category_description: customDesc || null,
+        custom_category_base_type: customBaseType,
+        business_profile_completed: true,
+        onboarding_completed_at: new Date().toISOString(),
+      }).eq('id', workspace.id)
+      if (updateErr) throw updateErr
+      setSuccess(true)
+      await refreshWorkspace()
+      setTimeout(() => navigate('/dashboard', { replace: true }), 900)
+    } catch (_) {
+      setError('Wystąpił błąd. Spróbuj ponownie.')
+      setLoading(false)
+    }
+  }
+
   async function handleSkip() {
     setLoading(true)
     try {
@@ -359,6 +518,7 @@ export default function BusinessOnboarding() {
               onSkip={handleSkip}
               loading={loading}
               error={error}
+              onCustomSave={handleCustomSave}
             />
           )}
           {step === 3 && (
