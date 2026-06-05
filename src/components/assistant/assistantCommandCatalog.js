@@ -119,6 +119,18 @@ export const ASSISTANT_COMMANDS = [
     ],
     requiresProductQuery: true,
   },
+  {
+    intent: 'contractor_search',
+    title: 'Wyszukiwarka kontrahentów',
+    description: 'Znajdź kontrahenta/dostawcę, sprawdź liczbę faktur i wydatki w ostatnim roku.',
+    badge: 'Dostawcy',
+    examples: [
+      'Faktury od Castorama',
+      'Ile wydaliśmy u Makro?',
+      'Pokaż kontrahenta Leroy',
+    ],
+    requiresProductQuery: true,
+  },
 ]
 
 export const BADGE_COLORS = {

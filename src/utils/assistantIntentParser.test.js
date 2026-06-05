@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseAssistantIntent, getAssistantResponse } from './assistantIntentParser.js'
+import { parseAssistantIntent, getAssistantResponse, getSmartFallbackSuggestions } from './assistantIntentParser.js'
 
 describe('parseAssistantIntent', () => {
   it('rozpoznaje purchase_dashboard', () => {
@@ -275,5 +275,58 @@ describe('multi-turn context', () => {
     const r = parseAssistantIntent('a za ostatni tydzień', history)
     expect(r.intent).toBe('latest_price_changes')
     expect(r.entities.dateRange).toBeTruthy()
+  })
+})
+
+describe('diacritics-agnostic fuzzy matching', () => {
+  it('"zarowka led" → product_price_history or product_search', () => {
+    const r = parseAssistantIntent('zarowka led historia ceny')
+    expect(['product_price_history', 'product_search']).toContain(r.intent)
+  })
+
+  it('"rekawice" → fuzzy matches "rękawice" keywords', () => {
+    const r = parseAssistantIntent('stany rekawice')
+    expect(r.confidence).toBeGreaterThan(0)
+  })
+})
+
+describe('contractor_search intent', () => {
+  it('"faktury od Castorama" → contractor_search + contractorQuery = "Castorama"', () => {
+    const r = parseAssistantIntent('faktury od Castorama')
+    expect(r.intent).toBe('contractor_search')
+    expect(r.entities.contractorQuery).toBe('Castorama')
+  })
+
+  it('"ile wydaliśmy u Makro" → contractor_search', () => {
+    const r = parseAssistantIntent('ile wydaliśmy u Makro')
+    expect(r.intent).toBe('contractor_search')
+    expect(r.entities.contractorQuery).toBeDefined()
+  })
+
+  it('"pokaż kontrahenta Leroy" → contractor_search', () => {
+    const r = parseAssistantIntent('pokaż kontrahenta Leroy')
+    expect(r.intent).toBe('contractor_search')
+    expect(r.entities.contractorQuery).toBe('Leroy')
+  })
+})
+
+describe('getSmartFallbackSuggestions', () => {
+  it('"cenka" → sugestie zawierające intenty cenowe', () => {
+    const s = getSmartFallbackSuggestions('cenka')
+    expect(Array.isArray(s)).toBe(true)
+  })
+
+  it('"abc123xyz" → pusta lista lub krótka lista', () => {
+    const s = getSmartFallbackSuggestions('abc123xyz')
+    expect(Array.isArray(s)).toBe(true)
+    expect(s.length).toBeLessThanOrEqual(3)
+  })
+
+  it('pusty string → pusta lista', () => {
+    expect(getSmartFallbackSuggestions('')).toHaveLength(0)
+  })
+
+  it('krótki string (< 3 znaki) → pusta lista', () => {
+    expect(getSmartFallbackSuggestions('ab')).toHaveLength(0)
   })
 })

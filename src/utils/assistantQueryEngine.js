@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { buildTfIdfIndex, queryTfIdf } from './invoiceTfIdf'
+import { buildTfIdfIndex, queryTfIdf, combinedProductScore } from './invoiceTfIdf'
 
 export async function fetchAssistantOrderRecommendationData({ workspaceId }) {
   return fetchAssistantLowStockData({ workspaceId })
@@ -363,16 +363,26 @@ export async function fetchAssistantProductSearchData({ workspaceId, query }) {
     stockByProduct[row.towar_id].push(row)
   }
 
+  // TF-IDF pre-filter (top 20) + combined scoring for abbreviation/fuzzy support
   const index = buildTfIdfIndex(safeProducts)
-  const topMatches = queryTfIdf(query, index, 5)
+  const tfidfTop = queryTfIdf(query, index, 20)
 
-  const results = topMatches
-    .filter(m => m.score > 0.05)
-    .map(m => ({
-      product: m.product,
-      score: m.score,
-      stock: stockByProduct[m.product?.id] ?? [],
-    }))
+  const scored = safeProducts.map(p => ({
+    product: p,
+    score: combinedProductScore(query, p.nazwa ?? ''),
+    stock: stockByProduct[p.id] ?? [],
+  }))
+
+  // Boost products found by both systems
+  for (const item of scored) {
+    const tfidfMatch = tfidfTop.find(t => (t.product?.id ?? t.productId) === item.product.id)
+    if (tfidfMatch) item.score = Math.max(item.score, tfidfMatch.score * 0.8, item.score + 0.1)
+  }
+
+  const results = scored
+    .filter(r => r.score > 0.12)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
 
   return { results, query, errors }
 }
@@ -425,4 +435,78 @@ export async function fetchAssistantPurchaseDashboardData({ workspaceId, dateRan
     contractors: [],
     errors,
   }
+}
+
+export async function fetchAssistantContractorSearchData({ workspaceId, query }) {
+  if (!workspaceId) return { results: [], query, errors: ['Brak aktywnego workspace'] }
+  const errors = []
+
+  const { data: contractors, error: e1 } = await supabase
+    .from('kontrahenci')
+    .select('id, nazwa, nip')
+    .eq('workspace_id', workspaceId)
+    .limit(200)
+
+  if (e1) {
+    errors.push(`Błąd: ${e1.message}`)
+    return { results: [], query, errors }
+  }
+
+  const safe = contractors ?? []
+  if (safe.length === 0) return { results: [], query, errors }
+
+  const scored = safe
+    .map(c => ({ contractor: c, score: combinedProductScore(query, c.nazwa ?? '') }))
+    .filter(r => r.score > 0.15)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+
+  if (scored.length === 0) return { results: [], query, errors }
+
+  const contractorIds = scored.map(s => s.contractor.id)
+  const dateFrom = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
+
+  const { data: invoices, error: e2 } = await supabase
+    .from('faktury')
+    .select('id, numer, data_zakupu, typ, status, kontrahent_id')
+    .eq('workspace_id', workspaceId)
+    .in('kontrahent_id', contractorIds)
+    .neq('status', 'anulowana')
+    .gte('data_zakupu', dateFrom)
+    .order('data_zakupu', { ascending: false })
+    .limit(100)
+
+  if (e2) errors.push(`Błąd faktur: ${e2.message}`)
+  const safeInv = invoices ?? []
+
+  const totalsByContractor = {}
+  if (safeInv.length > 0) {
+    const invIds = safeInv.map(f => f.id)
+    const { data: lines } = await supabase
+      .from('pozycje_faktury')
+      .select('faktura_id, cena_netto, ilosc')
+      .in('faktura_id', invIds)
+      .limit(5000)
+
+    const invToContractor = {}
+    for (const inv of safeInv) invToContractor[inv.id] = inv.kontrahent_id
+    for (const line of (lines ?? [])) {
+      const cid = invToContractor[line.faktura_id]
+      if (!cid) continue
+      totalsByContractor[cid] = (totalsByContractor[cid] ?? 0) + (line.cena_netto ?? 0) * (line.ilosc ?? 1)
+    }
+  }
+
+  const results = scored.map(({ contractor, score }) => {
+    const cInvoices = safeInv.filter(f => f.kontrahent_id === contractor.id)
+    return {
+      contractor,
+      invoiceCount: cInvoices.length,
+      totalSpent: totalsByContractor[contractor.id] ?? 0,
+      lastInvoice: cInvoices[0] ?? null,
+      score,
+    }
+  })
+
+  return { results, query, errors }
 }

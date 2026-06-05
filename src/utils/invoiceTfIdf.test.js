@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeText, tokenize, buildTfIdfIndex, queryTfIdf } from './invoiceTfIdf.js'
+import { normalizeText, tokenize, buildTfIdfIndex, queryTfIdf, generateTrigrams, trigramSimilarity, substringMatch, subsequenceMatch, combinedProductScore } from './invoiceTfIdf.js'
 
 // ── normalizeText ─────────────────────────────────────────────────────────────
 
@@ -197,5 +197,104 @@ describe('queryTfIdf', () => {
     const byId = Object.fromEntries(results.map(r => [r.productId, r.score]))
     expect(byId[1] ?? 0).toBeGreaterThan(byId[2] ?? 0)
     expect(byId[1] ?? 0).toBeGreaterThan(byId[3] ?? 0)
+  })
+})
+
+// ── New: trigram / substring / subsequence / combinedProductScore ───────────
+
+describe('generateTrigrams', () => {
+  it('generates correct trigrams for "domestos"', () => {
+    const tg = generateTrigrams('domestos')
+    expect(tg.has('dom')).toBe(true)
+    expect(tg.has('tos')).toBe(true)
+  })
+
+  it('short string returns itself as a Set entry', () => {
+    const tg = generateTrigrams('ab')
+    expect(tg.has('ab')).toBe(true)
+  })
+})
+
+describe('trigramSimilarity', () => {
+  it('"domestos" vs "domestos" → 1.0', () => {
+    expect(trigramSimilarity('domestos', 'domestos')).toBeCloseTo(1.0, 5)
+  })
+
+  it('"domest" vs "domestos" → > 0.5', () => {
+    expect(trigramSimilarity('domest', 'domestos')).toBeGreaterThan(0.5)
+  })
+
+  it('completely different strings → 0', () => {
+    expect(trigramSimilarity('abc', 'xyz')).toBe(0)
+  })
+})
+
+describe('substringMatch', () => {
+  it('"led" in "żarówka LED 5W" → 1.0 (diacritics stripped)', () => {
+    expect(substringMatch('led', 'żarówka LED 5W')).toBe(1.0)
+  })
+
+  it('"papier toalet" in "papier toaletowy" → 1.0', () => {
+    expect(substringMatch('papier toalet', 'papier toaletowy')).toBe(1.0)
+  })
+
+  it('"zarowka" in "żarówka LED" → 1.0 (diacritics stripped)', () => {
+    expect(substringMatch('zarowka', 'żarówka LED')).toBe(1.0)
+  })
+
+  it('"xyz" in "domestos" → 0', () => {
+    expect(substringMatch('xyz', 'domestos')).toBe(0)
+  })
+})
+
+describe('subsequenceMatch', () => {
+  it('"dmst" in "domestos" → > 0.4', () => {
+    expect(subsequenceMatch('dmst', 'domestos')).toBeGreaterThan(0.4)
+  })
+
+  it('"ptl" in "papier toaletowy" → > 0', () => {
+    expect(subsequenceMatch('ptl', 'papier toaletowy')).toBeGreaterThan(0)
+  })
+
+  it('"xyz" in "domestos" → 0 (not a subsequence)', () => {
+    expect(subsequenceMatch('xyz', 'domestos')).toBe(0)
+  })
+
+  it('"zl" in "zarowka led" → > 0', () => {
+    expect(subsequenceMatch('zl', 'zarowka led')).toBeGreaterThan(0)
+  })
+})
+
+describe('combinedProductScore', () => {
+  it('"dmst" vs "Domestos" → > 0.09 (subsequence signal)', () => {
+    expect(combinedProductScore('dmst', 'Domestos')).toBeGreaterThan(0.09)
+  })
+
+  it('"żarówka" vs "zarowka led" → > 0.4 (diacritics)', () => {
+    expect(combinedProductScore('żarówka', 'zarowka led')).toBeGreaterThan(0.4)
+  })
+
+  it('"zar led" vs "Żarówka LED 5W" → > 0.5', () => {
+    expect(combinedProductScore('zar led', 'Żarówka LED 5W')).toBeGreaterThan(0.5)
+  })
+
+  it('"papier" vs "Papier toaletowy 8 rolek" → > 0.3', () => {
+    expect(combinedProductScore('papier', 'Papier toaletowy 8 rolek')).toBeGreaterThan(0.3)
+  })
+
+  it('"rekaw" vs "Rękawice nitrylowe M" → > 0.3', () => {
+    expect(combinedProductScore('rekaw', 'Rękawice nitrylowe M')).toBeGreaterThan(0.3)
+  })
+
+  it('"DOMESTOS" vs "domestos" → > 0.9 (case insensitive)', () => {
+    expect(combinedProductScore('DOMESTOS', 'domestos')).toBeGreaterThan(0.9)
+  })
+
+  it('"ręcznik" vs "recznik papierowy" → > 0.3 (diacritics)', () => {
+    expect(combinedProductScore('ręcznik', 'recznik papierowy')).toBeGreaterThan(0.3)
+  })
+
+  it('empty query → 0', () => {
+    expect(combinedProductScore('', 'domestos')).toBe(0)
   })
 })

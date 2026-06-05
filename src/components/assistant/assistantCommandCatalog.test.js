@@ -13,8 +13,8 @@ const ALL_INTENTS = [
 ]
 
 describe('assistantCommandCatalog', () => {
-  it('contains exactly 10 commands', () => {
-    expect(ASSISTANT_COMMANDS).toHaveLength(10)
+  it('contains exactly 11 commands', () => {
+    expect(ASSISTANT_COMMANDS).toHaveLength(11)
   })
 
   it('every command has an intent', () => {

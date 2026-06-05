@@ -174,3 +174,71 @@ export function queryTfIdf(rawName, index, topK = 5) {
 
   return scored.slice(0, topK)
 }
+
+// ── Trigram generator ────────────────────────────────────────────────────────
+export function generateTrigrams(str) {
+  const s = normalizeText(str)
+  if (s.length < 3) return new Set([s])
+  const trigrams = new Set()
+  for (let i = 0; i <= s.length - 3; i++) {
+    trigrams.add(s.slice(i, i + 3))
+  }
+  return trigrams
+}
+
+// ── Trigram similarity (Dice coefficient) ────────────────────────────────────
+export function trigramSimilarity(a, b) {
+  const tA = generateTrigrams(a)
+  const tB = generateTrigrams(b)
+  if (tA.size === 0 || tB.size === 0) return 0
+  let intersection = 0
+  for (const t of tA) { if (tB.has(t)) intersection++ }
+  return (2 * intersection) / (tA.size + tB.size)
+}
+
+// ── Substring containment check (diacritics-agnostic) ────────────────────────
+export function substringMatch(query, target) {
+  const q = normalizeText(query)
+  const t = normalizeText(target)
+  if (!q || !t) return 0
+  if (t.includes(q)) return 1.0
+  const qWords = q.split(' ').filter(w => w.length >= 2)
+  if (qWords.length === 0) return 0
+  const matchCount = qWords.filter(w => t.includes(w)).length
+  return matchCount / qWords.length
+}
+
+// ── Subsequence match (abbreviation-friendly) ────────────────────────────────
+// "dmst" is a subsequence of "domestos" → score based on coverage
+export function subsequenceMatch(query, target) {
+  const q = normalizeText(query)
+  const t = normalizeText(target)
+  if (!q || !t) return 0
+  let qi = 0
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) qi++
+  }
+  if (qi < q.length) return 0
+  return q.length / t.length
+}
+
+// ── Combined product scoring ──────────────────────────────────────────────────
+// Combines substring (exact/partial), trigram (abbreviations), token overlap,
+// and subsequence (letter abbreviations like "dmst" → "domestos").
+export function combinedProductScore(query, productName) {
+  if (!query || !productName) return 0
+  const tfidfTokens = tokenize(query)
+  const productTokens = tokenize(productName)
+
+  const qSet = new Set(tfidfTokens)
+  const pSet = new Set(productTokens)
+  let tokenOverlap = 0
+  for (const t of qSet) { if (pSet.has(t)) tokenOverlap++ }
+  const overlapScore = qSet.size > 0 ? tokenOverlap / qSet.size : 0
+
+  const trigramScore = trigramSimilarity(query, productName)
+  const subScore = substringMatch(query, productName)
+  const subseqScore = subsequenceMatch(query, productName)
+
+  return Math.min(1, subScore * 0.4 + trigramScore * 0.25 + overlapScore * 0.15 + subseqScore * 0.2)
+}

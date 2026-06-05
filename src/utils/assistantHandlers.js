@@ -8,6 +8,7 @@ import {
   fetchAssistantProductPriceHistoryData,
   fetchAssistantSupplierComparisonData,
   fetchAssistantProductSearchData,
+  fetchAssistantContractorSearchData,
 } from './assistantQueryEngine'
 import { buildPurchaseDashboard } from './purchaseAnalyticsEngine'
 import { buildLatestPriceChanges } from './priceAnalyticsEngine'
@@ -27,7 +28,7 @@ import {
   formatProductPriceHistoryResponse,
   formatSupplierComparisonResponse,
 } from './assistantResponseFormatter'
-import { getAssistantResponse } from './assistantIntentParser'
+import { getAssistantResponse, getSmartFallbackSuggestions } from './assistantIntentParser'
 
 async function handlePurchaseDashboard({ workspaceId, entities }) {
   const rawData = await fetchAssistantPurchaseDashboardData({
@@ -179,6 +180,22 @@ async function handleCreatePriceAlert({ workspaceId, entities }) {
   }
 }
 
+async function handleContractorSearch({ workspaceId, entities }) {
+  const query = entities?.contractorQuery
+  if (!query) return { text: 'Podaj nazwę kontrahenta lub dostawcy.', structuredData: null }
+  const rawData = await fetchAssistantContractorSearchData({ workspaceId, query })
+  if (rawData.errors.length > 0) {
+    return { text: `Błąd: ${rawData.errors.join(' ')}`, structuredData: null }
+  }
+  if (!rawData.results.length) {
+    return { text: `Nie znalazłem kontrahenta „${query}".`, structuredData: { results: [], query } }
+  }
+  return {
+    text: `Znalazłem ${rawData.results.length} kontrahentów dla „${query}".`,
+    structuredData: { results: rawData.results, query },
+  }
+}
+
 const HANDLERS = {
   purchase_dashboard: handlePurchaseDashboard,
   latest_price_changes: handleLatestPriceChanges,
@@ -190,6 +207,7 @@ const HANDLERS = {
   compare_suppliers: handleSupplierComparison,
   product_search: handleProductSearch,
   create_price_alert: handleCreatePriceAlert,
+  contractor_search: handleContractorSearch,
 }
 
 export async function runAssistantIntent({ intentResult, workspaceId }) {
@@ -199,7 +217,11 @@ export async function runAssistantIntent({ intentResult, workspaceId }) {
   }
   const handler = HANDLERS[intent]
   if (!handler) {
-    return { intent, text: getAssistantResponse(intentResult), structuredData: null }
+    const suggestions = getSmartFallbackSuggestions(intentResult.rawQuery)
+    const fallbackText = suggestions.length > 0
+      ? `Nie jestem pewien o co pytasz. Może chodziło Ci o:\n${suggestions.map(s => `• ${s}`).join('\n')}\n\nWpisz polecenie lub wybierz z szybkich analiz powyżej.`
+      : getAssistantResponse(intentResult)
+    return { intent, text: fallbackText, structuredData: null }
   }
   try {
     const result = await handler({ workspaceId, entities })

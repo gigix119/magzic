@@ -9,6 +9,7 @@ import ProductPriceHistoryResult from './results/ProductPriceHistoryResult'
 import SupplierComparisonResult from './results/SupplierComparisonResult'
 import ProductSearchResult from './results/ProductSearchResult'
 import CreatePriceAlertResult from './results/CreatePriceAlertResult'
+import ContractorSearchResult from './results/ContractorSearchResult'
 
 const INTENT_LABELS = {
   purchase_dashboard: 'Dashboard zakupów',
@@ -21,6 +22,7 @@ const INTENT_LABELS = {
   order_recommendation: 'Rekomendacja zamówień',
   product_search: 'Wyszukiwarka towarów',
   create_price_alert: 'Alert cenowy',
+  contractor_search: 'Wyszukiwarka kontrahentów',
   unknown: null,
 }
 
@@ -36,6 +38,7 @@ export default function AssistantResult({ intent, text, structuredData }) {
     if (intent === 'compare_suppliers') return <SupplierComparisonResult comparison={structuredData} text={text} />
     if (intent === 'product_search') return <ProductSearchResult data={structuredData} />
     if (intent === 'create_price_alert') return <CreatePriceAlertResult data={structuredData} />
+    if (intent === 'contractor_search') return <ContractorSearchResult data={structuredData} />
   }
 
   const label = INTENT_LABELS[intent]

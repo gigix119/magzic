@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Send, Sparkles, HelpCircle, X } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { parseAssistantIntent } from '../../utils/assistantIntentParser'
@@ -6,18 +6,16 @@ import { runAssistantIntent } from '../../utils/assistantHandlers'
 import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 import AssistantCommandHelp from './AssistantCommandHelp'
+import { supabase } from '../../supabase'
 
-const QUICK_PROMPTS = [
+const BASE_PROMPTS = [
   'Pokaż dashboard zakupów',
   'Co najbardziej podrożało?',
   'Porównaj dwie ostatnie faktury',
   'Pokaż niskie stany',
   'Co powinienem zamówić?',
   'Pokaż faktury do weryfikacji',
-  'Historia ceny Domestos',
   'Porównaj dostawców',
-  'Znajdź towar Domestos',
-  'Ustaw alert na Domestos 15%',
 ]
 
 let msgCounter = 0
@@ -43,8 +41,39 @@ export default function AssistantChat() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [sampleProduct, setSampleProduct] = useState(null)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
+
+  useEffect(() => {
+    if (!workspaceId) return
+    supabase
+      .from('towary')
+      .select('nazwa')
+      .eq('workspace_id', workspaceId)
+      .eq('aktywny', true)
+      .limit(20)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const random = data[Math.floor(Math.random() * data.length)]
+          setSampleProduct(random.nazwa)
+        }
+      })
+  }, [workspaceId])
+
+  const quickPrompts = useMemo(() => {
+    const prompts = [...BASE_PROMPTS]
+    if (sampleProduct) {
+      const short = sampleProduct.length > 20 ? sampleProduct.slice(0, 20) + '…' : sampleProduct
+      prompts.push(`Historia ceny ${short}`)
+      prompts.push(`Znajdź towar ${short}`)
+      prompts.push(`Ustaw alert na ${short} 15%`)
+    } else {
+      prompts.push('Znajdź towar (wpisz nazwę)')
+      prompts.push('Ustaw alert cenowy (wpisz nazwę)')
+    }
+    return prompts
+  }, [sampleProduct])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -152,7 +181,7 @@ export default function AssistantChat() {
           Szybkie analizy
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {QUICK_PROMPTS.map(prompt => (
+          {quickPrompts.map(prompt => (
             <button
               key={prompt}
               onClick={() => sendMessage(prompt)}

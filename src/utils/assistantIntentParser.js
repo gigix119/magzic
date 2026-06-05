@@ -14,14 +14,15 @@ function levenshteinDistance(a, b) {
   return dp[m][n]
 }
 
-// ── Fuzzy keyword match against sliding n-grams ────────────────────────────
+// ── Fuzzy keyword match against sliding n-grams (diacritics-agnostic) ────────
 function fuzzyKeywordMatch(inputWords, keyword, threshold = 0.75) {
-  const kwWords = keyword.toLowerCase().split(/\s+/)
+  const kwWords = normalizeText(keyword).split(/\s+/)
   const kwLen = kwWords.length
+  const normalizedInputWords = inputWords.map(w => normalizeText(w))
   const windowSize = Math.max(1, kwLen)
   let bestSim = 0
-  for (let i = 0; i <= inputWords.length - windowSize; i++) {
-    const window = inputWords.slice(i, i + windowSize).join(' ')
+  for (let i = 0; i <= normalizedInputWords.length - windowSize; i++) {
+    const window = normalizedInputWords.slice(i, i + windowSize).join(' ')
     const kwStr = kwWords.join(' ')
     const maxLen = Math.max(window.length, kwStr.length)
     if (maxLen === 0) continue
@@ -30,8 +31,8 @@ function fuzzyKeywordMatch(inputWords, keyword, threshold = 0.75) {
   }
   // Also try ±1 word windows
   for (let size = Math.max(1, windowSize - 1); size <= windowSize + 1; size++) {
-    for (let i = 0; i <= inputWords.length - size; i++) {
-      const window = inputWords.slice(i, i + size).join(' ')
+    for (let i = 0; i <= normalizedInputWords.length - size; i++) {
+      const window = normalizedInputWords.slice(i, i + size).join(' ')
       const kwStr = kwWords.join(' ')
       const maxLen = Math.max(window.length, kwStr.length)
       if (maxLen === 0) continue
@@ -173,6 +174,17 @@ const INTENT_DEFS = {
     ],
     keywords: ['ustaw alert', 'dodaj alert', 'alert cenowy', 'powiadom gdy', 'monitoruj cenę'],
   },
+  contractor_search: {
+    patterns: [
+      /faktury\s+(?:od|z|u|z\s+firmy)\s+/i,
+      /kontrahent\w*\s+/i,
+      /dostawc\w+\s+\w+/i,
+      /ile\s+wydali[śs]my\s+(?:u|w|na)\s+/i,
+      /pokaż\s+(?:kontrahent|dostawc)/i,
+      /znajdź\s+(?:kontrahent|dostawc|firm)/i,
+    ],
+    keywords: ['faktury od', 'kontrahent', 'dostawca', 'ile wydaliśmy u', 'znajdź firmę', 'znajdź dostawcę'],
+  },
 }
 
 const PLACEHOLDER_RESPONSES = {
@@ -196,6 +208,8 @@ const PLACEHOLDER_RESPONSES = {
     'Szukam towaru w magazynie…',
   create_price_alert:
     'Szukam towaru i przygotowuję alert cenowy…',
+  contractor_search:
+    'Szukam kontrahenta…',
   unknown:
     'Na razie umiem analizować faktury, ceny, dostawców, stany magazynowe i alerty. Spróbuj: „pokaż dashboard zakupów z ostatniego miesiąca" albo „co powinienem zamówić?"',
 }
@@ -386,6 +400,24 @@ function extractEntities(normalized, intent, rawInput) {
     if (alertProduct.length >= 2) entities.alertProduct = alertProduct
   }
 
+  if (intent === 'contractor_search') {
+    const contractorStripPrefixes = [
+      /^(?:pokaż\s+)?faktury\s+(?:od|z|u|z\s+firmy)\s+/i,
+      /^pokaż\s+(?:kontrahenta?|dostawcę?)\s+/i,
+      /^znajdź\s+(?:kontrahenta?|dostawcę?|firmę?)\s+/i,
+      /^ile\s+wydali[śs]my\s+(?:u|w|na)\s+/i,
+      /^kontrahent\s+/i,
+      /^dostawca\s+/i,
+    ]
+    let cq = rawInput ?? ''
+    for (const p of contractorStripPrefixes) {
+      const s = cq.replace(p, '')
+      if (s !== cq) { cq = s; break }
+    }
+    cq = cq.replace(/[?!.,]+$/, '').trim()
+    if (cq.length >= 2) entities.contractorQuery = cq
+  }
+
   return entities
 }
 
@@ -466,4 +498,37 @@ export function parseAssistantIntent(input, conversationHistory = []) {
 
 export function getAssistantResponse(parsedResult) {
   return PLACEHOLDER_RESPONSES[parsedResult.intent] ?? PLACEHOLDER_RESPONSES.unknown
+}
+
+const INTENT_SUGGESTIONS = {
+  purchase_dashboard: 'Pokaż dashboard zakupów',
+  compare_invoices: 'Porównaj dwie ostatnie faktury',
+  latest_price_changes: 'Co najbardziej podrożało?',
+  product_price_history: 'Historia ceny [nazwa towaru]',
+  compare_suppliers: 'Porównaj dostawców',
+  invoices_needing_review: 'Pokaż faktury do weryfikacji',
+  low_stock: 'Pokaż niskie stany',
+  order_recommendation: 'Co powinienem zamówić?',
+  product_search: 'Znajdź towar [nazwa]',
+  create_price_alert: 'Ustaw alert na [towar] [%]',
+  contractor_search: 'Faktury od [kontrahent]',
+}
+
+export function getSmartFallbackSuggestions(rawQuery) {
+  if (!rawQuery || rawQuery.length < 3) return []
+  const normalized = rawQuery.trim().toLowerCase()
+  const inputWords = normalized.split(/\s+/)
+
+  const intentScores = []
+  for (const [intentName, def] of Object.entries(INTENT_DEFS)) {
+    let score = 0
+    for (const keyword of def.keywords) {
+      const fuzzy = fuzzyKeywordMatch(inputWords, keyword, 0.55)
+      if (fuzzy > 0) score = Math.max(score, fuzzy)
+    }
+    if (score > 0.3) intentScores.push({ intentName, score })
+  }
+
+  intentScores.sort((a, b) => b.score - a.score)
+  return intentScores.slice(0, 3).map(s => INTENT_SUGGESTIONS[s.intentName] ?? s.intentName)
 }
