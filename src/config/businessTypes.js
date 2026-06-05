@@ -318,3 +318,140 @@ export function getCategoryLabel(id) {
 export function getHelperDescriptionFor(categoryId) {
   return getCategoryById(categoryId).helperDescription
 }
+
+const FIRST_USE_FLOWS = {
+  general: {
+    title: 'Skonfiguruj podstawowy magazyn',
+    steps: [
+      { id: 'add_warehouse', label: 'Dodaj pierwszy magazyn', description: 'Utwórz magazyn, np. główny, zapasowy.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_product', label: 'Dodaj pierwszy produkt', description: 'Dodaj towary, które chcesz śledzić.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_contractor', label: 'Dodaj kontrahenta', description: 'Dodaj dostawcę lub odbiorcę.', route: '/kontrahenci', ctaLabel: 'Dodaj kontrahenta', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj pierwszą fakturę', description: 'Wgraj fakturę zakupową.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź Alerty', description: 'Zobacz rekomendacje asystenta.', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  gastronomy: {
+    title: 'Przygotuj gastronomię do pracy',
+    steps: [
+      { id: 'add_warehouse', label: 'Dodaj magazyn kuchni', description: 'Utwórz magazyn np. kuchnia, bar, chłodnia.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_product', label: 'Dodaj składniki', description: 'Dodaj produkty spożywcze i składniki.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę żywności', description: 'Dodaj hurtownię lub dostawcę.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę od dostawcy', description: 'Wgraj pierwszą fakturę zakupową.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź braki składników', description: 'Zobacz co kończy się w kuchni.', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  retail: {
+    title: 'Ustaw kontrolę sprzedaży',
+    steps: [
+      { id: 'add_product', label: 'Dodaj produkty', description: 'Dodaj towary ze sklepu.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę', description: 'Dodaj hurtownię lub producenta.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę zakupową', description: 'Dodaj fakturę, żeby śledzić ceny.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn sklepu', description: 'Utwórz magazyn np. sklep, zaplecze.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'check_alerts', label: 'Sprawdź niskie stany', description: 'Zobacz produkty do domówienia.', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  ecommerce: {
+    title: 'Przygotuj kompletację zamówień',
+    steps: [
+      { id: 'add_product', label: 'Dodaj produkty z SKU', description: 'Dodaj towary do sprzedaży online.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn wysyłkowy', description: 'Utwórz magazyn do kompletacji.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę', description: 'Dodaj źródło zaopatrzenia.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź ceny zakupu.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź braki do wysyłki', description: 'Zobacz co trzeba domówić.', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  beauty: {
+    title: 'Ustaw zużycie produktów na zabiegi',
+    steps: [
+      { id: 'add_product', label: 'Dodaj produkty kosmetyczne', description: 'Dodaj kosmetyki, materiały jednorazowe.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę kosmetyków', description: 'Dodaj hurtownię beauty.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn salonu', description: 'Utwórz magazyn np. salon, zaplecze.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź ceny produktów.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź co się kończy', description: 'Zobacz produkty do domówienia.', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  floristry_decor: {
+    title: 'Przygotuj kompozycje i świeżość produktów',
+    steps: [
+      { id: 'add_product', label: 'Dodaj kwiaty i dodatki', description: 'Dodaj kwiaty, zielone, wstążki, papier.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę kwiatów', description: 'Dodaj hurtownię florystyczną.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn kwiaciarni', description: 'Utwórz magazyn np. chłodnia, sklep.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź ceny dostaw.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź produkty krótkoterminowe', description: 'Co może się zmarnować?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  hospitality: {
+    title: 'Przygotuj obsługę apartamentów',
+    steps: [
+      { id: 'add_warehouse', label: 'Dodaj magazyn środków czystości', description: 'Utwórz magazyn np. magazyn chemii.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_product', label: 'Dodaj produkty: ręczniki, pościel, chemia', description: 'Dodaj wszystko co zużywasz w obiektach.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę', description: 'Dodaj hurtownię chemii lub tekstyliów.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź koszty zakupów.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź braki przed sprzątaniem', description: 'Co trzeba domówić?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  cleaning_facility: {
+    title: 'Zbuduj pierwszy pakiet sprzątania',
+    steps: [
+      { id: 'add_product', label: 'Dodaj środki czystości', description: 'Dodaj chemię, rękawiczki, worki.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn', description: 'Utwórz magazyn środków.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę chemii', description: 'Dodaj hurtownię.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź koszty środków.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź braki', description: 'Co trzeba domówić na zlecenia?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  workshop_service: {
+    title: 'Przygotuj zlecenia serwisowe',
+    steps: [
+      { id: 'add_product', label: 'Dodaj części i materiały', description: 'Dodaj części zamienne, oleje, filtry.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn warsztatu', description: 'Utwórz magazyn np. warsztat, regał.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę części', description: 'Dodaj hurtownię motoryzacyjną.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź ceny części.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź brakujące części', description: 'Co blokuje zlecenia?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  production_craft: {
+    title: 'Zbuduj pierwszą recepturę produkcyjną',
+    steps: [
+      { id: 'add_product', label: 'Dodaj materiały i surowce', description: 'Dodaj drewno, tkaninę, farbę, klej.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn materiałów', description: 'Utwórz magazyn np. pracownia, skład.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę surowców', description: 'Dodaj źródło materiałów.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź koszty materiałów.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź braki materiałowe', description: 'Co blokuje produkcję?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  construction: {
+    title: 'Przygotuj materiały na budowę',
+    steps: [
+      { id: 'add_product', label: 'Dodaj materiały budowlane', description: 'Dodaj cement, płytki, farby, narzędzia.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn budowy', description: 'Utwórz magazyn np. plac budowy, skład.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę materiałów', description: 'Dodaj skład budowlany, hurtownię.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź koszty materiałów.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź braki na budowie', description: 'Co może opóźnić realizację?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  health_care: {
+    title: 'Ustaw kontrolę materiałów gabinetowych',
+    steps: [
+      { id: 'add_product', label: 'Dodaj materiały jednorazowe', description: 'Dodaj rękawiczki, maseczki, igły, leki.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn gabinetu', description: 'Utwórz magazyn np. gabinet, magazyn.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę medycznego', description: 'Dodaj hurtownię medyczną.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź koszty materiałów.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź krótkie daty i braki', description: 'Co się kończy w gabinecie?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+  fitness_recreation: {
+    title: 'Skontroluj sprzęt i wypożyczenia',
+    steps: [
+      { id: 'add_product', label: 'Dodaj sprzęt', description: 'Dodaj piłki, maty, hantle, rowery.', route: '/towary', ctaLabel: 'Dodaj produkt', detection: 'products' },
+      { id: 'add_warehouse', label: 'Dodaj magazyn sprzętu', description: 'Utwórz magazyn np. siłownia, wypożyczalnia.', route: '/magazyny', ctaLabel: 'Dodaj magazyn', detection: 'warehouses' },
+      { id: 'add_contractor', label: 'Dodaj dostawcę sprzętu', description: 'Dodaj hurtownię sportową.', route: '/kontrahenci', ctaLabel: 'Dodaj dostawcę', detection: 'contractors' },
+      { id: 'upload_invoice', label: 'Wgraj fakturę', description: 'Śledź koszty zakupów.', route: '/faktury', ctaLabel: 'Wgraj fakturę', detection: 'invoices' },
+      { id: 'check_alerts', label: 'Sprawdź stan sprzętu', description: 'Co wymaga uwagi?', route: '/alerty', ctaLabel: 'Sprawdź alerty', detection: null },
+    ],
+  },
+}
+
+export function getFirstUseFlowFor(categoryId) {
+  return FIRST_USE_FLOWS[categoryId] || FIRST_USE_FLOWS.general
+}
