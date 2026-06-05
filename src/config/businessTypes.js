@@ -15,6 +15,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Zarządzaj towarami, stanami i fakturami w jednym miejscu.',
+    assistantWelcomeMessage: 'Analizuj faktury, ceny, dostawców, magazyn i rekomendacje zakupowe',
+    assistantHelperCards: [
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur, dostawców i trendów zakupowych.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Niskie stany', description: 'Towary poniżej minimum magazynowego lub bliskie zera.', badge: 'Magazyn', example: 'Pokaż niskie stany' },
+      { title: 'Co zamówić?', description: 'Rekomendacje zakupowe na podstawie stanów i historii.', badge: 'Magazyn', example: 'Co powinienem zamówić?' },
+      { title: 'Zmiany cen', description: 'Które towary najbardziej podrożały lub staniały.', badge: 'Ceny', example: 'Co najbardziej podrożało?' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami, brakami lub anomaliami cenowymi.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+      { title: 'Porównanie dostawców', description: 'Ranking dostawców według cen i sumarycznych wydatków.', badge: 'Dostawcy', example: 'Porównaj dostawców' },
+    ],
     searchAliases: ['magazyn', 'ogólny', 'uniwersalny', 'firma', 'biuro', 'inne'],
   },
   {
@@ -39,6 +48,15 @@ export const BUSINESS_CATEGORIES = [
       'Sprawdź faktury od dostawców żywności',
     ],
     helperDescription: 'Kontroluj zaplecze kuchni, dostawy i stany produktów spożywczych.',
+    assistantWelcomeMessage: 'Kontroluj składniki, dostawy żywności i stany kuchenne',
+    assistantHelperCards: [
+      { title: 'Co kończy się w kuchni?', description: 'Składniki i produkty z niskim stanem lub brakiem.', badge: 'Magazyn', example: 'Co kończy się przed weekendem?' },
+      { title: 'Co domówić?', description: 'Lista produktów do uzupełnienia na podstawie stanów.', badge: 'Magazyn', example: 'Co powinienem domówić do kuchni?' },
+      { title: 'Ceny dostawców żywności', description: 'Które produkty spożywcze podrożały ostatnio.', badge: 'Ceny', example: 'Które produkty spożywcze podrożały?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i wydatków na zaopatrzenie kuchni.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury od dostawców', description: 'Faktury z błędami lub wymagające sprawdzenia.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+      { title: 'Najtańszy dostawca', description: 'Porównanie dostawców żywności według cen.', badge: 'Dostawcy', example: 'Porównaj dostawców' },
+    ],
     searchAliases: ['kebab', 'bar', 'kawiarnia', 'piekarnia', 'catering', 'pizza', 'sushi', 'restauracja', 'fast food', 'jedzenie', 'kuchnia', 'food truck', 'bistro', 'cukiernia'],
   },
   {
@@ -69,6 +87,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj stanów, rotacji i cen w sklepie.',
+    assistantWelcomeMessage: 'Zarządzaj stanem sklepu, rotacją produktów i cenami dostawców',
+    assistantHelperCards: [
+      { title: 'Niskie stany sklepowe', description: 'Produkty na wyczerpaniu w sklepie lub zapleczu.', badge: 'Magazyn', example: 'Które produkty mają niski stan?' },
+      { title: 'Zalegające produkty', description: 'Towary bez ruchu, które zajmują miejsce na półce.', badge: 'Magazyn', example: 'Które produkty zalegają w sklepie?' },
+      { title: 'Co domówić?', description: 'Lista produktów do zamówienia na podstawie stanów.', badge: 'Magazyn', example: 'Co powinienem domówić?' },
+      { title: 'Podwyżki cen', description: 'Które produkty najbardziej podrożały u dostawców.', badge: 'Ceny', example: 'Co najbardziej podrożało u dostawców?' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub niezatwierdzone dostawy.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+      { title: 'Porównanie dostawców', description: 'Ranking dostawców według indeksu cenowego.', badge: 'Dostawcy', example: 'Porównaj dostawców' },
+    ],
     searchAliases: ['sklep', 'odzież', 'spożywczy', 'elektronika', 'zabawki', 'kiosk', 'warzywniak', 'kosmetyki', 'zoologiczny', 'delikatesy', 'market'],
   },
   {
@@ -93,6 +120,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Kontroluj stany magazynowe i ceny dla sprzedaży online.',
+    assistantWelcomeMessage: 'Pilnuj stanów do wysyłki, cen zakupowych i alertów cenowych',
+    assistantHelperCards: [
+      { title: 'Stany do wysyłki', description: 'Produkty z niskim stanem lub brakiem do wysyłki.', badge: 'Magazyn', example: 'Które produkty mają niski stan?' },
+      { title: 'Zalegające produkty', description: 'Towary bez ruchu, które blokują magazyn wysyłkowy.', badge: 'Magazyn', example: 'Które produkty zalegają w magazynie?' },
+      { title: 'Co uzupełnić?', description: 'Produkty do domówienia, żeby nie zatrzymywać zamówień.', badge: 'Magazyn', example: 'Co powinienem domówić do sklepu online?' },
+      { title: 'Podwyżki cen', description: 'Które produkty podrożały u dostawców.', badge: 'Ceny', example: 'Co najbardziej podrożało u dostawców?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów zaopatrzenia.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub brakami produktów.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['allegro', 'sklep online', 'ecommerce', 'marketplace', 'shopify', 'woocommerce', 'olx', 'wysyłka', 'kompletacja', 'e-commerce'],
   },
   {
@@ -119,6 +155,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj zapasów kosmetyków, materiałów jednorazowych i produktów do sprzedaży.',
+    assistantWelcomeMessage: 'Kontroluj kosmetyki, materiały jednorazowe i koszty usług',
+    assistantHelperCards: [
+      { title: 'Kosmetyki do domówienia', description: 'Produkty do zabiegów z niskim stanem.', badge: 'Magazyn', example: 'Które kosmetyki trzeba domówić?' },
+      { title: 'Produkty do odsprzedaży', description: 'Towary sprzedawane klientom z niskim stanem.', badge: 'Magazyn', example: 'Które produkty do odsprzedaży mają niski stan?' },
+      { title: 'Materiały jednorazowe', description: 'Rękawiczki, patyczki i jednorazowe akcesoria.', badge: 'Magazyn', example: 'Czy mam zapas produktów jednorazowych?' },
+      { title: 'Podwyżki u dostawców', description: 'Które kosmetyki lub materiały podrożały.', badge: 'Ceny', example: 'Co najbardziej podrożało u dostawców?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów zaopatrzenia salonu.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub niezatwierdzone.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['fryzjer', 'kosmetyczka', 'paznokcie', 'barber', 'salon', 'spa', 'masaż', 'tatuaż', 'stylizacja', 'beauty', 'uroda'],
   },
   {
@@ -140,6 +185,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Zarządzaj zapasami kwiatów, dekoracji i materiałów sezonowych.',
+    assistantWelcomeMessage: 'Zarządzaj kwiatami, dekoracjami i sezonowymi stanami',
+    assistantHelperCards: [
+      { title: 'Niskie stany kwiatów', description: 'Kwiaty i materiały florystyczne do uzupełnienia.', badge: 'Magazyn', example: 'Które produkty mają niski stan?' },
+      { title: 'Co domówić?', description: 'Kwiaty, zieleń i dodatki do zamówienia przed sezonem.', badge: 'Magazyn', example: 'Co trzeba domówić przed sezonem?' },
+      { title: 'Zalegające dekoracje', description: 'Produkty bez ruchu, które można wyprzedać lub użyć.', badge: 'Magazyn', example: 'Które kwiaty lub dekoracje zalegają?' },
+      { title: 'Zmiany cen', description: 'Które kwiaty lub dekoracje podrożały u dostawców.', badge: 'Ceny', example: 'Co podrożało u dostawców?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i wydatków na materiały.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub wymagające uwagi.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['kwiaty', 'dekoracje', 'florystyka', 'kwiaciarnia', 'bukiety', 'kompozycje', 'ślub', 'event', 'ozdoby'],
   },
   {
@@ -164,6 +218,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Kontroluj zapasy chemii, pościeli, ręczników i wyposażenia obiektu.',
+    assistantWelcomeMessage: 'Kontroluj chemię, pościel, ręczniki i wyposażenie obiektów',
+    assistantHelperCards: [
+      { title: 'Chemia i pościel', description: 'Sprawdź zapas środków czystości i tekstyliów.', badge: 'Magazyn', example: 'Czy wystarczy chemii i pościeli?' },
+      { title: 'Co domówić do obiektu?', description: 'Wyposażenie i artykuły wymagające uzupełnienia.', badge: 'Magazyn', example: 'Co trzeba domówić do obiektu?' },
+      { title: 'Ceny środków czystości', description: 'Które środki podrożały u dostawców.', badge: 'Ceny', example: 'Które środki czystości podrożały?' },
+      { title: 'Porównanie dostawców', description: 'Który dostawca chemii jest najtańszy.', badge: 'Dostawcy', example: 'Porównaj dostawców' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie wydatków na zaopatrzenie obiektu.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub brakami pozycji.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['apartamenty', 'wynajem', 'pensjonat', 'hotel', 'hostel', 'noclegi', 'airbnb', 'booking', 'turystyka', 'obiekt'],
   },
   {
@@ -189,6 +252,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj części, materiałów eksploatacyjnych i stanów w serwisie.',
+    assistantWelcomeMessage: 'Zarządzaj częściami, materiałami eksploatacyjnymi i zleceniami',
+    assistantHelperCards: [
+      { title: 'Brakujące części', description: 'Części i materiały z niskim stanem lub brakiem.', badge: 'Magazyn', example: 'Których części lub materiałów brakuje?' },
+      { title: 'Co domówić?', description: 'Materiały do zlecenia — co blokuje serwis.', badge: 'Magazyn', example: 'Co trzeba domówić do serwisu?' },
+      { title: 'Materiały eksploatacyjne', description: 'Oleje, filtry i materiały eksploatacyjne do uzupełnienia.', badge: 'Magazyn', example: 'Które materiały eksploatacyjne mają niski stan?' },
+      { title: 'Podwyżki cen', description: 'Które części lub materiały podrożały u dostawców.', badge: 'Ceny', example: 'Co najbardziej podrożało u dostawców?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów zaopatrzenia serwisu.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub brakami pozycji.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['warsztat', 'serwis', 'mechanik', 'rower', 'IT', 'GSM', 'naprawa', 'instalacja', 'elektryk', 'hydraulik'],
   },
   {
@@ -213,6 +285,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Kontroluj zapasy chemii, rękawiczek, worków i środków czystości.',
+    assistantWelcomeMessage: 'Kontroluj środki czystości, materiały i koszty zleceń',
+    assistantHelperCards: [
+      { title: 'Chemia na zlecenia', description: 'Czy środki czystości wystarczą na zaplanowane zlecenia.', badge: 'Magazyn', example: 'Czy wystarczy chemii na najbliższe zlecenia?' },
+      { title: 'Niskie stany środków', description: 'Środki czystości wymagające uzupełnienia.', badge: 'Magazyn', example: 'Które środki czystości mają niski stan?' },
+      { title: 'Zapas materiałów', description: 'Rękawiczki, worki i drobne materiały do sprawdzenia.', badge: 'Magazyn', example: 'Czy mamy zapas rękawiczek i worków?' },
+      { title: 'Zmiany cen', description: 'Które środki lub materiały podrożały u dostawców.', badge: 'Ceny', example: 'Co podrożało u dostawców?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów zaopatrzenia.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub niezatwierdzone dostawy.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['sprzątanie', 'pralnia', 'cleaning', 'housekeeping', 'czystość', 'firma sprzątająca', 'biuro', 'obiekt'],
   },
   {
@@ -236,6 +317,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Zarządzaj surowcami, półproduktami i materiałami do produkcji.',
+    assistantWelcomeMessage: 'Zarządzaj surowcami, materiałami i kosztami produkcji',
+    assistantHelperCards: [
+      { title: 'Brakujące surowce', description: 'Materiały i surowce z niedoborem w pracowni.', badge: 'Magazyn', example: 'Których surowców brakuje?' },
+      { title: 'Co domówić?', description: 'Materiały do zamówienia, żeby nie zatrzymać produkcji.', badge: 'Magazyn', example: 'Co trzeba domówić do pracowni?' },
+      { title: 'Niskie stany materiałów', description: 'Materiały bliskie wyczerpania do uzupełnienia.', badge: 'Magazyn', example: 'Które materiały mają niski stan?' },
+      { title: 'Podwyżki materiałów', description: 'Które surowce lub materiały podrożały.', badge: 'Ceny', example: 'Które materiały podrożały?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów materiałów produkcyjnych.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub brakami pozycji.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['drukarnia', 'stolarnia', 'szycie', 'handmade', 'rękodzieło', 'produkcja', 'szwalnia', 'meble', 'drewno'],
   },
   {
@@ -258,6 +348,15 @@ export const BUSINESS_CATEGORIES = [
       'Pokaż faktury do weryfikacji',
     ],
     helperDescription: 'Pilnuj materiałów budowlanych, narzędzi i zapasów na projekty.',
+    assistantWelcomeMessage: 'Pilnuj materiałów budowlanych, narzędzi i kosztów projektów',
+    assistantHelperCards: [
+      { title: 'Brakujące materiały', description: 'Materiały budowlane z niedoborem na placu budowy.', badge: 'Magazyn', example: 'Których materiałów brakuje?' },
+      { title: 'Co domówić na projekt?', description: 'Materiały do zamówienia, żeby nie opóźnić robót.', badge: 'Magazyn', example: 'Co trzeba domówić na projekt?' },
+      { title: 'Podwyżki materiałów', description: 'Które materiały budowlane podrożały ostatnio.', badge: 'Ceny', example: 'Które materiały budowlane podrożały?' },
+      { title: 'Narzędzia i materiały', description: 'Narzędzia i materiały z niskim stanem.', badge: 'Magazyn', example: 'Pokaż niskie stany narzędzi i materiałów' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów materiałów.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub wymagające weryfikacji.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['budowa', 'remont', 'wykończenie', 'materiały budowlane', 'skład', 'płytki', 'farby', 'cement', 'instalacje'],
   },
   {
@@ -282,6 +381,15 @@ export const BUSINESS_CATEGORIES = [
       'Co podrożało u dostawców?',
     ],
     helperDescription: 'Kontroluj materiały jednorazowe, środki dezynfekcji i zapasy gabinetu.',
+    assistantWelcomeMessage: 'Kontroluj materiały jednorazowe, środki dezynfekcji i zapasy gabinetu',
+    assistantHelperCards: [
+      { title: 'Materiały jednorazowe', description: 'Rękawiczki, maseczki, igły — co się kończy w gabinecie.', badge: 'Magazyn', example: 'Których materiałów jednorazowych brakuje?' },
+      { title: 'Niskie stany gabinetu', description: 'Produkty z niedoborem wymagające uzupełnienia.', badge: 'Magazyn', example: 'Co ma niski stan w gabinecie?' },
+      { title: 'Zamówienie na tydzień', description: 'Co trzeba domówić przed kolejnymi wizytami.', badge: 'Magazyn', example: 'Co trzeba domówić przed kolejnym tygodniem?' },
+      { title: 'Podwyżki dostawców', description: 'Które materiały lub produkty medyczne podrożały.', badge: 'Ceny', example: 'Co podrożało u dostawców?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów zaopatrzenia gabinetu.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+      { title: 'Faktury do weryfikacji', description: 'Faktury z błędami lub niezatwierdzone dostawy.', badge: 'Faktury', example: 'Pokaż faktury do weryfikacji' },
+    ],
     searchAliases: ['gabinet', 'stomatolog', 'fizjo', 'weterynarz', 'optyk', 'lekarz', 'klinika', 'przychodnia', 'apteka', 'medyczny'],
   },
   {
@@ -305,6 +413,15 @@ export const BUSINESS_CATEGORIES = [
       'Co najbardziej podrożało?',
     ],
     helperDescription: 'Zarządzaj zapasami sprzętu, środków czystości i akcesoriów w obiekcie.',
+    assistantWelcomeMessage: 'Zarządzaj sprzętem, akcesoriami i środkami czystości obiektu',
+    assistantHelperCards: [
+      { title: 'Środki czystości', description: 'Zapas środków do utrzymania czystości obiektu.', badge: 'Magazyn', example: 'Czy mamy zapas środków czystości?' },
+      { title: 'Produkty do sprzedaży', description: 'Odżywki, akcesoria i napoje do uzupełnienia.', badge: 'Magazyn', example: 'Które produkty do sprzedaży mają niski stan?' },
+      { title: 'Wyposażenie obiektu', description: 'Sprzęt i materiały do domówienia.', badge: 'Magazyn', example: 'Co trzeba domówić do obiektu?' },
+      { title: 'Akcesoria sportowe', description: 'Akcesoria sportowe wymagające uzupełnienia.', badge: 'Magazyn', example: 'Które akcesoria wymagają uzupełnienia?' },
+      { title: 'Podwyżki cen', description: 'Co podrożało u dostawców sprzętu i materiałów.', badge: 'Ceny', example: 'Co najbardziej podrożało?' },
+      { title: 'Dashboard zakupów', description: 'Podsumowanie faktur i kosztów zaopatrzenia.', badge: 'Zakupy', example: 'Pokaż dashboard zakupów' },
+    ],
     searchAliases: ['siłownia', 'klub', 'wypożyczalnia', 'rowery', 'sport', 'basen', 'taniec', 'fitness', 'joga', 'trening'],
   },
 ]
@@ -330,6 +447,14 @@ export function getCategoryLabel(id) {
 
 export function getHelperDescriptionFor(categoryId) {
   return getCategoryById(categoryId).helperDescription
+}
+
+export function getHelperCardsFor(categoryId) {
+  return getCategoryById(categoryId).assistantHelperCards
+}
+
+export function getWelcomeMessageFor(categoryId) {
+  return getCategoryById(categoryId).assistantWelcomeMessage
 }
 
 const FIRST_USE_FLOWS = {

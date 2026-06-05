@@ -7,7 +7,7 @@ import AssistantMessage from './AssistantMessage'
 import AssistantResult from './AssistantResult'
 import AssistantCommandHelp from './AssistantCommandHelp'
 import { supabase } from '../../supabase'
-import { getQuickPromptsFor } from '../../config/businessTypes'
+import { getQuickPromptsFor, getHelperCardsFor, getWelcomeMessageFor } from '../../config/businessTypes'
 
 let msgCounter = 0
 function nextId() { return ++msgCounter }
@@ -52,14 +52,19 @@ export default function AssistantChat() {
       })
   }, [workspaceId])
 
+  const categoryId = getBusinessCategory()
+
   const quickPrompts = useMemo(() => {
-    const categoryPrompts = getQuickPromptsFor(getBusinessCategory())
+    const categoryPrompts = getQuickPromptsFor(categoryId)
     if (sampleProduct) {
       const short = sampleProduct.length > 20 ? sampleProduct.slice(0, 20) + '…' : sampleProduct
       return [...categoryPrompts, `Historia ceny ${short}`, `Znajdź towar ${short}`, `Ustaw alert na ${short} 15%`]
     }
     return [...categoryPrompts, 'Znajdź towar (wpisz nazwę)', 'Ustaw alert cenowy (wpisz nazwę)']
-  }, [sampleProduct, getBusinessCategory])
+  }, [sampleProduct, categoryId])
+
+  const helperCards = useMemo(() => getHelperCardsFor(categoryId), [categoryId])
+  const welcomeMessage = useMemo(() => getWelcomeMessageFor(categoryId), [categoryId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -135,7 +140,7 @@ export default function AssistantChat() {
             Asystent Magzic
           </h2>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-            Analizuj faktury, ceny, dostawców, magazyn i rekomendacje zakupowe
+            {welcomeMessage}
           </p>
         </div>
         <button
@@ -188,7 +193,7 @@ export default function AssistantChat() {
 
       {/* Help panel */}
       {showHelp && (
-        <AssistantCommandHelp onExampleClick={text => sendMessage(text)} />
+        <AssistantCommandHelp onExampleClick={text => sendMessage(text)} helperCards={helperCards} />
       )}
 
       {/* Messages */}

@@ -1,7 +1,7 @@
-import { ASSISTANT_COMMANDS, BADGE_COLORS } from './assistantCommandCatalog'
+import { BADGE_COLORS } from './assistantCommandCatalog'
 
-function CommandCard({ cmd, onExampleClick }) {
-  const badge = BADGE_COLORS[cmd.badge] ?? { bg: 'var(--table-sub)', color: 'var(--muted)' }
+function HelperCard({ card, onExampleClick }) {
+  const badge = BADGE_COLORS[card.badge] ?? { bg: 'var(--table-sub)', color: 'var(--muted)' }
   return (
     <div
       className="rounded-xl p-3 flex flex-col gap-2"
@@ -12,45 +12,34 @@ function CommandCard({ cmd, onExampleClick }) {
           className="text-xs font-medium rounded-md px-1.5 py-0.5"
           style={{ background: badge.bg, color: badge.color, fontSize: 10 }}
         >
-          {cmd.badge}
+          {card.badge}
         </span>
-        {cmd.requiresProductQuery && (
-          <span
-            className="text-xs rounded-md px-1.5 py-0.5"
-            style={{ background: 'var(--table-sub)', color: 'var(--muted)', border: '1px solid var(--border)', fontSize: 10 }}
-          >
-            + nazwa produktu
-          </span>
-        )}
       </div>
       <p className="font-semibold leading-tight" style={{ fontSize: 12, color: 'var(--text)' }}>
-        {cmd.title}
+        {card.title}
       </p>
       <p className="leading-relaxed" style={{ fontSize: 11, color: 'var(--text-2)' }}>
-        {cmd.description}
+        {card.description}
       </p>
       <div className="flex flex-wrap gap-1 mt-0.5">
-        {cmd.examples.slice(0, 2).map(ex => (
-          <button
-            key={ex}
-            onClick={() => onExampleClick(ex)}
-            className="rounded-md px-2 py-0.5 transition-opacity hover:opacity-80 active:opacity-60"
-            style={{
-              background: 'var(--table-sub)',
-              color: 'var(--text-2)',
-              border: '1px solid var(--border)',
-              fontSize: 11,
-            }}
-          >
-            {ex}
-          </button>
-        ))}
+        <button
+          onClick={() => onExampleClick(card.example)}
+          className="rounded-md px-2 py-0.5 transition-opacity hover:opacity-80 active:opacity-60"
+          style={{
+            background: 'var(--table-sub)',
+            color: 'var(--text-2)',
+            border: '1px solid var(--border)',
+            fontSize: 11,
+          }}
+        >
+          {card.example}
+        </button>
       </div>
     </div>
   )
 }
 
-export default function AssistantCommandHelp({ onExampleClick }) {
+export default function AssistantCommandHelp({ onExampleClick, helperCards }) {
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
       <div
@@ -68,8 +57,8 @@ export default function AssistantCommandHelp({ onExampleClick }) {
         className="px-4 pb-3 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"
         style={{ maxHeight: 340, background: 'var(--bg)' }}
       >
-        {ASSISTANT_COMMANDS.map(cmd => (
-          <CommandCard key={cmd.intent} cmd={cmd} onExampleClick={onExampleClick} />
+        {(helperCards || []).map((card, i) => (
+          <HelperCard key={i} card={card} onExampleClick={onExampleClick} />
         ))}
       </div>
     </div>
