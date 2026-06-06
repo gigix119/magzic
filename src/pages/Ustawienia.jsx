@@ -9,6 +9,9 @@ import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
 import { getAllSettings } from '../utils/workspaceSettings'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isValidUUID(v) { return typeof v === 'string' && UUID_RE.test(v) }
+
 const TABS = [
   { id: 'profil',        icon: '👤', label: 'Profil',        short: 'Profil'   },
   { id: 'firma',         icon: '🏢', label: 'Firma i branża', short: 'Firma'    },
@@ -115,7 +118,7 @@ function TabProfil({ user }) {
 
   async function handleSave(ev) {
     ev.preventDefault()
-    if (!user?.id) { addToast('Brak sesji użytkownika', 'error'); return }
+    if (!isValidUUID(user?.id)) { addToast('Brak sesji użytkownika', 'error'); return }
     setSaving(true)
     const { error } = await supabase.from('profiles').upsert({
       id: user.id,
@@ -138,7 +141,7 @@ function TabProfil({ user }) {
   }
 
   async function handleMarketingToggle(val) {
-    if (!user?.id) return
+    if (!isValidUUID(user?.id)) return
     setMarketing(val)
     setSavingConsent(true)
     await supabase.from('user_consents').upsert(
@@ -272,24 +275,29 @@ function TabFirma({ user, workspaceId, refreshWorkspace }) {
 
   async function handleSaveFirma(ev) {
     ev.preventDefault()
-    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
+    const wsId = ws?.id || workspaceId
+    if (!isValidUUID(wsId)) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSavingFirma(true)
     const { error } = await supabase.from('workspaces').update({
       company_name: firmaForm.company_name.trim() || null,
       nip: firmaForm.nip.trim() || null,
-    }).eq('id', workspaceId)
+    }).eq('id', wsId)
     if (error) addToast(error.message, 'error')
     else addToast('Dane firmy zapisane', 'success')
     setSavingFirma(false)
   }
 
   async function handleSaveCategory() {
-    if (!pickerCat || !workspaceId) return
+    const wsId = ws?.id || workspaceId
+    if (!pickerCat || !isValidUUID(wsId)) {
+      addToast('Brak workspace — odśwież stronę', 'error')
+      return
+    }
     setSavingCategory(true)
     const { error } = await supabase.from('workspaces').update({
       business_category: pickerCat.id,
       business_subcategory: pickerSub || null,
-    }).eq('id', workspaceId)
+    }).eq('id', wsId)
     if (error) { addToast(error.message, 'error') }
     else {
       setWs(w => ({ ...w, business_category: pickerCat.id, business_subcategory: pickerSub || null }))
@@ -509,7 +517,7 @@ function TabMagazyn({ workspace, workspaceId, refreshWorkspace }) {
 
   async function handleSave(ev) {
     ev.preventDefault()
-    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
+    if (!isValidUUID(workspaceId)) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSaving(true)
     const newSettings = {
       ...(workspace?.settings || {}),
@@ -645,7 +653,7 @@ function TabPowiadomienia({ workspace, workspaceId, refreshWorkspace }) {
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
   async function handleSave() {
-    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
+    if (!isValidUUID(workspaceId)) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSaving(true)
     const newSettings = { ...(workspace?.settings || {}), ...form }
     const { error } = await supabase.from('workspaces').update({ settings: newSettings }).eq('id', workspaceId)
@@ -733,7 +741,7 @@ function TabWyglad({ workspace, workspaceId, refreshWorkspace }) {
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
   async function handleSave() {
-    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
+    if (!isValidUUID(workspaceId)) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSaving(true)
     const newSettings = { ...(workspace?.settings || {}), ...form }
     const { error } = await supabase.from('workspaces').update({ settings: newSettings }).eq('id', workspaceId)
