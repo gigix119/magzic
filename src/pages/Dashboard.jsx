@@ -4,6 +4,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import FirstUseSteps from '../components/FirstUseSteps'
+import BriefingCard from '../components/BriefingCard'
 import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
@@ -182,6 +183,7 @@ export default function Dashboard() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dashboard</h1>
         </div>
         <FirstUseSteps />
+        <BriefingCard />
         <div className="rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <OnboardingScreen />
         </div>
@@ -197,6 +199,7 @@ export default function Dashboard() {
       </div>
 
       <FirstUseSteps />
+      <BriefingCard />
 
       {error && (
         <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#dc2626' }}>

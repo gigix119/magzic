@@ -593,3 +593,23 @@ const FIRST_USE_FLOWS = {
 export function getFirstUseFlowFor(categoryId) {
   return FIRST_USE_FLOWS[categoryId] || FIRST_USE_FLOWS.general
 }
+
+const BRIEFING_TITLES = {
+  general: 'Co musisz dziś zrobić?',
+  gastronomy: 'Co musisz dziś zrobić w kuchni?',
+  retail: 'Co musisz dziś zrobić w sklepie?',
+  ecommerce: 'Co musisz dziś zrobić z zamówieniami?',
+  beauty: 'Co musisz dziś zrobić w salonie?',
+  floristry_decor: 'Co musisz dziś zrobić w kwiaciarni?',
+  hospitality: 'Co musisz dziś zrobić w obiektach?',
+  cleaning_facility: 'Co musisz dziś zrobić przed zleceniami?',
+  workshop_service: 'Co musisz dziś zrobić w warsztacie?',
+  production_craft: 'Co musisz dziś zrobić w pracowni?',
+  construction: 'Co musisz dziś zrobić na budowie?',
+  health_care: 'Co musisz dziś zrobić w gabinecie?',
+  fitness_recreation: 'Co musisz dziś zrobić na obiekcie?',
+}
+
+export function getBriefingTitleFor(categoryId) {
+  return BRIEFING_TITLES[categoryId] || 'Co musisz dziś zrobić?'
+}
