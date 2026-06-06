@@ -292,7 +292,7 @@ export default function Layout() {
             {typeof Icon === 'string'
               ? <span style={{ fontSize: 20, lineHeight: 1 }}>{Icon}</span>
               : <Icon size={20} />}
-            <span style={{ fontSize: 10, fontWeight: 500 }}>{label}</span>
+            <span style={{ fontSize: 11, fontWeight: 500 }}>{label}</span>
             {showBadge && alertCount > 0 && (
               <span style={{
                 position: 'absolute', top: 4, right: 8,

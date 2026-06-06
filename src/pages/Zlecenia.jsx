@@ -165,7 +165,7 @@ export default function Zlecenia() {
             onClick={() => setStatusFilter(tab.key)}
             className="rounded-full px-4 text-sm font-medium flex-shrink-0 transition-colors"
             style={{
-              minHeight: 36,
+              minHeight: 44,
               background: statusFilter === tab.key ? '#3b82f6' : 'var(--card)',
               color: statusFilter === tab.key ? '#fff' : 'var(--text-2)',
               border: `1px solid ${statusFilter === tab.key ? '#3b82f6' : 'var(--border)'}`,

@@ -109,7 +109,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
             {loading ? (
               <div className="mt-1"><Skeleton w={140} h={11} /></div>
             ) : report ? (
-              <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+              <p className="mt-0.5" style={{ color: 'var(--muted)', fontSize: 13 }}>
                 {fromDate} – {toDate}.{toYear}
               </p>
             ) : null}
@@ -120,7 +120,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
         {/* Collapsed summary line */}
         {collapsed && !loading && !error && report && summaryLine && (
           <div className="px-4 pb-3" style={{ marginTop: -6 }}>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>{summaryLine}</p>
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>{summaryLine}</p>
           </div>
         )}
 
@@ -145,19 +145,19 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
               <>
                 {/* Spending */}
                 <div>
-                  <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>💰 Wydatki</p>
+                  <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>💰 Wydatki</p>
                   <p className="font-semibold" style={{ color: 'var(--text)', fontSize: 18, fontFamily: 'DM Mono, monospace' }}>
                     {fmt(report.spending.current)}
                   </p>
                   {changeLabel && (
-                    <p className="text-xs mt-0.5" style={{ color: changeLabel.color }}>{changeLabel.text}</p>
+                    <p className="mt-0.5" style={{ color: changeLabel.color, fontSize: 13 }}>{changeLabel.text}</p>
                   )}
                 </div>
 
                 {/* Invoices */}
                 {report.newInvoices > 0 && (
                   <div>
-                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>📄 Faktury</p>
+                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📄 Faktury</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {report.newInvoices} {report.newInvoices === 1 ? 'nowa faktura' : 'nowych faktur'} w tym tygodniu
                     </p>
@@ -167,7 +167,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Inventory */}
                 {(report.inventory.lowStock > 0 || report.inventory.deadStock > 0) && (
                   <div>
-                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>📦 Magazyn</p>
+                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📦 Magazyn</p>
                     {report.inventory.lowStock > 0 && (
                       <p className="text-sm" style={{ color: 'var(--text)' }}>
                         {report.inventory.lowStock} {report.inventory.lowStock === 1 ? 'produkt' : 'produktów'} z niskim stanem
@@ -184,7 +184,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Orders */}
                 {(report.orders.new > 0 || report.orders.completed > 0) && (
                   <div>
-                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>📋 Zlecenia</p>
+                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📋 Zlecenia</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {[
                         report.orders.new > 0 ? `${report.orders.new} nowe` : null,
@@ -197,7 +197,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Biggest price increase */}
                 {report.biggestPriceIncrease && (
                   <div>
-                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>📈 Największa podwyżka</p>
+                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📈 Największa podwyżka</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {report.biggestPriceIncrease.productName}: +{report.biggestPriceIncrease.changePercent}%
                     </p>
@@ -207,7 +207,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* New products */}
                 {report.newProducts > 0 && (
                   <div>
-                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>🆕 Nowe produkty</p>
+                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>🆕 Nowe produkty</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {report.newProducts} {report.newProducts === 1 ? 'produkt dodany' : 'produkty dodane'} w tym tygodniu
                     </p>
@@ -218,7 +218,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 <button
                   onClick={load}
                   className="w-full rounded-lg text-sm"
-                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 40, marginTop: 4 }}
+                  style={{ color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 44, marginTop: 4 }}
                 >
                   📊 Odśwież raport
                 </button>

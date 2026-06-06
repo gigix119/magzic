@@ -338,7 +338,7 @@ export default function ZlecenieDetail() {
               <button
                 onClick={() => toggleWydano(p)}
                 className="flex-shrink-0 flex items-center justify-center rounded-lg transition-colors"
-                style={{ width: 32, height: 32, background: p.wydano ? '#22c55e' : 'var(--border)', color: '#fff', border: 'none' }}
+                style={{ width: 44, height: 44, background: p.wydano ? '#22c55e' : 'var(--border)', color: '#fff', border: 'none' }}
                 title={p.wydano ? 'Oznacz jako niewydane' : 'Oznacz jako wydane'}
               >
                 {p.wydano && <Check size={14} />}

@@ -511,7 +511,7 @@ export default function Ustawienia() {
             onClick={() => setActiveTab(i)}
             className="rounded-lg px-4 text-sm font-medium flex-shrink-0 transition-colors"
             style={{
-              minHeight: 40,
+              minHeight: 44,
               background: activeTab === i ? '#3b82f6' : 'var(--card)',
               color: activeTab === i ? '#fff' : 'var(--text-2)',
               border: `1px solid ${activeTab === i ? '#3b82f6' : 'var(--border)'}`,

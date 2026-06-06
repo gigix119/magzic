@@ -49,7 +49,7 @@ function BriefingItem({ item, onNavigate }) {
           {item.title}
         </p>
         {item.description && (
-          <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0', lineHeight: 1.45 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '3px 0 0', lineHeight: 1.45 }}>
             {item.description}
           </p>
         )}
