@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { getWorkspaceSetting } from '../utils/workspaceSettings'
 import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import FirstUseSteps from '../components/FirstUseSteps'
@@ -80,7 +81,12 @@ function OnboardingScreen() {
 }
 
 export default function Dashboard() {
-  const { workspaceId, wsQuery, addWsFilter, getBusinessCategory } = useWorkspace()
+  const { workspaceId, workspace, wsQuery, addWsFilter, getBusinessCategory } = useWorkspace()
+  const showBriefing      = getWorkspaceSetting(workspace, 'briefing_on_dashboard')
+  const showWeeklyReport  = getWorkspaceSetting(workspace, 'weekly_report_on_dashboard')
+  const showStatCards     = getWorkspaceSetting(workspace, 'show_stat_cards')
+  const showChart         = getWorkspaceSetting(workspace, 'show_chart')
+  const showAttentionList = getWorkspaceSetting(workspace, 'show_attention_list')
   const [stats, setStats] = useState({})
   const [stockStatus, setStockStatus] = useState({ ok: 0, low: 0, empty: 0 })
   const [topAlerts, setTopAlerts] = useState([])
@@ -184,7 +190,7 @@ export default function Dashboard() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Dashboard</h1>
         </div>
         <FirstUseSteps />
-        <BriefingCard />
+        {showBriefing && <BriefingCard />}
         <div className="rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <OnboardingScreen />
         </div>
@@ -200,8 +206,8 @@ export default function Dashboard() {
       </div>
 
       <FirstUseSteps />
-      <BriefingCard />
-      <WeeklyReport workspaceId={workspaceId} businessCategory={getBusinessCategory()} />
+      {showBriefing && <BriefingCard />}
+      {showWeeklyReport && <WeeklyReport workspaceId={workspaceId} businessCategory={getBusinessCategory()} />}
 
       {error && (
         <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#dc2626' }}>
@@ -209,102 +215,110 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Row 1: main counts */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <StatCard icon={Package}   label="Towary"       value={stats.towary}      color="#3b82f6" />
-        <StatCard icon={Warehouse} label="Magazyny"     value={stats.magazyny}    color="#8b5cf6" />
-        <StatCard icon={Users}     label="Kontrahenci"  value={stats.kontrahenci} color="#10b981" />
-        <StatCard icon={FileText}  label="Faktury"      value={stats.faktury}     color="#f59e0b"
-          sub={stats.fakturyRobocze ? `${stats.fakturyRobocze} oczekuje` : undefined} />
-      </div>
-
-      {/* Row 2: stock status */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard icon={CheckCircle2}  label="Stany OK"       value={stockStatus.ok}    color="#22c55e" />
-        <StatCard icon={TrendingDown}  label="Stany Niskie"   value={stockStatus.low}   color="#f59e0b" />
-        <StatCard icon={AlertTriangle} label="Brak stanu"     value={stockStatus.empty} color="#ef4444" />
-      </div>
+      {/* Row 1 + 2: stat cards */}
+      {showStatCards && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <StatCard icon={Package}   label="Towary"       value={stats.towary}      color="#3b82f6" />
+            <StatCard icon={Warehouse} label="Magazyny"     value={stats.magazyny}    color="#8b5cf6" />
+            <StatCard icon={Users}     label="Kontrahenci"  value={stats.kontrahenci} color="#10b981" />
+            <StatCard icon={FileText}  label="Faktury"      value={stats.faktury}     color="#f59e0b"
+              sub={stats.fakturyRobocze ? `${stats.fakturyRobocze} oczekuje` : undefined} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <StatCard icon={CheckCircle2}  label="Stany OK"     value={stockStatus.ok}    color="#22c55e" />
+            <StatCard icon={TrendingDown}  label="Stany Niskie" value={stockStatus.low}   color="#f59e0b" />
+            <StatCard icon={AlertTriangle} label="Brak stanu"   value={stockStatus.empty} color="#ef4444" />
+          </div>
+        </>
+      )}
 
       {/* Row 3: chart + urgent alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-          <h2 className="font-medium mb-4" style={{ fontSize: 14, color: 'var(--text)' }}>Stan magazynowy — top 8 towarów</h2>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={isMobile ? 160 : 220}>
-              <BarChart data={chartData} barCategoryGap="30%">
-                <XAxis
-                  dataKey="name"
-                  tick={{ fill: 'var(--text-2)', fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  angle={isMobile ? -35 : 0}
-                  textAnchor={isMobile ? 'end' : 'middle'}
-                  height={isMobile ? 52 : 30}
-                />
-                <YAxis tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? '#3b82f6' : 'var(--border)'} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-sm py-8 text-center" style={{ color: 'var(--muted)' }}>Brak danych</p>
-          )}
-        </div>
-
-        <div className="rounded-xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <Bell size={16} style={{ color: alertCount > 0 ? '#f59e0b' : '#22c55e' }} />
-            <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Wymagają uwagi</h2>
-            {alertCount > 0 && <Badge variant="yellow">{alertCount}</Badge>}
-          </div>
-          {topAlerts.length === 0 ? (
-            <p className="text-sm py-8 text-center" style={{ color: 'var(--muted)' }}>Brak alertów — wszystko OK</p>
-          ) : (
-            <>
-              <div className="space-y-2 max-h-52 overflow-y-auto">
-                {topAlerts.map((a, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2.5"
-                    style={{ background: a.severity === 'critical' ? 'rgba(239,68,68,0.06)' : 'rgba(234,88,12,0.06)' }}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      {a.severity === 'critical'
-                        ? <AlertTriangle size={14} style={{ color: SEV_COLORS.critical, flexShrink: 0 }} />
-                        : <TrendingDown  size={14} style={{ color: SEV_COLORS.high, flexShrink: 0 }} />
-                      }
-                      <div className="min-w-0">
-                        <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>{a.msg}</p>
-                      </div>
-                    </div>
-                    <Badge variant={SEV_BADGE[a.severity]} style={{ flexShrink: 0, marginLeft: 8 }}>
-                      {SEV_LABELS[a.severity]}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-              {alertCount > 0 && (
-                <Link
-                  to="/alerty"
-                  className="md:hidden mt-2 flex items-center justify-center gap-1.5 w-full rounded-lg text-sm font-medium"
-                  style={{ color: '#3b82f6', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', minHeight: 44 }}
-                >
-                  Zobacz wszystkie alerty ({alertCount}) →
-                </Link>
+      {(showChart || showAttentionList) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {showChart && (
+            <div className="rounded-xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              <h2 className="font-medium mb-4" style={{ fontSize: 14, color: 'var(--text)' }}>Stan magazynowy — top 8 towarów</h2>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={isMobile ? 160 : 220}>
+                  <BarChart data={chartData} barCategoryGap="30%">
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: 'var(--text-2)', fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      angle={isMobile ? -35 : 0}
+                      textAnchor={isMobile ? 'end' : 'middle'}
+                      height={isMobile ? 52 : 30}
+                    />
+                    <YAxis tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? '#3b82f6' : 'var(--border)'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm py-8 text-center" style={{ color: 'var(--muted)' }}>Brak danych</p>
               )}
-            </>
+            </div>
           )}
 
-          {stats.fakturyRobocze > 0 && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
-              <Clock size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
-              <p className="text-sm" style={{ color: '#f59e0b' }}>
-                {stats.fakturyRobocze} {stats.fakturyRobocze === 1 ? 'faktura oczekuje' : 'faktury oczekują'} na zatwierdzenie
-              </p>
+          {showAttentionList && (
+            <div className="rounded-xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 mb-4">
+                <Bell size={16} style={{ color: alertCount > 0 ? '#f59e0b' : '#22c55e' }} />
+                <h2 className="font-medium" style={{ fontSize: 14, color: 'var(--text)' }}>Wymagają uwagi</h2>
+                {alertCount > 0 && <Badge variant="yellow">{alertCount}</Badge>}
+              </div>
+              {topAlerts.length === 0 ? (
+                <p className="text-sm py-8 text-center" style={{ color: 'var(--muted)' }}>Brak alertów — wszystko OK</p>
+              ) : (
+                <>
+                  <div className="space-y-2 max-h-52 overflow-y-auto">
+                    {topAlerts.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                        style={{ background: a.severity === 'critical' ? 'rgba(239,68,68,0.06)' : 'rgba(234,88,12,0.06)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {a.severity === 'critical'
+                            ? <AlertTriangle size={14} style={{ color: SEV_COLORS.critical, flexShrink: 0 }} />
+                            : <TrendingDown  size={14} style={{ color: SEV_COLORS.high, flexShrink: 0 }} />
+                          }
+                          <div className="min-w-0">
+                            <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{a.towar.nazwa}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-2)' }}>{a.msg}</p>
+                          </div>
+                        </div>
+                        <Badge variant={SEV_BADGE[a.severity]} style={{ flexShrink: 0, marginLeft: 8 }}>
+                          {SEV_LABELS[a.severity]}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  {alertCount > 0 && (
+                    <Link
+                      to="/alerty"
+                      className="md:hidden mt-2 flex items-center justify-center gap-1.5 w-full rounded-lg text-sm font-medium"
+                      style={{ color: '#3b82f6', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', minHeight: 44 }}
+                    >
+                      Zobacz wszystkie alerty ({alertCount}) →
+                    </Link>
+                  )}
+                </>
+              )}
+
+              {stats.fakturyRobocze > 0 && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <Clock size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                  <p className="text-sm" style={{ color: '#f59e0b' }}>
+                    {stats.fakturyRobocze} {stats.fakturyRobocze === 1 ? 'faktura oczekuje' : 'faktury oczekują'} na zatwierdzenie
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

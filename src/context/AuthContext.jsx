@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
           .eq('id', sessionUser.id)
           .maybeSingle(),
         supabase.from('workspaces')
-          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name')
+          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name, settings')
           .eq('owner_user_id', sessionUser.id)
           .maybeSingle(),
       ])
@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
         const { data: created, error: createErr } = await supabase
           .from('workspaces')
           .insert({ owner_user_id: sessionUser.id, name: 'Mój magazyn' })
-          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name')
+          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name, settings')
           .single()
         if (createErr) {
           console.error('[AuthContext] auto-create workspace failed:', createErr)
