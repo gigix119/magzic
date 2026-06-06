@@ -257,7 +257,7 @@ function TabFirma({ user, workspaceId, refreshWorkspace }) {
 
   useEffect(() => {
     async function fetchWs() {
-      if (!workspaceId) return
+      if (!workspaceId) { setLoading(false); return }
       const { data } = await supabase.from('workspaces').select('*').eq('id', workspaceId).single()
       if (data) {
         setWs(data)
