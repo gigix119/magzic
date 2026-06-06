@@ -35,18 +35,22 @@ export function AuthProvider({ children }) {
       setProfile(prof ?? null)
 
       if (wsErr) {
-        // Query error — keep existing workspace value, log for diagnostics
         console.error('[AuthContext] workspace query error:', wsErr)
+        // Fallback: query without settings column (migration may not have run yet)
+        const { data: wsFallback } = await supabase
+          .from('workspaces')
+          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name')
+          .eq('owner_user_id', sessionUser.id)
+          .maybeSingle()
+        if (wsFallback) setWorkspace(wsFallback)
       } else if (ws) {
         setWorkspace(ws)
       } else {
         // No workspace row found — auto-create one so the user can operate immediately.
-        // This handles users who registered before the handle_new_user_workspace trigger
-        // was added (i.e., no workspace was ever provisioned for them).
         const { data: created, error: createErr } = await supabase
           .from('workspaces')
           .insert({ owner_user_id: sessionUser.id, name: 'Mój magazyn' })
-          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name, settings')
+          .select('id, name, owner_user_id, business_category, business_subcategory, business_profile_completed, company_name')
           .single()
         if (createErr) {
           console.error('[AuthContext] auto-create workspace failed:', createErr)

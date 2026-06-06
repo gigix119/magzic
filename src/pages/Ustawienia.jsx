@@ -248,7 +248,7 @@ function TabProfil({ user }) {
 
 // ─── Tab 2: Firma i branża ────────────────────────────────────────────────────
 
-function TabFirma({ user, workspaceId, refreshWorkspace }) {
+function TabFirma({ user, workspaceId, workspace: ctxWorkspace, refreshWorkspace }) {
   const { addToast } = useToast()
   const [ws, setWs] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -262,21 +262,28 @@ function TabFirma({ user, workspaceId, refreshWorkspace }) {
 
   useEffect(() => {
     async function fetchWs() {
-      if (!workspaceId) { setLoading(false); return }
-      const { data } = await supabase.from('workspaces').select('*').eq('id', workspaceId).single()
+      if (!user?.id) { setLoading(false); return }
+      // Fetch by owner_user_id — works even if workspaceId from context is null (e.g. settings column missing)
+      const { data } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('owner_user_id', user.id)
+        .maybeSingle()
       if (data) {
         setWs(data)
         setFirmaForm({ company_name: data.company_name || '', nip: data.nip || '' })
+        // If context workspace is stale/missing, trigger refresh so workspaceId updates
+        if (!isValidUUID(workspaceId)) refreshWorkspace()
       }
       setLoading(false)
     }
     fetchWs()
-  }, [workspaceId])
+  }, [user?.id])
 
   async function handleSaveFirma(ev) {
     ev.preventDefault()
-    const wsId = ws?.id || workspaceId
-    if (!isValidUUID(wsId)) { addToast('Brak workspace — odśwież stronę', 'error'); return }
+    const wsId = ws?.id || ctxWorkspace?.id || workspaceId
+    if (!isValidUUID(wsId)) { addToast('Nie można zidentyfikować workspace — spróbuj ponownie', 'error'); return }
     setSavingFirma(true)
     const { error } = await supabase.from('workspaces').update({
       company_name: firmaForm.company_name.trim() || null,
@@ -288,9 +295,9 @@ function TabFirma({ user, workspaceId, refreshWorkspace }) {
   }
 
   async function handleSaveCategory() {
-    const wsId = ws?.id || workspaceId
+    const wsId = ws?.id || ctxWorkspace?.id || workspaceId
     if (!pickerCat || !isValidUUID(wsId)) {
-      addToast('Brak workspace — odśwież stronę', 'error')
+      addToast('Nie można zidentyfikować workspace — spróbuj ponownie', 'error')
       return
     }
     setSavingCategory(true)
@@ -840,7 +847,7 @@ export default function Ustawienia() {
       </div>
 
       {activeTab === 0 && <TabProfil user={user} />}
-      {activeTab === 1 && <TabFirma user={user} workspaceId={workspaceId} refreshWorkspace={refreshWorkspace} />}
+      {activeTab === 1 && <TabFirma user={user} workspaceId={workspaceId} workspace={workspace} refreshWorkspace={refreshWorkspace} />}
       {activeTab === 2 && <TabMagazyn workspace={workspace} workspaceId={workspaceId} refreshWorkspace={refreshWorkspace} />}
       {activeTab === 3 && <TabPowiadomienia workspace={workspace} workspaceId={workspaceId} refreshWorkspace={refreshWorkspace} />}
       {activeTab === 4 && <TabWyglad workspace={workspace} workspaceId={workspaceId} refreshWorkspace={refreshWorkspace} />}
