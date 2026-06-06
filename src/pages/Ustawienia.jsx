@@ -115,6 +115,7 @@ function TabProfil({ user }) {
 
   async function handleSave(ev) {
     ev.preventDefault()
+    if (!user?.id) { addToast('Brak sesji użytkownika', 'error'); return }
     setSaving(true)
     const { error } = await supabase.from('profiles').upsert({
       id: user.id,
@@ -137,6 +138,7 @@ function TabProfil({ user }) {
   }
 
   async function handleMarketingToggle(val) {
+    if (!user?.id) return
     setMarketing(val)
     setSavingConsent(true)
     await supabase.from('user_consents').upsert(
@@ -270,6 +272,7 @@ function TabFirma({ user, workspaceId, refreshWorkspace }) {
 
   async function handleSaveFirma(ev) {
     ev.preventDefault()
+    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSavingFirma(true)
     const { error } = await supabase.from('workspaces').update({
       company_name: firmaForm.company_name.trim() || null,
@@ -281,7 +284,7 @@ function TabFirma({ user, workspaceId, refreshWorkspace }) {
   }
 
   async function handleSaveCategory() {
-    if (!pickerCat) return
+    if (!pickerCat || !workspaceId) return
     setSavingCategory(true)
     const { error } = await supabase.from('workspaces').update({
       business_category: pickerCat.id,
@@ -506,6 +509,7 @@ function TabMagazyn({ workspace, workspaceId, refreshWorkspace }) {
 
   async function handleSave(ev) {
     ev.preventDefault()
+    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSaving(true)
     const newSettings = {
       ...(workspace?.settings || {}),
@@ -641,6 +645,7 @@ function TabPowiadomienia({ workspace, workspaceId, refreshWorkspace }) {
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
   async function handleSave() {
+    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSaving(true)
     const newSettings = { ...(workspace?.settings || {}), ...form }
     const { error } = await supabase.from('workspaces').update({ settings: newSettings }).eq('id', workspaceId)
@@ -728,6 +733,7 @@ function TabWyglad({ workspace, workspaceId, refreshWorkspace }) {
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
   async function handleSave() {
+    if (!workspaceId) { addToast('Brak workspace — odśwież stronę', 'error'); return }
     setSaving(true)
     const newSettings = { ...(workspace?.settings || {}), ...form }
     const { error } = await supabase.from('workspaces').update({ settings: newSettings }).eq('id', workspaceId)
