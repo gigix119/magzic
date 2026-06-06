@@ -19,6 +19,8 @@ import Kontrahenci from './pages/Kontrahenci'
 import Faktury from './pages/Faktury'
 import Pakiety from './pages/Pakiety'
 import Alerty from './pages/Alerty'
+import Zlecenia from './pages/Zlecenia'
+import ZlecenieDetail from './pages/ZlecenieDetail'
 import Regulamin from './pages/Regulamin'
 import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
 import BusinessOnboarding from './components/BusinessOnboarding'
@@ -73,6 +75,8 @@ export default function App() {
                   <Route path="/faktury" element={<Faktury />} />
                   <Route path="/pakiety" element={<Pakiety />} />
                   <Route path="/alerty" element={<Alerty />} />
+                  <Route path="/zlecenia" element={<Zlecenia />} />
+                  <Route path="/zlecenia/:id" element={<ZlecenieDetail />} />
                   {/* Backend — only for owner role */}
                   <Route path="/backend" element={<OwnerRoute><BackendLayout /></OwnerRoute>}>
                     <Route index element={<BackendIndex />} />

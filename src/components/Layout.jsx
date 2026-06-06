@@ -5,18 +5,11 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../supabase'
 import { isOwner, trackEvent } from '../utils/adminHelpers'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { getZlecenieConfigFor } from '../config/businessTypes'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
   Sparkles, Bell, Menu, X, Sun, Moon, LogOut, Shield,
 } from 'lucide-react'
-
-const BOTTOM_NAV = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/towary', icon: Package, label: 'Towary' },
-  { to: '/faktury', icon: FileText, label: 'Faktury' },
-  { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
-  { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
-]
 
 const CORE_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -24,6 +17,14 @@ const CORE_NAV = [
   { to: '/magazyny', icon: Warehouse, label: 'Magazyny' },
   { to: '/kontrahenci', icon: Users, label: 'Kontrahenci' },
   { to: '/faktury', icon: FileText, label: 'Faktury' },
+  { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
+]
+
+const BOTTOM_NAV_BASE = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/towary', icon: Package, label: 'Towary' },
+  { to: '/faktury', icon: FileText, label: 'Faktury' },
+  // zlecenia inserted here dynamically
   { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
 ]
 
@@ -37,6 +38,7 @@ const ROUTE_TRACKING = {
   '/faktury':     { module: 'invoices',    action: 'invoices_opened' },
   '/pakiety':     { module: 'packages',    action: 'packages_opened' },
   '/alerty':      { module: 'alerts',      action: 'alerts_opened' },
+  '/zlecenia':    { module: 'zlecenia',    action: 'zlecenia_opened' },
 }
 
 export default function Layout() {
@@ -50,6 +52,8 @@ export default function Layout() {
   const dark = theme === 'dark'
 
   const businessCategory = getBusinessCategory()
+  const zlecenieConfig = getZlecenieConfigFor(businessCategory)
+  const zlecenieItem = { to: '/zlecenia', icon: zlecenieConfig.icon, label: zlecenieConfig.moduleLabel }
 
   const businessItems = CLEANING_CATEGORIES.includes(businessCategory)
     ? [{ to: '/pakiety', icon: Sparkles, label: 'Pakiety sprzątania' }]
@@ -59,7 +63,13 @@ export default function Layout() {
     ? [{ to: '/backend', icon: Shield, label: 'Backend', isBackend: true }]
     : []
 
-  const navItems = [...CORE_NAV, ...businessItems, ...adminItems]
+  const navItems = [...CORE_NAV, zlecenieItem, ...businessItems, ...adminItems]
+
+  const bottomNav = [
+    ...BOTTOM_NAV_BASE.slice(0, 3),
+    zlecenieItem,
+    ...BOTTOM_NAV_BASE.slice(3),
+  ]
 
   // Page view tracking on navigation
   useEffect(() => {
@@ -162,7 +172,9 @@ export default function Layout() {
                 onMouseEnter={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = 'var(--hover-bg)' }}
                 onMouseLeave={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = '' }}
               >
-                <Icon size={16} />
+                {typeof Icon === 'string'
+                  ? <span style={{ fontSize: 15, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>{Icon}</span>
+                  : <Icon size={16} />}
                 <span className="flex-1">{label}</span>
                 {showBadge && alertCount > 0 && (
                   <span style={{
@@ -247,19 +259,21 @@ export default function Layout() {
           paddingBottom: 'env(safe-area-inset-bottom, 8px)',
         }}
       >
-        {BOTTOM_NAV.map(({ to, icon: Icon, label, showBadge }) => (
+        {bottomNav.map(({ to, icon: Icon, label, showBadge }) => (
           <NavLink
             key={to}
             to={to}
-            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg relative"
+            className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg relative"
             style={({ isActive }) => ({
               color: isActive ? '#3b82f6' : 'var(--text-2)',
-              minWidth: 48,
+              minWidth: 44,
               minHeight: 44,
               justifyContent: 'center',
             })}
           >
-            <Icon size={20} />
+            {typeof Icon === 'string'
+              ? <span style={{ fontSize: 20, lineHeight: 1 }}>{Icon}</span>
+              : <Icon size={20} />}
             <span style={{ fontSize: 10, fontWeight: 500 }}>{label}</span>
             {showBadge && alertCount > 0 && (
               <span style={{

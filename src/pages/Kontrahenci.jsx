@@ -13,10 +13,12 @@ const IS = (err) => ({
   border: `1px solid ${err ? '#ef4444' : 'var(--border)'}`,
   borderRadius: 8,
   color: 'var(--text)',
-  padding: '8px 12px',
-  fontSize: 14,
+  padding: '10px 12px',
+  fontSize: 16,
   width: '100%',
   outline: 'none',
+  minHeight: 48,
+  boxSizing: 'border-box',
 })
 
 const empty = { nazwa: '', nip: '', email: '', telefon: '', adres: '', aktywny: true }
@@ -149,8 +151,8 @@ export default function Kontrahenci() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn"
-          style={{ background: '#3b82f6' }}
+          className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium text-white page-header-btn w-full sm:w-auto justify-center"
+          style={{ background: '#3b82f6', minHeight: 48 }}
         >
           <Plus size={16} /> Dodaj kontrahenta
         </button>
@@ -348,16 +350,16 @@ export default function Kontrahenci() {
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
-                className="flex-1 rounded-lg py-2 text-sm font-medium"
-                style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                className="flex-1 rounded-lg text-sm font-medium"
+                style={{ background: 'var(--table-sub)', color: 'var(--text-2)', minHeight: 48 }}
               >
                 Anuluj
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 rounded-lg py-2 text-sm font-medium text-white"
-                style={{ background: '#3b82f6', opacity: saving ? 0.7 : 1 }}
+                className="flex-1 rounded-lg text-sm font-medium text-white"
+                style={{ background: '#3b82f6', minHeight: 48, opacity: saving ? 0.7 : 1 }}
               >
                 {saving ? 'Zapisywanie…' : editItem ? 'Zapisz zmiany' : 'Dodaj kontrahenta'}
               </button>
@@ -397,8 +399,8 @@ export default function Kontrahenci() {
               <button
                 type="button"
                 onClick={() => setDeactivateTarget(null)}
-                className="flex-1 rounded-lg py-2 text-sm font-medium"
-                style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
+                className="flex-1 rounded-lg text-sm font-medium"
+                style={{ background: 'var(--table-sub)', color: 'var(--text-2)', minHeight: 48 }}
               >
                 Anuluj
               </button>
@@ -406,8 +408,8 @@ export default function Kontrahenci() {
                 type="button"
                 onClick={handleDeactivate}
                 disabled={deactivating}
-                className="flex-1 rounded-lg py-2 text-sm font-medium text-white"
-                style={{ background: '#d97706', opacity: deactivating ? 0.7 : 1 }}
+                className="flex-1 rounded-lg text-sm font-medium text-white"
+                style={{ background: '#d97706', minHeight: 48, opacity: deactivating ? 0.7 : 1 }}
               >
                 {deactivating ? 'Dezaktywuję…' : 'Dezaktywuj kontrahenta'}
               </button>
