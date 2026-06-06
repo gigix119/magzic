@@ -21,6 +21,7 @@ import Pakiety from './pages/Pakiety'
 import Alerty from './pages/Alerty'
 import Zlecenia from './pages/Zlecenia'
 import ZlecenieDetail from './pages/ZlecenieDetail'
+import Ustawienia from './pages/Ustawienia'
 import Regulamin from './pages/Regulamin'
 import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
 import BusinessOnboarding from './components/BusinessOnboarding'
@@ -77,6 +78,7 @@ export default function App() {
                   <Route path="/alerty" element={<Alerty />} />
                   <Route path="/zlecenia" element={<Zlecenia />} />
                   <Route path="/zlecenia/:id" element={<ZlecenieDetail />} />
+                  <Route path="/ustawienia" element={<Ustawienia />} />
                   {/* Backend — only for owner role */}
                   <Route path="/backend" element={<OwnerRoute><BackendLayout /></OwnerRoute>}>
                     <Route index element={<BackendIndex />} />

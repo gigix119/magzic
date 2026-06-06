@@ -8,7 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { getZlecenieConfigFor } from '../config/businessTypes'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
-  Sparkles, Bell, Menu, X, Sun, Moon, LogOut, Shield,
+  Sparkles, Bell, Menu, X, Sun, Moon, LogOut, Shield, Settings,
 } from 'lucide-react'
 
 const CORE_NAV = [
@@ -203,6 +203,24 @@ export default function Layout() {
               </p>
             </div>
           )}
+          <div className="px-2">
+            <NavLink
+              to="/ustawienia"
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"
+              style={({ isActive }) => ({
+                color: isActive ? (dark ? '#60a5fa' : '#2563eb') : 'var(--text-2)',
+                background: isActive ? 'rgba(59,130,246,0.12)' : '',
+                fontWeight: isActive ? 500 : undefined,
+                minHeight: 44,
+              })}
+              onMouseEnter={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = 'var(--hover-bg)' }}
+              onMouseLeave={e => { if (!e.currentTarget.style.fontWeight) e.currentTarget.style.background = '' }}
+            >
+              <Settings size={15} />
+              <span>Ustawienia</span>
+            </NavLink>
+          </div>
           <div className="px-2 sidebar-logout-wrap">
             <button
               onClick={handleSignOut}

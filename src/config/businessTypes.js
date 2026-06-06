@@ -815,3 +815,23 @@ const ZLECENIE_CONFIGS = {
 export function getZlecenieConfigFor(categoryId) {
   return ZLECENIE_CONFIGS[categoryId] || ZLECENIE_CONFIGS.general
 }
+
+const WEEKLY_REPORT_TITLES = {
+  general:           'Twój tydzień w skrócie',
+  gastronomy:        'Tydzień w kuchni',
+  retail:            'Tydzień w sklepie',
+  ecommerce:         'Tydzień w e-commerce',
+  beauty:            'Tydzień w salonie',
+  floristry_decor:   'Tydzień w kwiaciarni',
+  hospitality:       'Tydzień w obiektach',
+  cleaning_facility: 'Tydzień w sprzątaniu',
+  workshop_service:  'Tydzień w warsztacie',
+  production_craft:  'Tydzień w produkcji',
+  construction:      'Tydzień na budowie',
+  health_care:       'Tydzień w gabinecie',
+  fitness_recreation:'Tydzień na obiekcie',
+}
+
+export function getWeeklyReportTitleFor(categoryId) {
+  return WEEKLY_REPORT_TITLES[categoryId] || WEEKLY_REPORT_TITLES.general
+}

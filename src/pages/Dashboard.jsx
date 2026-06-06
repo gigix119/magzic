@@ -5,6 +5,7 @@ import Spinner from '../components/Spinner'
 import Badge from '../components/Badge'
 import FirstUseSteps from '../components/FirstUseSteps'
 import BriefingCard from '../components/BriefingCard'
+import WeeklyReport from '../components/WeeklyReport'
 import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
@@ -79,7 +80,7 @@ function OnboardingScreen() {
 }
 
 export default function Dashboard() {
-  const { workspaceId, wsQuery, addWsFilter } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, getBusinessCategory } = useWorkspace()
   const [stats, setStats] = useState({})
   const [stockStatus, setStockStatus] = useState({ ok: 0, low: 0, empty: 0 })
   const [topAlerts, setTopAlerts] = useState([])
@@ -200,6 +201,7 @@ export default function Dashboard() {
 
       <FirstUseSteps />
       <BriefingCard />
+      <WeeklyReport workspaceId={workspaceId} businessCategory={getBusinessCategory()} />
 
       {error && (
         <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#dc2626' }}>
