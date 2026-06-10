@@ -348,7 +348,7 @@ The combination of these layers — not any single one — is what makes Magzic 
 
 Screenshots use demo/test data and owner-approved admin/demo accounts. This repository does not include production secrets, `.env` files, Supabase service role keys, real invoices or customer data.
 
-Environment variables must be configured locally using `.env.example` as a template, or set in the hosting provider dashboard. Desktop and invoice parser screenshots are not included because they were captured from a test account that displays a test email address in the UI sidebar.
+Deployment and environment variables are configured outside the repository in the hosting provider dashboard.
 
 ---
 

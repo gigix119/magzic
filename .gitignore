@@ -33,8 +33,14 @@ out/
 # Environment variables — NEVER commit real values
 .env
 .env.*
-!.env.example
 *.local
+
+# Private / internal notes (not for public repo)
+_private_notes/
+SECURITY_CHECKLIST.md
+.env.example
+ADMIN_SETUP.md
+DEPLOY.md
 
 # OS
 .DS_Store
