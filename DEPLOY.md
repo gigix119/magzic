@@ -43,13 +43,12 @@ git push -u origin main
 |---|---|
 | `VITE_SUPABASE_URL` | supabase.com → projekt → Settings → API → Project URL |
 | `VITE_SUPABASE_ANON_KEY` | supabase.com → projekt → Settings → API → anon public |
-| `VITE_ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
+| `VITE_INVOICE_AI_ENDPOINT` | opcjonalnie: URL Cloudflare Worker / Supabase Edge Function z kluczem AI po stronie serwera |
 
 Ustaw dla środowisk: **Production** i **Preview**.
 
 ## 6. Uwagi
 
 - `public/_redirects` zapewnia SPA routing (wszystkie ścieżki serwują `index.html`)
-- Supabase anon key jest kluczem publicznym — bezpieczny po stronie klienta
-- Anthropic API key jest używany bezpośrednio z przeglądarki (header `anthropic-dangerous-direct-browser-access`)
-  — ogranicz użycie kluczy w Anthropic Console do domeny magzic.com
+- Supabase anon key jest kluczem publicznym — bezpieczny po stronie klienta, jeśli włączone jest RLS
+- Klucz AI (Anthropic/OpenAI) przechowuj wyłącznie po stronie serwera (Cloudflare Worker / Edge Function) — nie w zmiennych `VITE_*`

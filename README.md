@@ -204,17 +204,9 @@ The invoice model section tracks extraction logs, corrections, model settings an
 
 ### Backend and model monitoring
 
-<p align="center">
-  <img src="assets/screenshots/magzic/backend/01_admin_backend_overview.png" width="700" />
-</p>
+The admin backend gives the owner visibility into users, activity, permissions and system state. The invoice model panel tracks extraction quality, correction history and training/evaluation tools.
 
-*Admin backend gives the owner visibility into users, activity, permissions and system state.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/backend/02_invoice_model_training_panel.png" width="700" />
-</p>
-
-*Invoice model panel helps monitor extraction quality and improve parser behavior over time.*
+> Backend screenshots are not included in this repository because they display test account data. The backend module is fully implemented and described in the Architecture section above.
 
 ---
 
@@ -242,7 +234,6 @@ Magzic is not only responsive — the product is designed mobile-first. Core wor
 
 <p align="center">
   <img src="assets/screenshots/magzic/mobile/09_mobile_dashboard_chart.jpeg" width="220" />
-  <img src="assets/screenshots/magzic/mobile/10_mobile_settings.jpeg" width="220" />
 </p>
 
 ---
@@ -345,9 +336,17 @@ The combination of these layers — not any single one — is what makes Magzic 
 
 ---
 
+## Security / demo data note
+
+This repository does not include production secrets, `.env` files, service role keys, real invoices or customer data. Environment variables must be configured locally using `.env.example` as a template, or set in the hosting provider dashboard.
+
+Screenshots use demo and test data. Desktop application screenshots were taken from a development test account and display test entries only. Backend panel screenshots are excluded from this repository as they display test account identifiers. Some AI/parser modules are still in active development.
+
+---
+
 ## Important note
 
-Screenshots may contain demo and test data. The project is actively developed and some AI/parser modules are still being improved.
+The project is actively developed. Some AI/parser features depend on an optional server-side endpoint (`VITE_INVOICE_AI_ENDPOINT`) that is not included in this repository. The local text-based PDF parser works without any external service.
 
 ---
 

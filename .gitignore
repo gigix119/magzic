@@ -13,6 +13,12 @@ dist-ssr
 build
 *.local
 
+# Cache / build artefacts
+.cache/
+coverage/
+.vite/
+out/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -24,12 +30,42 @@ build
 *.sln
 *.sw?
 
-# Environment variables
+# Environment variables — NEVER commit real values
 .env
-.env.local
-.env.production
-.env.*.local
+.env.*
+!.env.example
+*.local
 
 # OS
 .DS_Store
 Thumbs.db
+Thumbs.db:encryptable
+
+# Certificates and private keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Secrets / credentials
+secrets/
+private/
+credentials/
+service-account*.json
+*service_role*.json
+*service-role*.json
+
+# Database dumps / backups
+*.sql.gz
+*.dump
+*.backup
+*.bak
+*.sqlite
+*.sqlite3
+*.db
+
+# Supabase local dev
+supabase/.branches/
+supabase/.temp/
+.supabase/
