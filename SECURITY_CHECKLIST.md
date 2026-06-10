@@ -12,8 +12,8 @@
 - [x] No confidential company data in current files
 - [x] No database dumps
 - [x] No build artifacts / node_modules
-- [x] Screenshots reviewed — problematic ones removed
-- [ ] Desktop app screenshots still show test account email in sidebar — see Manual Actions
+- [x] Screenshots reviewed — all screenshots with private/test emails removed from repo and README
+- [x] Supabase anon key removed from source code (was hardcoded as fallback in `src/supabase.js`)
 
 ---
 
@@ -158,36 +158,37 @@ These are **early/draft migrations** that were superseded by `saas_migration.sql
 
 ## Manual actions required
 
-### ACTION 1 — IMPORTANT: Rotate Supabase anon key (recommended)
+### ACTION 1 — IMPORTANT: Rotate Supabase anon key
 
-The Supabase project URL (`qdagvdehtoyeuqxdbsss.supabase.co`) and anon key were committed in Git history (commit `248ed7d`). While the anon key is technically a public key designed for browser use, it is best practice to rotate it after it has appeared in a public repository.
+**Summary:** The Supabase anon key was previously hardcoded as a fallback value in `src/supabase.js` (commit `248ed7d`) and is therefore present in Git history. The anon key has role `anon` (not `service_role`) and is technically a public key designed for browser use. However, best practice after any key exposure in a public repository is to rotate it.
 
 **Steps:**
-1. Go to Supabase Dashboard → Settings → API
-2. Regenerate the anon key
-3. Update `VITE_SUPABASE_ANON_KEY` in Cloudflare Pages environment variables
-4. Update your local `.env` file
+1. Supabase Dashboard → Settings → API → Regenerate anon key
+2. Update `VITE_SUPABASE_ANON_KEY` in Cloudflare Pages → Settings → Environment variables
+3. Update your local `.env` file
 
-### ACTION 2 — IMPORTANT: Clean Git history (if full public exposure is a concern)
+### ACTION 2 — OPTIONAL: Clean Git history for `administrator@blueapart.pl`
 
-The email `administrator@blueapart.pl` appears in multiple commits before `8984dbd`. If you want to fully clean this from history:
+**Summary:** The email `administrator@blueapart.pl` exists in old Git history (commits before `8984dbd`). It was used as a test admin account email during development and has since been replaced with a placeholder in all current files. History cleanup is optional and requires separate manual approval — do not run without understanding the implications.
 
+If you decide to proceed:
 ```bash
-# Install git-filter-repo first (pip install git-filter-repo)
+# Requires git-filter-repo (pip install git-filter-repo)
 git filter-repo --replace-text <(echo "administrator@blueapart.pl==>admin@example.com")
 git push --force
 ```
 
-**Warning:** This rewrites Git history. All collaborators would need to re-clone. Only do this if you consider the email sensitive enough to justify history rewrite.
+**Warning:** Rewrites entire Git history. All collaborators must re-clone. The repo's commit SHAs will change permanently.
 
-### ACTION 3 — Re-capture desktop screenshots with a demo account
+### ACTION 3 — Re-capture desktop and invoice-parser screenshots with a demo account
 
-All desktop app screenshots show a test account email (`administrator@blueapart.pl`) in the navigation sidebar. To make the repository fully clean:
+**Summary:** All desktop app and invoice-parser screenshots displayed a test account email (`administrator@blueapart.pl`) in the navigation sidebar and have been removed from this repository and README. The navigation drawer mobile screenshot was also removed (`wojnowski-kordian@wp.pl` clearly visible).
 
-1. Create a demo Supabase account: `demo@magzic.com` or `demo@example.com`
-2. Add test/demo data to the workspace
-3. Re-capture all screenshots from `assets/screenshots/magzic/app/` and `assets/screenshots/magzic/invoice-parser/`
-4. Replace the files in the repo
+To restore visual documentation:
+1. Create a demo account: `demo@magzic.com` or `demo@example.com`
+2. Populate with clearly fictional test data
+3. Re-capture screenshots and place them back in `assets/screenshots/magzic/app/`, `assets/screenshots/magzic/invoice-parser/`
+4. Re-add to README
 
 ### ACTION 4 — Verify Supabase RLS in production Dashboard
 

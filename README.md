@@ -124,81 +124,29 @@ The invoice model section tracks extraction logs, corrections, model settings an
 
 ### Desktop application
 
-<p align="center">
-  <img src="assets/screenshots/magzic/app/01_dashboard_desktop.png" width="700" />
-</p>
+Desktop app screenshots are not included in this repository because they were captured from a test account and display a test email address in the navigation sidebar. The application views listed below are fully implemented and visible on [magzic.com](https://magzic.com).
 
-*Dashboard gives a quick overview of stock health, invoices, alerts and recent activity.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/02_products_inventory.png" width="700" />
-</p>
-
-*Products view manages the full inventory catalog with stock actions and movement history.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/03_warehouses_locations.png" width="700" />
-</p>
-
-*Warehouses view shows stock per location and supports multi-location transfers.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/04_invoices_list.png" width="700" />
-</p>
-
-*Invoices view connects purchase documents with stock updates in one workflow.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/05_stock_alerts.png" width="700" />
-</p>
-
-*Alerts surface critical stock problems — low stock, out of stock and price anomalies.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/06_price_anomalies_assistant.png" width="700" />
-</p>
-
-*Assistant panel shows price anomalies across invoices and offers quick operational prompts.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/07_assistant_invoice_analysis.png" width="700" />
-</p>
-
-*Assistant invoice analysis gives a structured view of invoice data without manual table searching.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/app/08_operational_packages.png" width="700" />
-</p>
-
-*Operational packages are reusable stock consumption templates for cleaning, service or maintenance jobs.*
+**Implemented views:**
+- **Dashboard** — stock health summary, alert counts, weekly report widget, recent activity
+- **Products / Inventory** — catalog with units, categories, SKU, stock status per product
+- **Warehouses** — stock per location, multi-location transfer support
+- **Invoices** — purchase invoice list, draft/approved states, NETTO/BRUTTO toggle
+- **Alerts** — low stock, out-of-stock, price anomaly detection
+- **Assistant** — operational quick prompts, invoice analysis, price change overview
+- **Operational packages** — reusable stock consumption templates for cleaning/service jobs
 
 ---
 
 ### AI invoice parser
 
-<p align="center">
-  <img src="assets/screenshots/magzic/invoice-parser/01_invoice_upload_modal.png" width="700" />
-</p>
+AI invoice parser screenshots are not included in this repository for the same reason as desktop screenshots (test account email visible in sidebar).
 
-*Upload modal starts the invoice import flow — the user picks a PDF and the parser begins extraction.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/invoice-parser/02_invoice_parser_review.png" width="700" />
-</p>
-
-*Parser review screen shows extracted positions, confidence scores, matched products and verification state. Low-confidence rows are flagged before anything is approved.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/invoice-parser/03_create_product_from_invoice.png" width="700" />
-</p>
-
-*Product creation from invoice positions: if a product is not in the catalog, the user can create it directly from the invoice row and assign it to a warehouse immediately.*
-
-<p align="center">
-  <img src="assets/screenshots/magzic/invoice-parser/04_manual_invoice_entry_netto_brutto.png" width="700" />
-</p>
-
-*Manual invoice entry with NETTO/BRUTTO toggle — available when the parser cannot handle a document or for manual corrections.*
+**Parser workflow:**
+- Upload a PDF — parser extracts text, detects table structure, maps columns
+- Review screen shows confidence per position, matched products, warnings
+- Unmatched products can be created directly from the invoice row and assigned to a warehouse
+- NETTO/BRUTTO toggle available both in the parser review and in manual entry
+- Stock updates only after the invoice is explicitly approved — never during preview
 
 ---
 
@@ -217,23 +165,19 @@ Magzic is not only responsive — the product is designed mobile-first. Core wor
 <p align="center">
   <img src="assets/screenshots/magzic/mobile/01_mobile_landing_hero.jpeg" width="220" />
   <img src="assets/screenshots/magzic/mobile/02_mobile_landing_mockup.jpeg" width="220" />
-  <img src="assets/screenshots/magzic/mobile/03_mobile_navigation_drawer.jpeg" width="220" />
+  <img src="assets/screenshots/magzic/mobile/04_mobile_dashboard.jpeg" width="220" />
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/magzic/mobile/04_mobile_dashboard.jpeg" width="220" />
   <img src="assets/screenshots/magzic/mobile/05_mobile_products.jpeg" width="220" />
   <img src="assets/screenshots/magzic/mobile/06_mobile_warehouses.jpeg" width="220" />
-</p>
-
-<p align="center">
   <img src="assets/screenshots/magzic/mobile/07_mobile_contractors.jpeg" width="220" />
-  <img src="assets/screenshots/magzic/mobile/08_mobile_invoices.jpeg" width="220" />
-  <img src="assets/screenshots/magzic/mobile/11_mobile_service_orders.jpeg" width="220" />
 </p>
 
 <p align="center">
+  <img src="assets/screenshots/magzic/mobile/08_mobile_invoices.jpeg" width="220" />
   <img src="assets/screenshots/magzic/mobile/09_mobile_dashboard_chart.jpeg" width="220" />
+  <img src="assets/screenshots/magzic/mobile/11_mobile_service_orders.jpeg" width="220" />
 </p>
 
 ---
@@ -338,9 +282,9 @@ The combination of these layers — not any single one — is what makes Magzic 
 
 ## Security / demo data note
 
-This repository does not include production secrets, `.env` files, service role keys, real invoices or customer data. Environment variables must be configured locally using `.env.example` as a template, or set in the hosting provider dashboard.
+Screenshots use demo/test data only. This repository does not include production secrets, `.env` files, Supabase service role keys, real invoices or customer data.
 
-Screenshots use demo and test data. Desktop application screenshots were taken from a development test account and display test entries only. Backend panel screenshots are excluded from this repository as they display test account identifiers. Some AI/parser modules are still in active development.
+Environment variables must be configured locally using `.env.example` as a template, or set in the hosting provider dashboard. Desktop and invoice parser screenshots are not included because they were captured from a test account that displays a test email address in the UI sidebar.
 
 ---
 
