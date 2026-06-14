@@ -48,6 +48,7 @@ following files **in this exact order** — paste each file's content and click
 | 16 | `custom_category_migration.sql` | Custom category fields on `workspaces` |
 | 17 | `price_alerts_migration.sql` | `alerty_cenowe_faktury` table |
 | 18 | `warehouse_fix_migration.sql` | Any warehouse-related fixes |
+| 19 | `warehouse_receive_p8_migration.sql` | P8: `idempotency_key` column + `receive_stock` RPC |
 
 > **Tip:** if a file fails, read the error — most are idempotent (`IF NOT EXISTS`)
 > so re-running is safe. The most common issue is running them out of order.
@@ -142,6 +143,84 @@ After completing the steps above, verify:
 - [ ] Kontrahenci shows 2 contractors.
 - [ ] Faktury shows 2 invoices: `FV-STAGING-001` (robocza) and `FV-STAGING-002` (zatwierdzona).
 - [ ] Log out, log in as `test2@staging.magzic` → separate workspace **Magazyn Testowy Beta** with its own data only (tenant isolation).
+
+---
+
+---
+
+## P8 — Atomic receive rollout checklist
+
+Follow these steps **in order** for every environment (staging first, then production).
+
+### Pre-migration backup
+
+- [ ] In Supabase Dashboard → **Settings → Backups** (or your backup tool), trigger a manual backup before running any P8 SQL.
+- [ ] Record the current reconciliation baseline — paste the output of `docs/db-snapshot/08_inventory_reconciliation.sql` into a local file so you have a before-snapshot.
+
+### Step A1 — Initial-stock backfill (ADR-001, Option A)
+
+Run in Supabase SQL Editor (staging first):
+
+```sql
+-- A1: backfill initial_stock rows for existing stany_magazynowe balances.
+-- Rollback: DELETE FROM ruchy_magazynowe WHERE typ = 'initial_stock';
+INSERT INTO ruchy_magazynowe
+  (towar_id, magazyn_docelowy_id, ilosc, typ, workspace_id, created_at)
+SELECT
+  towar_id,
+  magazyn_id,
+  ilosc,
+  'initial_stock',
+  workspace_id,
+  COALESCE(updated_at, now())
+FROM stany_magazynowe
+WHERE ilosc > 0
+ON CONFLICT DO NOTHING;
+```
+
+Verify: re-run `docs/db-snapshot/08_inventory_reconciliation.sql` → all `drift` columns should be **0**.
+
+### Step P8 — Apply warehouse_receive_p8_migration.sql
+
+Paste the full content of `warehouse_receive_p8_migration.sql` into the SQL Editor and run.
+
+Post-migration checks (copy-paste each):
+
+```sql
+-- 1. Confirm column
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_name = 'ruchy_magazynowe' AND column_name = 'idempotency_key';
+
+-- 2. Confirm index
+SELECT indexname, indexdef FROM pg_indexes
+WHERE tablename = 'ruchy_magazynowe' AND indexname = 'idx_ruchy_idempotency_key';
+
+-- 3. Confirm function (prosecdef = true means SECURITY DEFINER)
+SELECT proname, prosecdef FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'receive_stock';
+```
+
+### Step P8 — Functional verification
+
+- [ ] Open the app → Towary or Magazyny page → perform a **manual receive** (Dodaj stan) for any product.
+- [ ] Confirm the movement row appears in `ruchy_magazynowe` with `typ = 'purchase'`.
+- [ ] Confirm `stany_magazynowe.ilosc` equals `SUM(ruchy_magazynowe.ilosc)` for that (towar, magazyn, workspace) — run `docs/db-snapshot/08_inventory_reconciliation.sql` and verify `drift = 0`.
+- [ ] Repeat the identical receive (same product, same warehouse, same quantity) — confirm **no duplicate** movement row is created when the same idempotency key would be used. (Currently `dodajStan` passes `null` for the key, so idempotency is enforced at the DB constraint level; this test requires calling the RPC directly with a key to fully exercise it.)
+
+### Rollback
+
+```sql
+-- Code rollback: git revert the 4 changed JS/test files.
+-- DB rollback (only safe before any non-NULL idempotency_key rows exist):
+DROP FUNCTION IF EXISTS public.receive_stock(uuid, uuid, numeric, text, uuid, uuid, text);
+DROP INDEX  IF EXISTS public.idx_ruchy_idempotency_key;
+-- Column: skip DROP if any rows have idempotency_key IS NOT NULL — forward-fix instead.
+-- ALTER TABLE public.ruchy_magazynowe DROP COLUMN IF EXISTS idempotency_key;
+-- A1 rollback (removes initial_stock rows, restores pre-backfill state):
+-- DELETE FROM ruchy_magazynowe WHERE typ = 'initial_stock';
+```
 
 ---
 

@@ -1,6 +1,6 @@
 # ADR-001 — Inventory Source of Truth
 
-**Status:** PENDING APPROVAL  
+**Status:** APPROVED — Option A  
 **Date:** 2026-06-14  
 **Authors:** (generated from Prompt 7b audit)  
 **Depends on:** Prompt 5 (invariant audit), Prompt 6 (reconciliation), Prompt 6.5 (soft-mark)  
@@ -238,10 +238,10 @@ Mark Status as **APPROVED — Option A** and record the chosen option below.
 
 | Field | Value |
 |-------|-------|
-| Status | PENDING APPROVAL |
-| Chosen option | _(fill in: A / B / C)_ |
-| Approved by | _(name / date)_ |
-| Notes | |
+| Status | APPROVED — Option A |
+| Chosen option | A — Harden existing ruchy_magazynowe (no new table) |
+| Approved by | Kordian, 2026-06-14 |
+| Notes | Builds on P6.5 soft-mark. Backfill (A1) to be run on staging then production before P8. |
 
 ---
 

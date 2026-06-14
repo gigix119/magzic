@@ -5,8 +5,9 @@
 -- SAFE: SELECT only — no changes to the database.
 -- RUN ON: STAGING first, then PRODUCTION.
 --
--- Sign convention (mirrors magazyn.js):
---   purchase / invoice_purchase / correction_plus → +ilosc on magazyn_docelowy_id
+-- Sign convention (mirrors inventoryReconciliation.js / receive_stock RPC):
+--   purchase / invoice_purchase / correction_plus / initial_stock
+--                                                 → +ilosc on magazyn_docelowy_id
 --   correction_minus                              → -ilosc on magazyn_docelowy_id
 --   issue                                         → -ilosc on magazyn_zrodlowy_id
 --   transfer                                      → -ilosc on zrodlowy, +ilosc on docelowy
@@ -19,7 +20,7 @@ WITH movements AS (
     workspace_id,
     towar_id,
     CASE
-      WHEN typ IN ('purchase', 'invoice_purchase', 'correction_plus')
+      WHEN typ IN ('purchase', 'invoice_purchase', 'correction_plus', 'initial_stock')
         THEN magazyn_docelowy_id
       WHEN typ = 'correction_minus'
         THEN magazyn_docelowy_id
@@ -30,7 +31,7 @@ WITH movements AS (
       ELSE NULL
     END                           AS magazyn_id,
     CASE
-      WHEN typ IN ('purchase', 'invoice_purchase', 'correction_plus')
+      WHEN typ IN ('purchase', 'invoice_purchase', 'correction_plus', 'initial_stock')
         THEN  ilosc
       WHEN typ = 'correction_minus'
         THEN -ilosc
