@@ -1,5 +1,7 @@
 import { supabase } from '../supabase'
 import { refreshInventory } from './events'
+import { issueStock }    from './issueStock'
+import { transferStock } from './transferStock'
 
 const DEV = import.meta.env.DEV
 
@@ -25,7 +27,7 @@ async function insertRuch(fields, workspaceId) {
 
 // ── Eksportowane funkcje ───────────────────────────────────────
 
-export async function dodajStan(towarId, magazynId, ilosc, powod = null, fakturaId = null, workspaceId = null) {
+export async function dodajStan(towarId, magazynId, ilosc, powod = null, fakturaId = null, workspaceId = null, idempotencyKey = null) {
   if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
   if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
@@ -37,7 +39,7 @@ export async function dodajStan(towarId, magazynId, ilosc, powod = null, faktura
     p_powod:           powod ?? null,
     p_faktura_id:      fakturaId ?? null,
     p_workspace_id:    workspaceId ?? null,
-    p_idempotency_key: null,
+    p_idempotency_key: idempotencyKey ?? null,
   })
 
   if (error) return { success: false, error: error.message }
@@ -50,32 +52,19 @@ export async function dodajStan(towarId, magazynId, ilosc, powod = null, faktura
 
 export async function wydajStan(towarId, magazynId, ilosc, powod = null, workspaceId = null) {
   if (!magazynId) return { success: false, error: 'Magazyn jest wymagany' }
-  if (!towarId) return { success: false, error: 'Towar jest wymagany' }
+  if (!towarId)   return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
 
-  const current = await getStan(towarId, magazynId, workspaceId)
-  if (!current || Number(current.ilosc) < Number(ilosc)) {
-    return { success: false, error: `Niewystarczający stan. Dostępne: ${current?.ilosc ?? 0}` }
+  const result = await issueStock({ towarId, magazynId, ilosc: Number(ilosc), powod, workspaceId })
+
+  // Translate the RPC's English insufficient-stock message to Polish for the UI.
+  if (!result.success && result.available !== undefined) {
+    return { success: false, error: `Niewystarczający stan. Dostępne: ${result.available}` }
   }
-
-  const nowaIlosc = Number(current.ilosc) - Number(ilosc)
-  const { error } = await supabase
-    .from('stany_magazynowe')
-    .update({ ilosc: nowaIlosc })
-    .eq('id', current.id)
-  if (error) return { success: false, error: error.message }
-
-  await insertRuch({
-    towar_id: towarId,
-    magazyn_zrodlowy_id: magazynId,
-    ilosc: Number(ilosc),
-    typ: 'issue',
-    powod,
-  }, workspaceId)
-
-  if (DEV) console.debug('[magazyn] wydajStan', { towarId, magazynId, ilosc, nowaIlosc })
-  refreshInventory()
-  return { success: true }
+  if (DEV && result.success) {
+    console.debug('[magazyn] wydajStan', { towarId, magazynId, ilosc, newBalance: result.newBalance })
+  }
+  return result
 }
 
 export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, powod = null, workspaceId = null) {
@@ -84,45 +73,23 @@ export async function transferujStan(towarId, zMagazynuId, doMagazynuId, ilosc, 
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
   if (zMagazynuId === doMagazynuId) return { success: false, error: 'Magazyny muszą być różne' }
 
-  const zrodlo = await getStan(towarId, zMagazynuId, workspaceId)
-  if (!zrodlo || Number(zrodlo.ilosc) < Number(ilosc)) {
-    return { success: false, error: `Niewystarczający stan w magazynie źródłowym. Dostępne: ${zrodlo?.ilosc ?? 0}` }
-  }
-
-  const nowaIloscZrodlo = Number(zrodlo.ilosc) - Number(ilosc)
-  const { error: e1 } = await supabase
-    .from('stany_magazynowe')
-    .update({ ilosc: nowaIloscZrodlo })
-    .eq('id', zrodlo.id)
-  if (e1) return { success: false, error: e1.message }
-
-  const cel = await getStan(towarId, doMagazynuId, workspaceId)
-  const nowaIloscCel = Number(cel?.ilosc ?? 0) + Number(ilosc)
-  if (cel) {
-    const { error: e2 } = await supabase
-      .from('stany_magazynowe')
-      .update({ ilosc: nowaIloscCel })
-      .eq('id', cel.id)
-    if (e2) return { success: false, error: e2.message }
-  } else {
-    const payload = { towar_id: towarId, magazyn_id: doMagazynuId, ilosc: Number(ilosc) }
-    if (workspaceId) payload.workspace_id = workspaceId
-    const { error: e2 } = await supabase.from('stany_magazynowe').insert([payload])
-    if (e2) return { success: false, error: e2.message }
-  }
-
-  await insertRuch({
-    towar_id: towarId,
-    magazyn_zrodlowy_id: zMagazynuId,
-    magazyn_docelowy_id: doMagazynuId,
+  const result = await transferStock({
+    towarId,
+    magazynZrodlowyId: zMagazynuId,
+    magazynDocelowyId: doMagazynuId,
     ilosc: Number(ilosc),
-    typ: 'transfer',
     powod,
-  }, workspaceId)
+    workspaceId,
+  })
 
-  if (DEV) console.debug('[magazyn] transferujStan', { towarId, zMagazynuId, doMagazynuId, ilosc, nowaIloscZrodlo, nowaIloscCel })
-  refreshInventory()
-  return { success: true }
+  // Translate the RPC's English insufficient-stock message to Polish for the UI.
+  if (!result.success && result.available !== undefined) {
+    return { success: false, error: `Niewystarczający stan w magazynie źródłowym. Dostępne: ${result.available}` }
+  }
+  if (DEV && result.success) {
+    console.debug('[magazyn] transferujStan', { towarId, zMagazynuId, doMagazynuId, ilosc })
+  }
+  return result
 }
 
 export async function korektaStan(towarId, magazynId, nowaIlosc, powod, workspaceId = null) {
