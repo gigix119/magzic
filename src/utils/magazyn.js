@@ -30,32 +30,20 @@ export async function dodajStan(towarId, magazynId, ilosc, powod = null, faktura
   if (!towarId) return { success: false, error: 'Towar jest wymagany' }
   if (Number(ilosc) <= 0) return { success: false, error: 'Ilość musi być większa od 0' }
 
-  const current = await getStan(towarId, magazynId, workspaceId)
-  const nowaIlosc = Number(current?.ilosc ?? 0) + Number(ilosc)
+  const { data, error } = await supabase.rpc('receive_stock', {
+    p_towar_id:        towarId,
+    p_magazyn_id:      magazynId,
+    p_ilosc:           Number(ilosc),
+    p_powod:           powod ?? null,
+    p_faktura_id:      fakturaId ?? null,
+    p_workspace_id:    workspaceId ?? null,
+    p_idempotency_key: null,
+  })
 
-  if (current) {
-    const { error } = await supabase
-      .from('stany_magazynowe')
-      .update({ ilosc: nowaIlosc })
-      .eq('id', current.id)
-    if (error) return { success: false, error: error.message }
-  } else {
-    const payload = { towar_id: towarId, magazyn_id: magazynId, ilosc: Number(ilosc) }
-    if (workspaceId) payload.workspace_id = workspaceId
-    const { error } = await supabase.from('stany_magazynowe').insert([payload])
-    if (error) return { success: false, error: error.message }
-  }
+  if (error) return { success: false, error: error.message }
+  if (!data?.success) return { success: false, error: data?.error ?? 'Nieznany błąd' }
 
-  await insertRuch({
-    towar_id: towarId,
-    magazyn_docelowy_id: magazynId,
-    ilosc: Number(ilosc),
-    typ: 'purchase',
-    powod,
-    faktura_id: fakturaId || null,
-  }, workspaceId)
-
-  if (DEV) console.debug('[magazyn] dodajStan', { towarId, magazynId, ilosc, nowaIlosc })
+  if (DEV) console.debug('[magazyn] dodajStan', { towarId, magazynId, ilosc, newBalance: data.new_balance })
   refreshInventory()
   return { success: true }
 }

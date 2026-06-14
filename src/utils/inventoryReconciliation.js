@@ -6,7 +6,7 @@
 //   issue                                       → -ilosc on magazyn_zrodlowy_id
 //   transfer                                    → -ilosc on zrodlowy, +ilosc on docelowy
 
-const INBOUND_TYPES = new Set(['purchase', 'invoice_purchase', 'correction_plus'])
+const INBOUND_TYPES = new Set(['purchase', 'invoice_purchase', 'correction_plus', 'initial_stock'])
 
 /**
  * Pure reconciliation computation — no I/O.

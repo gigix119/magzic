@@ -195,6 +195,15 @@ describe('computeReconciliation', () => {
     expect(rows.every(r => r.drift === 0)).toBe(true)
   })
 
+  it('initial_stock counts as inbound movement (post-A1-backfill scenario)', () => {
+    const stany = [stan(T1, M1, 45)]
+    const ruchy = [ruch('initial_stock', T1, 45, { dst: M1 })]
+    const [row] = computeReconciliation(stany, ruchy)
+    expect(row.stored).toBe(45)
+    expect(row.expected).toBe(45)
+    expect(row.drift).toBe(0)
+  })
+
   it('unknown movement type is skipped without error', () => {
     const stany = [stan(T1, M1, 45)]
     const ruchy = [
@@ -380,6 +389,41 @@ describe('Invariant guard — balance === sum(non-reversed movements)', () => {
 
     const totalAbsDrift = mismatches.reduce((s, r) => s + Math.abs(r.drift), 0)
     expect(totalAbsDrift).toBe(185) // 45+80+18+12+30
+  })
+
+  it('[POST-BACKFILL] initial_stock rows from A1 migration reduce seed drift to zero', () => {
+    // After running ADR-001 A1 backfill SQL on staging, one initial_stock row
+    // is inserted per stany_magazynowe row.  Reconciliation must then show 0 drift.
+    const seedStany = [
+      stan('prod-1', 'mag-main', 45),
+      stan('prod-2', 'mag-main', 80),
+      stan('prod-3', 'mag-main', 18),
+      stan('prod-1', 'mag-aux',  12),
+      stan('prod-2', 'mag-aux',  30),
+    ]
+    const backfillRuchy = [
+      ruch('initial_stock', 'prod-1', 45, { dst: 'mag-main' }),
+      ruch('initial_stock', 'prod-2', 80, { dst: 'mag-main' }),
+      ruch('initial_stock', 'prod-3', 18, { dst: 'mag-main' }),
+      ruch('initial_stock', 'prod-1', 12, { dst: 'mag-aux'  }),
+      ruch('initial_stock', 'prod-2', 30, { dst: 'mag-aux'  }),
+    ]
+    const rows       = computeReconciliation(seedStany, backfillRuchy)
+    const mismatches = rows.filter(r => Math.abs(r.drift) > 0.001)
+    expect(mismatches).toHaveLength(0) // A1 backfill fully explains the stored balances
+  })
+
+  it('[POST-BACKFILL] initial_stock + subsequent purchase → correct cumulative balance', () => {
+    // Simulate: seed 45 units via initial_stock, then receive 10 more via purchase.
+    // Stored balance should be 55 with zero drift.
+    const stany = [stan(T1, M1, 55)]
+    const ruchy = [
+      ruch('initial_stock', T1, 45, { dst: M1 }),
+      ruch('purchase',      T1, 10, { dst: M1 }),
+    ]
+    const [row] = computeReconciliation(stany, ruchy)
+    expect(row.expected).toBe(55)
+    expect(row.drift).toBe(0)
   })
 
 })
