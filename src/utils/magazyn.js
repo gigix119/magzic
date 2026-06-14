@@ -334,7 +334,7 @@ export async function cofnijDoRoboczej(fakturaId) {
       )
   }
 
-  await supabase.from('ruchy_magazynowe').delete().eq('faktura_id', fakturaId)
+  await supabase.from('ruchy_magazynowe').update({ reversed_at: new Date().toISOString() }).eq('faktura_id', fakturaId)
 
   const { error } = await supabase
     .from('faktury')
