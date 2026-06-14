@@ -1,0 +1,5 @@
+# STAGING — 07_indexes.sql output
+# Run 07_indexes.sql in Supabase Dashboard → SQL Editor (staging project)
+# Paste the full result here, then do the same for PROD_07_indexes.txt
+
+[PASTE OUTPUT HERE]

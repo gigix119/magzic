@@ -1,0 +1,5 @@
+# STAGING — 06_triggers.sql output
+# Run 06_triggers.sql in Supabase Dashboard → SQL Editor (staging project)
+# Paste the full result here, then do the same for PROD_06_triggers.txt
+
+[PASTE OUTPUT HERE]

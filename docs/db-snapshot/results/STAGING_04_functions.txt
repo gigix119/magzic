@@ -1,0 +1,5 @@
+# STAGING — 04_functions.sql output
+# Run 04_functions.sql in Supabase Dashboard → SQL Editor (staging project)
+# Paste the full result here, then do the same for PROD_04_functions.txt
+
+[PASTE OUTPUT HERE]

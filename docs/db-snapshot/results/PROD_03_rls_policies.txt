@@ -1,0 +1,5 @@
+# PRODUCTION — 03_rls_policies.sql output
+# Run 03_rls_policies.sql in Supabase Dashboard → SQL Editor (production project)
+# Paste the full result here.
+
+[PASTE OUTPUT HERE]

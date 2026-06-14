@@ -1,0 +1,5 @@
+# PRODUCTION — 05_constraints.sql output
+# Run 05_constraints.sql in Supabase Dashboard → SQL Editor (production project)
+# Paste the full result here.
+
+[PASTE OUTPUT HERE]

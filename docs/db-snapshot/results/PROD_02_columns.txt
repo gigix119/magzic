@@ -1,0 +1,5 @@
+# PRODUCTION — 02_columns.sql output
+# Run 02_columns.sql in Supabase Dashboard → SQL Editor (production project)
+# Paste the full result here.
+
+[PASTE OUTPUT HERE]

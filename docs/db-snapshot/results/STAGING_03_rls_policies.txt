@@ -1,0 +1,5 @@
+# STAGING — 03_rls_policies.sql output
+# Run 03_rls_policies.sql in Supabase Dashboard → SQL Editor (staging project)
+# Paste the full result here, then do the same for PROD_03_rls_policies.txt
+
+[PASTE OUTPUT HERE]

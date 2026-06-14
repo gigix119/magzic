@@ -1,0 +1,5 @@
+# STAGING — 05_constraints.sql output
+# Run 05_constraints.sql in Supabase Dashboard → SQL Editor (staging project)
+# Paste the full result here, then do the same for PROD_05_constraints.txt
+
+[PASTE OUTPUT HERE]

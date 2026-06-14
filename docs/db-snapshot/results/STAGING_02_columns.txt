@@ -1,0 +1,5 @@
+# STAGING — 02_columns.sql output
+# Run 02_columns.sql in Supabase Dashboard → SQL Editor (staging project)
+# Paste the full result here, then do the same for PROD_02_columns.txt
+
+[PASTE OUTPUT HERE]

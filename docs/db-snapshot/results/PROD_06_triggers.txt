@@ -1,0 +1,5 @@
+# PRODUCTION — 06_triggers.sql output
+# Run 06_triggers.sql in Supabase Dashboard → SQL Editor (production project)
+# Paste the full result here.
+
+[PASTE OUTPUT HERE]
