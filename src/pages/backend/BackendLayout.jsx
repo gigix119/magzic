@@ -1,15 +1,16 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, Activity, ShieldCheck, ScrollText, AlertTriangle, Brain } from 'lucide-react'
+import { LayoutDashboard, Users, Activity, ShieldCheck, ScrollText, AlertTriangle, Brain, Scale } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const BACKEND_NAV = [
-  { to: '/backend',             icon: LayoutDashboard, label: 'Przegląd',    end: true },
-  { to: '/backend/users',       icon: Users,           label: 'Użytkownicy' },
-  { to: '/backend/activity',    icon: Activity,        label: 'Aktywność' },
-  { to: '/backend/permissions', icon: ShieldCheck,     label: 'Uprawnienia' },
-  { to: '/backend/audit',       icon: ScrollText,      label: 'Audit log' },
-  { to: '/backend/errors',      icon: AlertTriangle,   label: 'Błędy' },
-  { to: '/backend/model',       icon: Brain,           label: 'Model faktur' },
+  { to: '/backend',                   icon: LayoutDashboard, label: 'Przegląd',         end: true },
+  { to: '/backend/users',             icon: Users,           label: 'Użytkownicy' },
+  { to: '/backend/activity',          icon: Activity,        label: 'Aktywność' },
+  { to: '/backend/permissions',       icon: ShieldCheck,     label: 'Uprawnienia' },
+  { to: '/backend/audit',             icon: ScrollText,      label: 'Audit log' },
+  { to: '/backend/errors',            icon: AlertTriangle,   label: 'Błędy' },
+  { to: '/backend/model',             icon: Brain,           label: 'Model faktur' },
+  { to: '/backend/reconciliation',    icon: Scale,           label: 'Reconciliacja' },
 ]
 
 export default function BackendLayout() {

@@ -34,6 +34,7 @@ import BackendPermissions from './pages/backend/BackendPermissions'
 import BackendAudit from './pages/backend/BackendAudit'
 import BackendErrors from './pages/backend/BackendErrors'
 import BackendModel from './pages/backend/BackendModel'
+import BackendInventoryReconciliation from './pages/backend/BackendInventoryReconciliation'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -89,6 +90,7 @@ export default function App() {
                     <Route path="audit" element={<BackendAudit />} />
                     <Route path="errors" element={<BackendErrors />} />
                     <Route path="model" element={<BackendModel />} />
+                    <Route path="reconciliation" element={<BackendInventoryReconciliation />} />
                   </Route>
                 </Route>
               </Routes>
