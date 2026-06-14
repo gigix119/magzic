@@ -1,4 +1,10 @@
 -- ============================================================
+-- DEPRECATED (audyt 2026-06): zawiera USING(true) łamiące izolację tenantów.
+-- NIE URUCHAMIAĆ. Zachowane wyłącznie dla historii. Poprawne polityki: patrz
+-- Prompty 17-18 / migrations/.
+-- ============================================================
+
+-- ============================================================
 -- MAGZIC — migracja bazy danych
 -- Wklej w Supabase SQL Editor i uruchom jednorazowo
 -- ============================================================

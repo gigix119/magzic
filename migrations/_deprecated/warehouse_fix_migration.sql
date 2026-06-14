@@ -1,4 +1,10 @@
 -- ============================================================
+-- DEPRECATED (audyt 2026-06): zawiera USING(true) łamiące izolację tenantów.
+-- NIE URUCHAMIAĆ. Zachowane wyłącznie dla historii. Poprawne polityki: patrz
+-- Prompty 17-18 / migrations/.
+-- ============================================================
+
+-- ============================================================
 -- Magzic — Warehouse Fix Migration
 -- Idempotentny — można wykonać wielokrotnie.
 -- Wklej całość do Supabase SQL Editor i wykonaj.

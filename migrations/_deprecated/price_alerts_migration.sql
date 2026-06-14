@@ -1,3 +1,9 @@
+-- ============================================================
+-- DEPRECATED (audyt 2026-06): zawiera USING(true) łamiące izolację tenantów.
+-- NIE URUCHAMIAĆ. Zachowane wyłącznie dla historii. Poprawne polityki: patrz
+-- Prompty 17-18 / migrations/.
+-- ============================================================
+
 -- price_alerts_migration.sql
 -- Wklej całą zawartość w Supabase SQL Editor i kliknij "Run"
 

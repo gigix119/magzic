@@ -1,4 +1,10 @@
 -- ============================================================
+-- DEPRECATED (audyt 2026-06): zawiera USING(true) łamiące izolację tenantów.
+-- NIE URUCHAMIAĆ. Zachowane wyłącznie dla historii. Poprawne polityki: patrz
+-- Prompty 17-18 / migrations/.
+-- ============================================================
+
+-- ============================================================
 -- Magzic — Invoice Fix Migration
 -- Idempotentny — można wykonać wielokrotnie bez efektów ubocznych.
 -- Wklej całość do Supabase SQL Editor i wykonaj.
