@@ -81,7 +81,8 @@ export async function fetchAndReconcile(supabase, workspaceId) {
     supabase
       .from('ruchy_magazynowe')
       .select('towar_id, magazyn_zrodlowy_id, magazyn_docelowy_id, ilosc, typ, workspace_id')
-      .eq('workspace_id', workspaceId),
+      .eq('workspace_id', workspaceId)
+      .is('reversed_at', null),        // exclude soft-marked reversals (Prompt 6.5)
   ])
 
   if (stanyRes.error) return { rows: [], mismatches: [], error: stanyRes.error.message }

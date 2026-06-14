@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeReconciliation } from './inventoryReconciliation'
+import { computeReconciliation, fetchAndReconcile } from './inventoryReconciliation'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -205,6 +205,181 @@ describe('computeReconciliation', () => {
     // unknown type is ignored → expected stays 45
     expect(row.expected).toBe(45)
     expect(row.drift).toBe(0)
+  })
+
+})
+
+// ── fetchAndReconcile (mock Supabase) ──────────────────────────────────────────
+//
+// fetchAndReconcile(supabase, workspaceId) fetches from the DB and calls
+// computeReconciliation.  It must filter reversed_at IS NULL so that
+// soft-marked reversals (cofnijDoRoboczej) are excluded from expected balance.
+
+function makeSupa({ stany, ruchy }) {
+  return {
+    from(table) {
+      if (table === 'stany_magazynowe') {
+        return {
+          select: () => ({ eq: () => Promise.resolve({ data: stany, error: null }) }),
+        }
+      }
+      if (table === 'ruchy_magazynowe') {
+        // chain: .select().eq().is('reversed_at', null)
+        return {
+          select: () => ({
+            eq: () => ({
+              is: () => Promise.resolve({ data: ruchy, error: null }),
+            }),
+          }),
+        }
+      }
+      return {}
+    },
+  }
+}
+
+describe('fetchAndReconcile', () => {
+
+  it('returns no mismatches when movements fully account for stored balance', async () => {
+    const stany = [{ towar_id: T1, magazyn_id: M1, ilosc: 45, workspace_id: WS1 }]
+    const ruchy = [{
+      towar_id: T1, magazyn_docelowy_id: M1, magazyn_zrodlowy_id: null,
+      ilosc: 45, typ: 'purchase', workspace_id: WS1,
+    }]
+    const { rows, mismatches, error } = await fetchAndReconcile(makeSupa({ stany, ruchy }), WS1)
+    expect(error).toBeNull()
+    expect(rows).toHaveLength(1)
+    expect(mismatches).toHaveLength(0)
+  })
+
+  it('returns mismatch when stored exceeds movements (stored inflated)', async () => {
+    const stany = [{ towar_id: T1, magazyn_id: M1, ilosc: 50, workspace_id: WS1 }]
+    const ruchy = [{
+      towar_id: T1, magazyn_docelowy_id: M1, magazyn_zrodlowy_id: null,
+      ilosc: 45, typ: 'purchase', workspace_id: WS1,
+    }]
+    const { mismatches } = await fetchAndReconcile(makeSupa({ stany, ruchy }), WS1)
+    expect(mismatches).toHaveLength(1)
+    expect(mismatches[0].drift).toBe(-5) // expected 45, stored 50
+  })
+
+  it('propagates Supabase error from stany_magazynowe', async () => {
+    const errSupa = {
+      from(table) {
+        if (table === 'stany_magazynowe') {
+          return { select: () => ({ eq: () => Promise.resolve({ data: null, error: { message: 'DB error' } }) }) }
+        }
+        return { select: () => ({ eq: () => ({ is: () => Promise.resolve({ data: [], error: null }) }) }) }
+      },
+    }
+    const { error } = await fetchAndReconcile(errSupa, WS1)
+    expect(error).toBe('DB error')
+  })
+
+})
+
+// ── Invariant guard ────────────────────────────────────────────────────────────
+//
+// THE CORE ASSERTION: for every (towar, magazyn, workspace) row in
+// stany_magazynowe, drift must be 0 when the system is consistent.
+//
+// How to run this invariant against real staging data (read-only, no writes):
+//
+//   import { fetchAndReconcile } from './inventoryReconciliation'
+//   import { createClient } from '@supabase/supabase-js'
+//
+//   const supa = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+//   const { mismatches, error } = await fetchAndReconcile(supa, '<workspace-uuid>')
+//   console.table(mismatches)   // non-empty → drift exists; inspect before P8-P15
+//
+// Alternatively run docs/db-snapshot/08_inventory_reconciliation.sql in the
+// Supabase SQL Editor (staging first) for a workspace-scoped view.
+
+describe('Invariant guard — balance === sum(non-reversed movements)', () => {
+
+  it('[GUARD] clean workspace: all balances fully explained by movements → no drift', () => {
+    const stany = [
+      stan(T1, M1, 45),
+      stan(T2, M1, 80),
+      stan(T1, M2, 12),
+      stan(T2, M2, 30),
+    ]
+    const ruchy = [
+      ruch('purchase', T1, 45, { dst: M1 }),
+      ruch('purchase', T2, 80, { dst: M1 }),
+      ruch('purchase', T1, 12, { dst: M2 }),
+      ruch('purchase', T2, 30, { dst: M2 }),
+    ]
+    const rows       = computeReconciliation(stany, ruchy)
+    const mismatches = rows.filter(r => Math.abs(r.drift) > 0.001)
+    expect(mismatches).toHaveLength(0) // ← the invariant assertion
+  })
+
+  it('[GUARD] multi-type scenario: purchases + issue + transfer + corrections → no drift', () => {
+    // Mirrors the typical movement mix expected after P8-P15
+    const stany = [
+      stan(T1, M1, 30),  // 50 purchase − 10 issue − 10 transfer_out
+      stan(T1, M2, 10),  // 10 transfer_in
+      stan(T2, M1, 55),  // 50 purchase + 5 correction_plus
+    ]
+    const ruchy = [
+      ruch('purchase',         T1, 50, { dst: M1 }),
+      ruch('issue',            T1, 10, { src: M1 }),
+      ruch('transfer',         T1, 10, { src: M1, dst: M2 }),
+      ruch('purchase',         T2, 50, { dst: M1 }),
+      ruch('correction_plus',  T2,  5, { dst: M1 }),
+    ]
+    const mismatches = computeReconciliation(stany, ruchy).filter(r => Math.abs(r.drift) > 0.001)
+    expect(mismatches).toHaveLength(0) // ← the invariant assertion
+  })
+
+  it('[GUARD] correction_minus is correctly excluded from balance', () => {
+    // 50 purchased, 3 written off via correction_minus → stored = 47
+    const stany = [stan(T1, M1, 47)]
+    const ruchy = [
+      ruch('purchase',          T1, 50, { dst: M1 }),
+      ruch('correction_minus',  T1,  3, { dst: M1 }),
+    ]
+    const mismatches = computeReconciliation(stany, ruchy).filter(r => Math.abs(r.drift) > 0.001)
+    expect(mismatches).toHaveLength(0)
+  })
+
+  // ── Baseline: documents KNOWN drift from seed data ────────────────────────
+  //
+  // staging_seed.sql inserts stany_magazynowe rows directly (no matching ruchy).
+  // After a plain seed run the invariant WILL fail.  This test documents the
+  // exact baseline mismatch so it is visible before P8-P15.
+  //
+  // Baseline drift (staging_seed.sql Alpha workspace):
+  //   prod1/mag-main: stored=45, expected=0, drift=-45
+  //   prod2/mag-main: stored=80, expected=0, drift=-80
+  //   prod3/mag-main: stored=18, expected=0, drift=-18
+  //   prod1/mag-aux:  stored=12, expected=0, drift=-12
+  //   prod2/mag-aux:  stored=30, expected=0, drift=-30
+  //   Total abs drift: 185
+  //
+  // Root cause: non-atomic seed; stany written without corresponding ruchy.
+  // Fix: seed ruchy to match stany, OR reset stany to 0 and re-enter via
+  //      dodajStan / zatwierdźFakturę so ruchy are created atomically.
+
+  it('[BASELINE] staging_seed: every seeded balance has drift = -stored (no movements)', () => {
+    const seedStany = [
+      stan('prod-1', 'mag-main', 45),
+      stan('prod-2', 'mag-main', 80),
+      stan('prod-3', 'mag-main', 18),
+      stan('prod-1', 'mag-aux',  12),
+      stan('prod-2', 'mag-aux',  30),
+    ]
+    const rows       = computeReconciliation(seedStany, []) // no movements in staging seed
+    const mismatches = rows.filter(r => Math.abs(r.drift) > 0.001)
+
+    // ALL rows drift — this is the pre-P8 baseline
+    expect(mismatches).toHaveLength(5)
+    expect(mismatches.every(r => r.drift === -r.stored)).toBe(true)
+    expect(mismatches.every(r => r.expected === 0)).toBe(true)
+
+    const totalAbsDrift = mismatches.reduce((s, r) => s + Math.abs(r.drift), 0)
+    expect(totalAbsDrift).toBe(185) // 45+80+18+12+30
   })
 
 })
