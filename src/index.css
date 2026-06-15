@@ -65,6 +65,50 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+/* ── Semantic color tokens ── */
+:root {
+  --c-action: #2563EB;
+  --c-action-subtle: rgba(37, 99, 235, 0.1);
+  --c-success: #059669;
+  --c-success-subtle: rgba(5, 150, 105, 0.1);
+  --c-attention: #D97706;
+  --c-attention-subtle: rgba(217, 119, 6, 0.1);
+  --c-critical: #E11D48;
+  --c-critical-subtle: rgba(225, 29, 72, 0.1);
+  --c-automation: #7C3AED;
+  --c-automation-subtle: rgba(124, 58, 237, 0.1);
+
+  --c-app-bg: var(--bg);
+  --c-surface: #ffffff;
+
+  --radius-card: 16px;
+  --radius-control: 12px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+}
+
+:root[data-theme="dark"] {
+  --c-action: #3B82F6;
+  --c-action-subtle: rgba(59, 130, 246, 0.15);
+  --c-success: #10B981;
+  --c-success-subtle: rgba(16, 185, 129, 0.15);
+  --c-attention: #F59E0B;
+  --c-attention-subtle: rgba(245, 158, 11, 0.15);
+  --c-critical: #F43F5E;
+  --c-critical-subtle: rgba(244, 63, 94, 0.15);
+  --c-automation: #8B5CF6;
+  --c-automation-subtle: rgba(139, 92, 246, 0.15);
+
+  --c-app-bg: var(--bg);
+  --c-surface: #18181b;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
 /* ── Mobile-first responsive helpers ── */
 
 /* Sidebar: always visible on desktop (cancel any leftover transform) */
