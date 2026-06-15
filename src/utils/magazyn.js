@@ -163,97 +163,19 @@ export async function getRuchyTowaru(towarId, limit = 20, workspaceId = null) {
 }
 
 export async function zatwierdźFakturę(fakturaId) {
-  const { data: faktura, error: fakturaError } = await supabase
-    .from('faktury')
-    .select(`*, pozycje_faktury(id, towar_id, magazyn_id, ilosc, cena_netto, vat_procent, towary(nazwa, jednostka))`)
-    .eq('id', fakturaId)
-    .single()
+  const { data, error } = await supabase.rpc('approve_invoice_stock', {
+    p_faktura_id: fakturaId,
+  })
 
-  if (fakturaError || !faktura) {
-    return { success: false, error: fakturaError?.message || 'Nie znaleziono faktury' }
-  }
-
-  const pozycje = faktura.pozycje_faktury || []
-  if (pozycje.length === 0) {
-    return { success: false, error: 'Faktura nie ma pozycji' }
-  }
-  if (faktura.status === 'zatwierdzona') {
-    return { success: false, error: 'Faktura już zatwierdzona' }
-  }
-
-  const workspaceId = faktura.workspace_id || null
-
-  const pozycjeTowary = pozycje.filter(p =>
-    p.towar_id &&
-    (p.magazyn_id || faktura.magazyn_id) &&
-    Number(p.cena_netto) > 0 &&
-    Number(p.ilosc) > 0
-  )
-  const pozycjePoziome = pozycje.filter(p => !p.towar_id || (!p.magazyn_id && !faktura.magazyn_id))
-
-  const errors = []
-  const zaktualizowane = []
-
-  for (const poz of pozycjeTowary) {
-    const magazynId = poz.magazyn_id || faktura.magazyn_id
-
-    const { data: aktualny } = await supabase
-      .from('stany_magazynowe')
-      .select('id, ilosc')
-      .eq('towar_id', poz.towar_id)
-      .eq('magazyn_id', magazynId)
-      .maybeSingle()
-
-    const nowaIlosc = (aktualny?.ilosc || 0) + Number(poz.ilosc)
-
-    const upsertPayload = {
-      towar_id: poz.towar_id,
-      magazyn_id: magazynId,
-      ilosc: nowaIlosc,
-      updated_at: new Date().toISOString(),
-    }
-    if (workspaceId) upsertPayload.workspace_id = workspaceId
-
-    const { error: upsertError } = await supabase
-      .from('stany_magazynowe')
-      .upsert(upsertPayload, { onConflict: 'towar_id,magazyn_id' })
-
-    if (upsertError) {
-      errors.push(`${poz.towary?.nazwa || poz.towar_id}: ${upsertError.message}`)
-      continue
-    }
-
-    const ruchPayload = {
-      towar_id: poz.towar_id,
-      magazyn_docelowy_id: magazynId,
-      ilosc: Number(poz.ilosc),
-      typ: 'invoice_purchase',
-      powod: `Faktura ${faktura.numer}`,
-      faktura_id: fakturaId,
-    }
-    if (workspaceId) ruchPayload.workspace_id = workspaceId
-    await supabase.from('ruchy_magazynowe').insert([ruchPayload])
-
-    zaktualizowane.push({ towar: poz.towary?.nazwa, ilosc: poz.ilosc, nowaIlosc })
-  }
-
-  if (errors.length > 0) {
-    return { success: false, error: `Błędy aktualizacji stanów: ${errors.join('; ')}` }
-  }
-
-  const wartoscNetto = pozycje.reduce((s, p) => s + (Number(p.ilosc) * Number(p.cena_netto)), 0)
-
-  const { error: updateError } = await supabase
-    .from('faktury')
-    .update({ status: 'zatwierdzona', wartosc_netto: wartoscNetto })
-    .eq('id', fakturaId)
-
-  if (updateError) {
-    return { success: false, error: `Błąd aktualizacji statusu: ${updateError.message}` }
-  }
+  if (error) return { success: false, error: error.message }
+  if (!data?.success) return { success: false, error: data?.error ?? 'Nieznany błąd' }
 
   refreshInventory()
-  return { success: true, zaktualizowane, pominiete: pozycjePoziome.length }
+  return {
+    success:        true,
+    zaktualizowane: data.zaktualizowane ?? [],
+    pominiete:      data.pominiete      ?? 0,
+  }
 }
 
 export async function cofnijDoRoboczej(fakturaId) {
