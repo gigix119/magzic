@@ -179,49 +179,15 @@ export async function zatwierdźFakturę(fakturaId) {
 }
 
 export async function cofnijDoRoboczej(fakturaId) {
-  const { data: faktura } = await supabase
-    .from('faktury')
-    .select('*, pozycje_faktury(towar_id, magazyn_id, ilosc)')
-    .eq('id', fakturaId)
-    .single()
-
-  if (!faktura || faktura.status !== 'zatwierdzona') {
-    return { success: false, error: 'Faktura nie jest zatwierdzona' }
-  }
-
-  for (const poz of faktura.pozycje_faktury || []) {
-    if (!poz.towar_id) continue
-    const magazynId = poz.magazyn_id || faktura.magazyn_id
-    if (!magazynId) continue
-
-    const { data: stan } = await supabase
-      .from('stany_magazynowe')
-      .select('ilosc')
-      .eq('towar_id', poz.towar_id)
-      .eq('magazyn_id', magazynId)
-      .maybeSingle()
-
-    const nowaIlosc = Math.max(0, (stan?.ilosc || 0) - Number(poz.ilosc))
-
-    await supabase
-      .from('stany_magazynowe')
-      .upsert(
-        { towar_id: poz.towar_id, magazyn_id: magazynId, ilosc: nowaIlosc },
-        { onConflict: 'towar_id,magazyn_id' }
-      )
-  }
-
-  await supabase.from('ruchy_magazynowe').update({ reversed_at: new Date().toISOString() }).eq('faktura_id', fakturaId)
-
-  const { error } = await supabase
-    .from('faktury')
-    .update({ status: 'robocza' })
-    .eq('id', fakturaId)
+  const { data, error } = await supabase.rpc('reverse_invoice_stock', {
+    p_faktura_id: fakturaId,
+  })
 
   if (error) return { success: false, error: error.message }
+  if (!data?.success) return { success: false, error: data?.error ?? 'Nieznany błąd' }
 
   refreshInventory()
-  return { success: true }
+  return { success: true, cofniete: data.cofniete ?? 0 }
 }
 
 export async function sprawdzPowiazaniaTowaru(towarId) {

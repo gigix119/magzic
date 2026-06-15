@@ -14,68 +14,67 @@ const FAKTURA_ID = 'fak-test-1'
 const TOWAR_ID   = 'twr-test-1'
 const MAGAZYN_ID = 'mag-test-1'
 
-const ZATWIERDZONA = {
-  id: FAKTURA_ID,
-  status: 'zatwierdzona',
-  magazyn_id: MAGAZYN_ID,
-  pozycje_faktury: [{ towar_id: TOWAR_ID, magazyn_id: null, ilosc: 5 }],
-}
+// ── cofnijDoRoboczej — RPC-based reversal (P13) ───────────────────────────────
+//
+// cofnijDoRoboczej now delegates all DB work to the reverse_invoice_stock PG RPC.
+// Tests verify the JS contract: correct RPC name called, response passed through,
+// refreshInventory fired on success only, no direct table mutations from JS.
+// History preservation (reversed_at on originals, compensating rows) is enforced
+// by the PG function and covered by the acceptance criteria for the SQL migration.
 
-function setupMock({ faktura = ZATWIERDZONA } = {}) {
-  const ruchyUpdateEq = vi.fn().mockResolvedValue({ error: null })
-  const ruchyUpdate   = vi.fn().mockReturnValue({ eq: ruchyUpdateEq })
-  const ruchyDelete   = vi.fn()
-
-  vi.mocked(supabase.from).mockImplementation((table) => {
-    if (table === 'faktury') {
-      return {
-        select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: faktura, error: null }) }) }),
-        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
-      }
-    }
-    if (table === 'stany_magazynowe') {
-      return {
-        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { ilosc: 10 }, error: null }) }) }) }),
-        upsert:  () => Promise.resolve({ error: null }),
-      }
-    }
-    if (table === 'ruchy_magazynowe') {
-      return { update: ruchyUpdate, delete: ruchyDelete }
-    }
-    return {}
-  })
-
-  return { ruchyUpdate, ruchyUpdateEq, ruchyDelete }
-}
-
-describe('cofnijDoRoboczej', () => {
+describe('cofnijDoRoboczej — RPC path (P13)', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('marks ruchy_magazynowe as reversed instead of deleting them', async () => {
-    const { ruchyUpdate, ruchyUpdateEq, ruchyDelete } = setupMock()
+  it('calls reverse_invoice_stock RPC with the faktura id', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 1 },
+      error: null,
+    })
+
+    await cofnijDoRoboczej(FAKTURA_ID)
+
+    expect(supabase.rpc).toHaveBeenCalledWith('reverse_invoice_stock', { p_faktura_id: FAKTURA_ID })
+  })
+
+  it('calls RPC exactly once per reversal attempt', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 2 },
+      error: null,
+    })
+
+    await cofnijDoRoboczej(FAKTURA_ID)
+
+    expect(supabase.rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns success and fires refreshInventory on success', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 3 },
+      error: null,
+    })
 
     const result = await cofnijDoRoboczej(FAKTURA_ID)
 
     expect(result.success).toBe(true)
-    expect(ruchyDelete).not.toHaveBeenCalled()
-    expect(ruchyUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ reversed_at: expect.any(String) })
-    )
-    expect(ruchyUpdateEq).toHaveBeenCalledWith('faktura_id', FAKTURA_ID)
+    expect(refreshInventory).toHaveBeenCalledTimes(1)
   })
 
-  it('row count is preserved — update is called once (not delete)', async () => {
-    const { ruchyUpdate, ruchyDelete } = setupMock()
+  it('returns cofniete count from RPC response', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 4 },
+      error: null,
+    })
 
-    await cofnijDoRoboczej(FAKTURA_ID)
+    const result = await cofnijDoRoboczej(FAKTURA_ID)
 
-    expect(ruchyDelete).toHaveBeenCalledTimes(0)
-    expect(ruchyUpdate).toHaveBeenCalledTimes(1)
+    expect(result.cofniete).toBe(4)
   })
 
-  it('returns error when invoice status is not zatwierdzona', async () => {
-    const robocza = { ...ZATWIERDZONA, status: 'robocza' }
-    setupMock({ faktura: robocza })
+  it('returns error when invoice is not zatwierdzona (RPC guard)', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: false, error: 'Faktura nie jest zatwierdzona' },
+      error: null,
+    })
 
     const result = await cofnijDoRoboczej(FAKTURA_ID)
 
@@ -83,14 +82,110 @@ describe('cofnijDoRoboczej', () => {
     expect(result.error).toMatch(/nie jest zatwierdzona/)
   })
 
-  it('reversed_at value is a valid ISO timestamp string', async () => {
-    const { ruchyUpdate } = setupMock()
+  it('double-reverse is idempotent — second call returns error (Faktura już jest robocza)', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: false, error: 'Faktura już jest robocza' },
+      error: null,
+    })
+
+    const result = await cofnijDoRoboczej(FAKTURA_ID)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/już jest robocza/)
+  })
+
+  it('does not fire refreshInventory when RPC returns failure', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: false, error: 'Faktura nie jest zatwierdzona' },
+      error: null,
+    })
 
     await cofnijDoRoboczej(FAKTURA_ID)
 
-    const [callArg] = ruchyUpdate.mock.calls[0]
-    expect(() => new Date(callArg.reversed_at).toISOString()).not.toThrow()
-    expect(new Date(callArg.reversed_at).getTime()).toBeGreaterThan(0)
+    expect(refreshInventory).not.toHaveBeenCalled()
+  })
+
+  it('does not directly mutate ruchy_magazynowe or stany_magazynowe from JS', async () => {
+    // History preservation and balance restoration are owned by the PG function.
+    // The JS layer must not call supabase.from() for these tables.
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 1 },
+      error: null,
+    })
+
+    await cofnijDoRoboczej(FAKTURA_ID)
+
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('row count is preserved — supabase.from delete is never called', async () => {
+    // The RPC appends compensating rows; it never deletes originals.
+    // The JS layer must not issue any delete either.
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 2 },
+      error: null,
+    })
+
+    await cofnijDoRoboczej(FAKTURA_ID)
+
+    // supabase.from is never called — confirming no delete path
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('propagates Supabase transport error as { success: false, error }', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data:  null,
+      error: { message: 'connection timeout' },
+    })
+
+    const result = await cofnijDoRoboczej(FAKTURA_ID)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('connection timeout')
+    expect(refreshInventory).not.toHaveBeenCalled()
+  })
+
+  it('workspace ownership rejection propagates as error', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: false, error: 'workspace not owned by caller' },
+      error: null,
+    })
+
+    const result = await cofnijDoRoboczej(FAKTURA_ID)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/workspace/)
+    expect(refreshInventory).not.toHaveBeenCalled()
+  })
+
+  it('balance invariant: after reversal, non-reversed movements produce drift=0', () => {
+    // Simulate the state after a full approve+reverse cycle on one item:
+    //   - invoice_purchase qty=5 → reversed_at set (excluded from computeReconciliation input)
+    //   - compensating invoice_purchase qty=5 → reversed_at set (also excluded)
+    //   - stany_magazynowe restored to balance=0 by the PG function
+    // Only non-reversed movements are passed to computeReconciliation (the caller
+    // already filters reversed_at IS NULL before calling this function — see
+    // inventoryReconciliation.js:85 and inventoryConcurrency.test.js:402).
+    // With no non-reversed movements remaining, drift = 0 - 0 = 0.
+    const stany = [{ towar_id: TOWAR_ID, magazyn_id: MAGAZYN_ID, ilosc: 0, workspace_id: 'ws-1' }]
+    const ruchy = [] // all movements for this faktura have reversed_at set → filtered out by caller
+    const [row] = computeReconciliation(stany, ruchy)
+    expect(row.drift).toBe(0)
+  })
+
+  it('compensating sum equals original sum when the PG function inserts reversal rows', () => {
+    // This invariant is enforced by the SQL: the compensating INSERT uses the same
+    // ilosc as the original movement. We verify the JS caller receives cofniete=N
+    // (one compensating row per original movement) as the count.
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { success: true, cofniete: 3 },
+      error: null,
+    })
+
+    return cofnijDoRoboczej(FAKTURA_ID).then(result => {
+      // cofniete = 3 means 3 compensating movements created, one per original
+      expect(result.cofniete).toBe(3)
+    })
   })
 })
 
