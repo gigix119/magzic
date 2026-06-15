@@ -8,7 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { getZlecenieConfigFor } from '../config/businessTypes'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
-  Sparkles, Bell, X, Shield, Settings, LogOut,
+  Sparkles, Bell, X, Shield, Settings, LogOut, Menu,
 } from 'lucide-react'
 import Topbar from './ui/Topbar'
 
@@ -25,13 +25,6 @@ const ROUTE_TRACKING = {
   '/zlecenia':    { module: 'zlecenia',    action: 'zlecenia_opened' },
 }
 
-const BOTTOM_NAV_BASE = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/towary', icon: Package, label: 'Towary' },
-  { to: '/faktury', icon: FileText, label: 'Faktury' },
-  // zlecenia inserted here dynamically
-  { to: '/alerty', icon: Bell, label: 'Alerty', showBadge: true },
-]
 
 const GROUP_LABEL_STYLE = {
   fontSize: 10,
@@ -113,9 +106,10 @@ export default function Layout() {
   const close = () => setSidebarOpen(false)
 
   const bottomNav = [
-    ...BOTTOM_NAV_BASE.slice(0, 3),
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dziś' },
     zlecenieItem,
-    ...BOTTOM_NAV_BASE.slice(3),
+    { to: '/faktury', icon: FileText, label: 'Faktury' },
+    { icon: Menu, label: 'Więcej', showBadge: true, onClick: () => setSidebarOpen(true) },
   ]
 
   useEffect(() => {
@@ -291,34 +285,54 @@ export default function Layout() {
           paddingBottom: 'env(safe-area-inset-bottom, 8px)',
         }}
       >
-        {bottomNav.map(({ to, icon: Icon, label, showBadge }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg relative"
-            style={({ isActive }) => ({
-              color: isActive ? 'var(--c-action)' : 'var(--text-2)',
-              minWidth: 44,
-              minHeight: 44,
-              justifyContent: 'center',
-            })}
-          >
-            {typeof Icon === 'string'
-              ? <span style={{ fontSize: 20, lineHeight: 1 }}>{Icon}</span>
-              : <Icon size={20} />}
-            <span style={{ fontSize: 11, fontWeight: 500 }}>{label}</span>
-            {showBadge && alertCount > 0 && (
-              <span style={{
-                position: 'absolute', top: 4, right: 8,
-                background: '#ef4444', color: '#fff',
-                borderRadius: 10, padding: '1px 5px',
-                fontSize: 9, fontWeight: 700, lineHeight: '14px',
-              }}>
-                {alertCount > 9 ? '9+' : alertCount}
-              </span>
-            )}
-          </NavLink>
-        ))}
+        {bottomNav.map(({ to, icon: Icon, label, showBadge, onClick }) =>
+          to ? (
+            <NavLink
+              key={to}
+              to={to}
+              className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg relative"
+              style={({ isActive }) => ({
+                color: isActive ? 'var(--c-action)' : 'var(--text-2)',
+                minWidth: 44,
+                minHeight: 44,
+                justifyContent: 'center',
+              })}
+            >
+              {typeof Icon === 'string'
+                ? <span style={{ fontSize: 20, lineHeight: 1 }}>{Icon}</span>
+                : <Icon size={20} />}
+              <span className="bottom-nav-label" style={{ fontSize: 11, fontWeight: 500 }}>{label}</span>
+            </NavLink>
+          ) : (
+            <button
+              key={label}
+              onClick={onClick}
+              className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg relative"
+              style={{
+                color: 'var(--text-2)',
+                minWidth: 44,
+                minHeight: 44,
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <Icon size={20} />
+              <span className="bottom-nav-label" style={{ fontSize: 11, fontWeight: 500 }}>{label}</span>
+              {showBadge && alertCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: 4, right: 8,
+                  background: '#ef4444', color: '#fff',
+                  borderRadius: 10, padding: '1px 5px',
+                  fontSize: 9, fontWeight: 700, lineHeight: '14px',
+                }}>
+                  {alertCount > 9 ? '9+' : alertCount}
+                </span>
+              )}
+            </button>
+          )
+        )}
       </nav>
     </div>
   )
