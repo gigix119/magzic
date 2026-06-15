@@ -8,8 +8,9 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { getZlecenieConfigFor } from '../config/businessTypes'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
-  Sparkles, Bell, Menu, X, Sun, Moon, LogOut, Shield, Settings,
+  Sparkles, Bell, X, Shield, Settings,
 } from 'lucide-react'
+import Topbar from './ui/Topbar'
 
 const CORE_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -46,7 +47,7 @@ export default function Layout() {
   const [alertCount, setAlertCount] = useState(0)
   const { theme, toggleTheme } = useTheme()
   const { user, profile, signOut } = useAuth()
-  const { getBusinessCategory } = useWorkspace()
+  const { getBusinessCategory, workspace } = useWorkspace()
   const navigate = useNavigate()
   const location = useLocation()
   const dark = theme === 'dark'
@@ -239,29 +240,15 @@ export default function Layout() {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header
-          className="flex items-center gap-3 px-3 py-2 lg:px-4 lg:py-3"
-          style={{ background: 'var(--card)', borderBottom: '1px solid var(--border)' }}
-        >
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-lg lg:hidden flex items-center justify-center"
-            style={{ color: 'var(--muted)', minWidth: 44, minHeight: 44 }}
-          >
-            <Menu size={20} />
-          </button>
-          <span className="font-semibold lg:hidden" style={{ fontSize: 14, color: 'var(--text)' }}>magzic</span>
-          <div className="ml-auto">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg transition-colors"
-              style={{ background: 'var(--hover-bg)', color: 'var(--text-2)' }}
-              title={dark ? 'Włącz tryb jasny' : 'Włącz tryb ciemny'}
-            >
-              {dark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-          </div>
-        </header>
+        <Topbar
+          onMenuOpen={() => setSidebarOpen(true)}
+          alertCount={alertCount}
+          user={user}
+          dark={dark}
+          toggleTheme={toggleTheme}
+          handleSignOut={handleSignOut}
+          workspace={workspace}
+        />
 
         <main className="flex-1 overflow-y-auto p-6 panel-main">
           <Outlet />
