@@ -11,9 +11,15 @@ import { Plus, Sparkles, Trash2, CheckCircle2, XCircle, ChevronDown, ChevronUp, 
 
 const IS = (err) => ({
   background: 'var(--input-bg)',
-  border: `1px solid ${err ? '#ef4444' : 'var(--border)'}`,
-  borderRadius: 8, color: 'var(--text)',
-  padding: '8px 12px', fontSize: 14, width: '100%', outline: 'none',
+  border: `1px solid ${err ? 'var(--c-critical)' : 'var(--border)'}`,
+  borderRadius: 'var(--radius-control)',
+  color: 'var(--text)',
+  padding: '10px 12px',
+  fontSize: 16,
+  width: '100%',
+  outline: 'none',
+  minHeight: 48,
+  boxSizing: 'border-box',
 })
 
 const emptyItem = { towar_id: '', ilosc: '' }
@@ -188,7 +194,7 @@ export default function Pakiety() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Pakiety sprzątania</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{pakiety.length} pakietów</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: '#3b82f6' }}>
+        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: 'var(--c-action)' }}>
           <Plus size={16} /> Nowy pakiet
         </button>
       </div>
@@ -229,7 +235,7 @@ export default function Pakiety() {
                   <div className="flex items-center gap-2 mt-3" style={{ paddingLeft: 52 }}>
                     <div className="flex items-center gap-1.5">
                       {max > 0 ? <CheckCircle2 size={13} style={{ color: '#16a34a' }} /> : <XCircle size={13} style={{ color: '#dc2626' }} />}
-                      <span className="font-bold text-base" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{max}</span>
+                      <span className="num font-bold text-base" style={{ color: 'var(--text)' }}>{max}</span>
                       <span className="text-xs" style={{ color: 'var(--text-2)' }}>realizacji</span>
                     </div>
                     <Badge variant={pak.aktywny ? 'green' : 'zinc'}>{pak.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge>
@@ -255,7 +261,7 @@ export default function Pakiety() {
                       <p className="text-xs" style={{ color: 'var(--text-2)' }}>Możliwe realizacje</p>
                       <div className="flex items-center gap-1.5 justify-end mt-0.5">
                         {max > 0 ? <CheckCircle2 size={13} style={{ color: '#16a34a' }} /> : <XCircle size={13} style={{ color: '#dc2626' }} />}
-                        <span className="font-bold" style={{ fontFamily: 'DM Mono, monospace', fontSize: 18, color: 'var(--text)' }}>{max}</span>
+                        <span className="num font-bold" style={{ fontSize: 18, color: 'var(--text)' }}>{max}</span>
                         <span className="text-xs" style={{ color: 'var(--text-2)' }}>szt.</span>
                       </div>
                     </div>
@@ -296,8 +302,8 @@ export default function Pakiety() {
                             return (
                               <tr key={el.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                                 <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{el.towary?.nazwa || '—'}</td>
-                                <td className="px-5 py-3 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{needed} {el.towary?.jednostka || ''}</td>
-                                <td className="px-5 py-3 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: ok ? '#16a34a' : '#dc2626' }}>{dostepny}</td>
+                                <td className="px-5 py-3 text-right num" style={{ color: 'var(--text-2)' }}>{needed} {el.towary?.jednostka || ''}</td>
+                                <td className="px-5 py-3 text-right font-semibold num" style={{ color: ok ? 'var(--c-success)' : 'var(--c-critical)' }}>{dostepny}</td>
                                 <td className="px-5 py-3 text-center"><Badge variant={ok ? 'green' : 'red'}>{ok ? 'OK' : 'Brak'}</Badge></td>
                               </tr>
                             )
@@ -343,8 +349,8 @@ export default function Pakiety() {
                       return (
                         <tr key={el.id} style={{ borderTop: '1px solid var(--border)' }}>
                           <td className="px-4 py-2" style={{ color: 'var(--text)' }}>{el.towary?.nazwa || '—'}</td>
-                          <td className="px-4 py-2 text-right" style={{ fontFamily: 'DM Mono, monospace', color: 'var(--text-2)' }}>{el.ilosc}</td>
-                          <td className="px-4 py-2 text-right font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: ok ? '#16a34a' : '#dc2626' }}>{dostepne}</td>
+                          <td className="px-4 py-2 text-right num" style={{ color: 'var(--text-2)' }}>{el.ilosc}</td>
+                          <td className="px-4 py-2 text-right font-semibold num" style={{ color: ok ? 'var(--c-success)' : 'var(--c-critical)' }}>{dostepne}</td>
                         </tr>
                       )
                     })}
@@ -419,12 +425,12 @@ export default function Pakiety() {
             </div>
 
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="pak_a" checked={form.aktywny} onChange={e => setForm(f => ({ ...f, aktywny: e.target.checked }))} style={{ accentColor: '#3b82f6' }} />
+              <input type="checkbox" id="pak_a" checked={form.aktywny} onChange={e => setForm(f => ({ ...f, aktywny: e.target.checked }))} style={{ accentColor: 'var(--c-action)' }} />
               <label htmlFor="pak_a" className="text-sm" style={{ color: 'var(--text-2)' }}>Aktywny</label>
             </div>
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setShowModal(false)} className="flex-1 rounded-lg py-2 text-sm font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
-              <button type="submit" disabled={saving} className="flex-1 rounded-lg py-2 text-sm font-medium text-white" style={{ background: '#3b82f6', opacity: saving ? 0.7 : 1 }}>
+              <button type="submit" disabled={saving} className="flex-1 rounded-lg py-2 text-sm font-medium text-white" style={{ background: 'var(--c-action)', opacity: saving ? 0.7 : 1, minHeight: 44, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
                 {saving ? 'Zapisywanie...' : editItem ? 'Zapisz zmiany' : 'Utwórz pakiet'}
               </button>
             </div>

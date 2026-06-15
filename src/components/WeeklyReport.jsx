@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
 import { generateWeeklyReport } from '../utils/weeklyReportEngine'
 import { getWeeklyReportTitleFor } from '../config/businessTypes'
+import { WeeklyIcons, ChevronDown, ChevronUp } from './ui/categoryIcon'
 
 function fmt(amount) {
   return amount.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' zł'
@@ -103,7 +104,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
           className="w-full flex items-center gap-2 px-4 py-3 text-left"
           style={{ minHeight: 52 }}
         >
-          <span style={{ fontSize: 16 }}>📊</span>
+          <WeeklyIcons.header size={16} style={{ color: 'var(--c-action)', flexShrink: 0 }} />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{title}</p>
             {loading ? (
@@ -114,7 +115,9 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
               </p>
             ) : null}
           </div>
-          <span style={{ color: 'var(--muted)', fontSize: 13, flexShrink: 0 }}>{collapsed ? '▼' : '▲'}</span>
+          {collapsed
+            ? <ChevronDown size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+            : <ChevronUp   size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
         </button>
 
         {/* Collapsed summary line */}
@@ -145,8 +148,8 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
               <>
                 {/* Spending */}
                 <div>
-                  <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>💰 Wydatki</p>
-                  <p className="font-semibold" style={{ color: 'var(--text)', fontSize: 18, fontFamily: 'DM Mono, monospace' }}>
+                  <p className="font-medium mb-1 flex items-center gap-1.5" style={{ color: 'var(--muted)', fontSize: 13 }}><WeeklyIcons.spending size={13} /> Wydatki</p>
+                  <p className="num font-semibold" style={{ color: 'var(--text)', fontSize: 18 }}>
                     {fmt(report.spending.current)}
                   </p>
                   {changeLabel && (
@@ -157,7 +160,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Invoices */}
                 {report.newInvoices > 0 && (
                   <div>
-                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📄 Faktury</p>
+                    <p className="font-medium mb-1 flex items-center gap-1.5" style={{ color: 'var(--muted)', fontSize: 13 }}><WeeklyIcons.invoices size={13} /> Faktury</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {report.newInvoices} {report.newInvoices === 1 ? 'nowa faktura' : 'nowych faktur'} w tym tygodniu
                     </p>
@@ -167,7 +170,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Inventory */}
                 {(report.inventory.lowStock > 0 || report.inventory.deadStock > 0) && (
                   <div>
-                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📦 Magazyn</p>
+                    <p className="font-medium mb-1 flex items-center gap-1.5" style={{ color: 'var(--muted)', fontSize: 13 }}><WeeklyIcons.inventory size={13} /> Magazyn</p>
                     {report.inventory.lowStock > 0 && (
                       <p className="text-sm" style={{ color: 'var(--text)' }}>
                         {report.inventory.lowStock} {report.inventory.lowStock === 1 ? 'produkt' : 'produktów'} z niskim stanem
@@ -184,7 +187,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Orders */}
                 {(report.orders.new > 0 || report.orders.completed > 0) && (
                   <div>
-                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📋 Zlecenia</p>
+                    <p className="font-medium mb-1 flex items-center gap-1.5" style={{ color: 'var(--muted)', fontSize: 13 }}><WeeklyIcons.orders size={13} /> Zlecenia</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {[
                         report.orders.new > 0 ? `${report.orders.new} nowe` : null,
@@ -197,7 +200,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* Biggest price increase */}
                 {report.biggestPriceIncrease && (
                   <div>
-                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>📈 Największa podwyżka</p>
+                    <p className="font-medium mb-1 flex items-center gap-1.5" style={{ color: 'var(--muted)', fontSize: 13 }}><WeeklyIcons.priceIncrease size={13} /> Największa podwyżka</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {report.biggestPriceIncrease.productName}: +{report.biggestPriceIncrease.changePercent}%
                     </p>
@@ -207,7 +210,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                 {/* New products */}
                 {report.newProducts > 0 && (
                   <div>
-                    <p className="font-medium mb-1" style={{ color: 'var(--muted)', fontSize: 13 }}>🆕 Nowe produkty</p>
+                    <p className="font-medium mb-1 flex items-center gap-1.5" style={{ color: 'var(--muted)', fontSize: 13 }}><WeeklyIcons.newProducts size={13} /> Nowe produkty</p>
                     <p className="text-sm" style={{ color: 'var(--text)' }}>
                       {report.newProducts} {report.newProducts === 1 ? 'produkt dodany' : 'produkty dodane'} w tym tygodniu
                     </p>
@@ -220,7 +223,7 @@ export default function WeeklyReport({ workspaceId, businessCategory }) {
                   className="w-full rounded-lg text-sm"
                   style={{ color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 44, marginTop: 4 }}
                 >
-                  📊 Odśwież raport
+                  Odśwież raport
                 </button>
               </>
             ) : null}

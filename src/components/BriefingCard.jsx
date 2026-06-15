@@ -5,6 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { generateDailyBriefing } from '../utils/briefingEngine'
 import { getBriefingTitleFor } from '../config/businessTypes'
 import { supabase } from '../supabase'
+import { getBriefingIcon, BriefingHeaderIcon } from './ui/categoryIcon'
 
 function Skeleton() {
   return (
@@ -33,9 +34,10 @@ function Skeleton() {
 
 function BriefingItem({ item, onNavigate }) {
   const isGood = item.type === 'no_data'
+  const { Icon: BriefIcon, color: briefColor } = getBriefingIcon(item.type)
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 20px' }}>
-      <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1, marginTop: 1 }}>{item.icon}</span>
+      <BriefIcon size={18} style={{ flexShrink: 0, marginTop: 2, color: briefColor }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <p
           style={{
@@ -65,7 +67,7 @@ function BriefingItem({ item, onNavigate }) {
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            color: isGood ? '#16a34a' : '#3b82f6',
+            color: isGood ? 'var(--c-success)' : 'var(--c-action)',
             fontSize: 13,
             fontWeight: 600,
           }}
@@ -129,8 +131,9 @@ export default function BriefingCard() {
         }}
       >
         <div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>
-            🌅 {title}
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BriefingHeaderIcon size={15} style={{ color: 'var(--c-attention)', flexShrink: 0 }} />
+            {title}
           </h2>
           {briefing?.generatedAt && !loading && (
             <p style={{ fontSize: 11, color: 'var(--muted)', margin: '2px 0 0' }}>
@@ -175,7 +178,7 @@ export default function BriefingCard() {
                 onClick={() => setExpanded(true)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#3b82f6', fontSize: 13, fontWeight: 500,
+                  color: 'var(--c-action)', fontSize: 13, fontWeight: 500,
                   padding: '6px 0', minHeight: 44,
                 }}
               >

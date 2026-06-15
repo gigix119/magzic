@@ -108,6 +108,12 @@ body {
 }
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
+/* .num — DM Mono number display without slashed zero */
+.num {
+  font-family: 'DM Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'zero' 0, 'tnum' 1;
+}
 
 /* ── Mobile-first responsive helpers ── */
 

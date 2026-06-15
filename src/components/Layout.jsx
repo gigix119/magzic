@@ -11,6 +11,7 @@ import {
   Sparkles, Bell, X, Shield, Settings, LogOut, Menu,
 } from 'lucide-react'
 import Topbar from './ui/Topbar'
+import { getZlecenieIcon } from './ui/categoryIcon'
 
 const CLEANING_CATEGORIES = ['cleaning_facility', 'hospitality']
 
@@ -68,9 +69,7 @@ function SidebarNavLink({ to, icon: Icon, label, showBadge, alertCount, onClick,
         }
       }}
     >
-      {typeof Icon === 'string'
-        ? <span style={{ fontSize: 15, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>{Icon}</span>
-        : <Icon size={16} style={{ flexShrink: 0 }} />}
+      <Icon size={16} style={{ flexShrink: 0 }} />
       <span className="flex-1">{label}</span>
       {showBadge && alertCount > 0 && (
         <span style={{
@@ -98,7 +97,7 @@ export default function Layout() {
 
   const businessCategory = getBusinessCategory()
   const zlecenieConfig = getZlecenieConfigFor(businessCategory)
-  const zlecenieItem = { to: '/zlecenia', icon: zlecenieConfig.icon, label: zlecenieConfig.moduleLabel }
+  const zlecenieItem = { to: '/zlecenia', icon: getZlecenieIcon(businessCategory), label: zlecenieConfig.moduleLabel }
 
   const hasPakiety = CLEANING_CATEGORIES.includes(businessCategory)
   const ownerAccess = isOwner(profile)
@@ -180,7 +179,7 @@ export default function Layout() {
         >
           <div
             className="flex items-center justify-center rounded-lg font-bold text-white text-sm flex-shrink-0"
-            style={{ width: 32, height: 32, background: '#3b82f6', fontFamily: 'DM Mono, monospace' }}
+            style={{ width: 32, height: 32, background: 'var(--c-action)' }}
           >
             M
           </div>
@@ -298,9 +297,7 @@ export default function Layout() {
                 justifyContent: 'center',
               })}
             >
-              {typeof Icon === 'string'
-                ? <span style={{ fontSize: 20, lineHeight: 1 }}>{Icon}</span>
-                : <Icon size={20} />}
+              <Icon size={20} />
               <span className="bottom-nav-label" style={{ fontSize: 11, fontWeight: 500 }}>{label}</span>
             </NavLink>
           ) : (

@@ -10,15 +10,15 @@ import WeeklyReport from '../components/WeeklyReport'
 import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-function StatCard({ icon: Icon, label, value, color = '#3b82f6', sub }) {
+function StatCard({ icon: Icon, label, value, color = 'var(--c-action)', sub }) {
   return (
     <div className="rounded-xl p-5 flex items-center gap-4 stat-card-compact" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
       <div className="stat-icon rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 44, height: 44, background: color + '1a' }}>
         <Icon size={20} style={{ color }} />
       </div>
-      <div>
-        <p className="text-sm" style={{ color: 'var(--text-2)' }}>{label}</p>
-        <p className="stat-value text-2xl font-semibold mt-0.5" style={{ color: 'var(--text)', fontFamily: 'DM Mono, monospace' }}>
+      <div className="min-w-0">
+        <p className="text-sm truncate" style={{ color: 'var(--text-2)' }}>{label}</p>
+        <p className="stat-value text-2xl font-semibold mt-0.5 num" style={{ color: 'var(--text)' }}>
           {value ?? '—'}
         </p>
         {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{sub}</p>}
@@ -32,7 +32,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return (
     <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)' }}>
       <p className="font-medium">{label}</p>
-      <p style={{ color: '#3b82f6' }}>Stan: {payload[0].value}</p>
+      <p style={{ color: 'var(--c-action)' }}>Stan: {payload[0].value}</p>
     </div>
   )
 }
@@ -45,10 +45,10 @@ function OnboardingScreen() {
   return (
     <div style={{ textAlign: 'center', padding: 'clamp(32px, 8vw, 60px) 16px' }}>
       <div style={{
-        width: 72, height: 72, borderRadius: 20, background: 'rgba(59,130,246,0.1)',
+        width: 72, height: 72, borderRadius: 20, background: 'var(--c-action-subtle)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
       }}>
-        <Warehouse size={32} style={{ color: '#3b82f6' }} />
+        <Warehouse size={32} style={{ color: 'var(--c-action)' }} />
       </div>
       <h2 className="text-xl font-semibold mb-3" style={{ color: 'var(--text)' }}>Witaj w Magzic!</h2>
       <p className="text-sm mb-8 mx-auto" style={{ color: 'var(--text-2)', maxWidth: 400, lineHeight: 1.6 }}>
@@ -56,9 +56,9 @@ function OnboardingScreen() {
       </p>
       <div className="flex flex-wrap justify-center gap-3">
         {[
-          { label: 'Dodaj magazyn', to: '/magazyny', color: '#8b5cf6', icon: Warehouse },
-          { label: 'Dodaj produkt', to: '/towary', color: '#3b82f6', icon: Package },
-          { label: 'Dodaj dostawcę', to: '/kontrahenci', color: '#10b981', icon: Users },
+          { label: 'Dodaj magazyn', to: '/magazyny', color: 'var(--c-automation)', icon: Warehouse },
+          { label: 'Dodaj produkt', to: '/towary', color: 'var(--c-action)', icon: Package },
+          { label: 'Dodaj dostawcę', to: '/kontrahenci', color: 'var(--c-success)', icon: Users },
         ].map(({ label, to, color, icon: Icon }) => (
           <Link
             key={to}
@@ -219,16 +219,16 @@ export default function Dashboard() {
       {showStatCards && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <StatCard icon={Package}   label="Towary"       value={stats.towary}      color="#3b82f6" />
-            <StatCard icon={Warehouse} label="Magazyny"     value={stats.magazyny}    color="#8b5cf6" />
-            <StatCard icon={Users}     label="Kontrahenci"  value={stats.kontrahenci} color="#10b981" />
-            <StatCard icon={FileText}  label="Faktury"      value={stats.faktury}     color="#f59e0b"
+            <StatCard icon={Package}   label="Towary"       value={stats.towary}      color="var(--c-action)" />
+            <StatCard icon={Warehouse} label="Magazyny"     value={stats.magazyny}    color="var(--c-automation)" />
+            <StatCard icon={Users}     label="Kontrahenci"  value={stats.kontrahenci} color="var(--c-success)" />
+            <StatCard icon={FileText}  label="Faktury"      value={stats.faktury}     color="var(--c-attention)"
               sub={stats.fakturyRobocze ? `${stats.fakturyRobocze} oczekuje` : undefined} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <StatCard icon={CheckCircle2}  label="Stany OK"     value={stockStatus.ok}    color="#22c55e" />
-            <StatCard icon={TrendingDown}  label="Stany Niskie" value={stockStatus.low}   color="#f59e0b" />
-            <StatCard icon={AlertTriangle} label="Brak stanu"   value={stockStatus.empty} color="#ef4444" />
+            <StatCard icon={CheckCircle2}  label="Stany OK"     value={stockStatus.ok}    color="var(--c-success)" />
+            <StatCard icon={TrendingDown}  label="Stany Niskie" value={stockStatus.low}   color="var(--c-attention)" />
+            <StatCard icon={AlertTriangle} label="Brak stanu"   value={stockStatus.empty} color="var(--c-critical)" />
           </div>
         </>
       )}
@@ -240,24 +240,41 @@ export default function Dashboard() {
             <div className="rounded-xl p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
               <h2 className="font-medium mb-4" style={{ fontSize: 14, color: 'var(--text)' }}>Stan magazynowy — top 8 towarów</h2>
               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={isMobile ? 160 : 220}>
-                  <BarChart data={chartData} barCategoryGap="30%">
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: 'var(--text-2)', fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                      angle={isMobile ? -35 : 0}
-                      textAnchor={isMobile ? 'end' : 'middle'}
-                      height={isMobile ? 52 : 30}
-                    />
-                    <YAxis tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                      {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? '#3b82f6' : 'var(--border)'} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                isMobile ? (
+                  /* Mobile: horizontal bar chart — labels on Y axis, no overlap */
+                  <ResponsiveContainer width="100%" height={chartData.length * 32 + 16}>
+                    <BarChart data={chartData} layout="vertical" barCategoryGap="20%" margin={{ left: 0, right: 24, top: 4, bottom: 4 }}>
+                      <XAxis type="number" tick={{ fill: 'var(--text-2)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        type="category" dataKey="name" width={110}
+                        tick={{ fill: 'var(--text-2)', fontSize: 10 }}
+                        axisLine={false} tickLine={false}
+                        tickFormatter={v => v.length > 14 ? v.slice(0, 13) + '…' : v}
+                      />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? 'var(--c-action)' : 'var(--border)'} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  /* Desktop: vertical bar chart */
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={chartData} barCategoryGap="30%">
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fill: 'var(--text-2)', fontSize: 10 }}
+                        axisLine={false} tickLine={false}
+                        height={30}
+                      />
+                      <YAxis tick={{ fill: 'var(--text-2)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59,130,246,0.06)' }} />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {chartData.map((_, i) => <Cell key={i} fill={i === 0 ? 'var(--c-action)' : 'var(--border)'} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )
               ) : (
                 <p className="text-sm py-8 text-center" style={{ color: 'var(--muted)' }}>Brak danych</p>
               )}
@@ -299,7 +316,7 @@ export default function Dashboard() {
                     <Link
                       to="/alerty"
                       className="md:hidden mt-2 flex items-center justify-center gap-1.5 w-full rounded-lg text-sm font-medium"
-                      style={{ color: '#3b82f6', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', minHeight: 44 }}
+                      style={{ color: 'var(--c-action)', background: 'var(--c-action-subtle)', border: '1px solid rgba(37,99,235,0.2)', minHeight: 44 }}
                     >
                       Zobacz wszystkie alerty ({alertCount}) →
                     </Link>

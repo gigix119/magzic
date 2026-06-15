@@ -24,10 +24,9 @@ function KpiCard({ label, value, color }) {
         {label}
       </p>
       <p
-        className="font-bold leading-tight"
+        className="num font-bold leading-tight"
         style={{
           color: color ?? 'var(--text)',
-          fontFamily: 'DM Mono, monospace',
           fontSize: 17,
           wordBreak: 'break-word',
           lineHeight: 1.2,

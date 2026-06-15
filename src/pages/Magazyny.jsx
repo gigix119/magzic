@@ -13,13 +13,15 @@ import {
 
 const IS = (err) => ({
   background: 'var(--input-bg)',
-  border: `1px solid ${err ? '#ef4444' : 'var(--border)'}`,
-  borderRadius: 8,
+  border: `1px solid ${err ? 'var(--c-critical)' : 'var(--border)'}`,
+  borderRadius: 'var(--radius-control)',
   color: 'var(--text)',
-  padding: '8px 12px',
-  fontSize: 14,
+  padding: '10px 12px',
+  fontSize: 16,
   width: '100%',
   outline: 'none',
+  minHeight: 48,
+  boxSizing: 'border-box',
 })
 
 const empty = { nazwa: '', lokalizacja: '', opis: '', aktywny: true }
@@ -219,7 +221,7 @@ export default function Magazyny() {
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Magazyny</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{magazyny.length} magazynów</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: '#3b82f6' }}>
+        <button onClick={openCreate} className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white page-header-btn" style={{ background: 'var(--c-action)' }}>
           <Plus size={16} /> Dodaj magazyn
         </button>
       </div>
@@ -237,10 +239,65 @@ export default function Magazyny() {
             const isConfirmDelete = confirmDeleteMag === mag.id
             return (
               <div key={mag.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-4 px-5 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
+
+                {/* ── Mobile header (< md) ── */}
+                <div className="md:hidden px-4 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
+                  {/* Row 1: icon + name + edit/delete */}
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, background: 'var(--c-action-subtle)' }}>
+                      <Warehouse size={18} style={{ color: 'var(--c-action)' }} />
+                    </div>
+                    <div className="flex-1 min-w-0" onClick={() => setExpanded(isOpen ? null : mag.id)} style={{ cursor: 'pointer' }}>
+                      <p className="font-semibold leading-tight break-words" style={{ color: 'var(--text)' }}>{mag.nazwa}</p>
+                      {mag.lokalizacja && (
+                        <p className="flex items-center gap-1 text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+                          <MapPin size={10} /> {mag.lokalizacja}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      {isConfirmDelete ? (
+                        <>
+                          <button onClick={() => handleDelete(mag)} className="rounded-lg px-2 py-1 text-xs font-medium text-white" style={{ background: 'var(--c-critical)' }}>Usuń</button>
+                          <button onClick={() => setConfirmDeleteMag(null)} className="rounded-lg px-2 py-1 text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => openEdit(mag)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 40, minHeight: 40 }} title="Edytuj"><Pencil size={14} /></button>
+                          <button onClick={() => setConfirmDeleteMag(mag.id)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--c-critical)', minWidth: 40, minHeight: 40 }} title="Usuń"><Trash2 size={14} /></button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {/* Row 2: stats grid */}
+                  <div className="grid grid-cols-3 gap-2 mt-3 text-center" style={{ paddingLeft: 52 }}>
+                    <div>
+                      <p className="num font-semibold text-sm" style={{ color: 'var(--text)' }}>{mag.liczbaTowarow}</p>
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>rodzajów</p>
+                    </div>
+                    <div>
+                      <p className="num font-semibold text-sm" style={{ color: 'var(--text)' }}>{mag.lacznaIlosc}</p>
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>szt. łącznie</p>
+                    </div>
+                    <div>
+                      <p className="num font-semibold text-sm" style={{ color: mag.belowMin > 0 ? 'var(--c-attention)' : 'var(--c-success)' }}>{mag.belowMin}</p>
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>poniżej min.</p>
+                    </div>
+                  </div>
+                  {/* Row 3: status + chevron */}
+                  <div className="flex items-center justify-between mt-3" style={{ paddingLeft: 52 }}>
+                    <Badge variant={mag.aktywny ? 'green' : 'zinc'}>{mag.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge>
+                    <button onClick={() => setExpanded(isOpen ? null : mag.id)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--muted)', minWidth: 40, minHeight: 40 }}>
+                      {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── Desktop header (≥ md) ── */}
+                <div className="hidden md:flex items-center gap-4 px-5 py-4" style={{ background: isOpen ? 'var(--table-odd)' : 'transparent' }}>
                   <button className="flex-1 flex items-center gap-4 text-left" onClick={() => setExpanded(isOpen ? null : mag.id)}>
-                    <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, background: 'rgba(59,130,246,0.1)' }}>
-                      <Warehouse size={18} style={{ color: '#3b82f6' }} />
+                    <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, background: 'var(--c-action-subtle)' }}>
+                      <Warehouse size={18} style={{ color: 'var(--c-action)' }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium" style={{ color: 'var(--text)' }}>{mag.nazwa}</p>
@@ -250,10 +307,10 @@ export default function Magazyny() {
                             <MapPin size={11} /> {mag.lokalizacja}
                           </span>
                         )}
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{mag.liczbaTowarow} rodzajów towarów</span>
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{mag.lacznaIlosc} szt. łącznie</span>
+                        <span className="num text-xs" style={{ color: 'var(--muted)' }}>{mag.liczbaTowarow} rodzajów towarów</span>
+                        <span className="num text-xs" style={{ color: 'var(--muted)' }}>{mag.lacznaIlosc} szt. łącznie</span>
                         {mag.belowMin > 0 && (
-                          <span className="text-xs font-medium" style={{ color: '#f59e0b' }}>⚠ {mag.belowMin} poniżej minimum</span>
+                          <span className="num text-xs font-medium" style={{ color: 'var(--c-attention)' }}>⚠ {mag.belowMin} poniżej minimum</span>
                         )}
                       </div>
                     </div>
@@ -264,25 +321,13 @@ export default function Magazyny() {
                   <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                     {isConfirmDelete ? (
                       <>
-                        <button
-                          onClick={() => handleDelete(mag)}
-                          className="rounded-lg px-2 py-1 text-xs font-medium text-white"
-                          style={{ background: '#dc2626' }}
-                        >
-                          Usuń
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteMag(null)}
-                          className="rounded-lg px-2 py-1 text-xs font-medium"
-                          style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}
-                        >
-                          Anuluj
-                        </button>
+                        <button onClick={() => handleDelete(mag)} className="rounded-lg px-2 py-1 text-xs font-medium text-white" style={{ background: 'var(--c-critical)' }}>Usuń</button>
+                        <button onClick={() => setConfirmDeleteMag(null)} className="rounded-lg px-2 py-1 text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
                       </>
                     ) : (
                       <>
                         <button onClick={() => openEdit(mag)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
-                        <button onClick={() => setConfirmDeleteMag(mag.id)} className="p-1.5 rounded-lg table-action-btn" style={{ color: '#dc2626' }} title="Usuń"><Trash2 size={13} /></button>
+                        <button onClick={() => setConfirmDeleteMag(mag.id)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--c-critical)' }} title="Usuń"><Trash2 size={13} /></button>
                       </>
                     )}
                   </div>
@@ -308,8 +353,8 @@ export default function Magazyny() {
                                   )}
                                 </div>
                                 <div className="flex-shrink-0 text-right">
-                                  <p className="font-semibold" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6', fontSize: 15 }}>
-                                    {Number(s.ilosc)} <span className="text-xs font-normal" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || ''}</span>
+                                  <p className="num font-semibold" style={{ color: 'var(--c-action)', fontSize: 15 }}>
+                                    {Number(s.ilosc)} <span className="text-xs font-normal" style={{ color: 'var(--text-2)', fontFamily: 'inherit' }}>{s.towary?.jednostka || ''}</span>
                                   </p>
                                   {s.towary?.stan_minimalny != null && (
                                     <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>min: {s.towary.stan_minimalny}</p>
@@ -345,9 +390,9 @@ export default function Magazyny() {
                                 <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                                   <td className="px-5 py-3" style={{ color: 'var(--text)' }}>{s.towary?.nazwa || '—'}</td>
                                   <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-2)' }}>{s.towary?.kategorie?.nazwa || '—'}</td>
-                                  <td className="px-5 py-3 text-right font-medium" style={{ fontFamily: 'DM Mono, monospace', color: '#3b82f6' }}>{Number(s.ilosc)}</td>
+                                  <td className="px-5 py-3 text-right font-medium num" style={{ color: 'var(--c-action)' }}>{Number(s.ilosc)}</td>
                                   <td className="px-5 py-3 text-right" style={{ color: 'var(--text-2)' }}>{s.towary?.jednostka || '—'}</td>
-                                  <td className="px-5 py-3 text-right" style={{ color: 'var(--muted)', fontFamily: 'DM Mono, monospace', fontSize: 12 }}>{s.towary?.stan_minimalny ?? '—'}</td>
+                                  <td className="px-5 py-3 text-right num" style={{ color: 'var(--muted)', fontSize: 12 }}>{s.towary?.stan_minimalny ?? '—'}</td>
                                   <td className="px-5 py-3 text-center">
                                     <StanBadge ilosc={s.ilosc} min={s.towary?.stan_minimalny} />
                                   </td>
@@ -395,12 +440,12 @@ export default function Magazyny() {
               <textarea style={{ ...IS(), resize: 'vertical', minHeight: 72 }} value={form.opis} onChange={e => setForm(f => ({ ...f, opis: e.target.value }))} placeholder="Opcjonalny opis..." />
             </div>
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="mag_a" checked={form.aktywny} onChange={e => setForm(f => ({ ...f, aktywny: e.target.checked }))} style={{ accentColor: '#3b82f6' }} />
+              <input type="checkbox" id="mag_a" checked={form.aktywny} onChange={e => setForm(f => ({ ...f, aktywny: e.target.checked }))} style={{ accentColor: 'var(--c-action)' }} />
               <label htmlFor="mag_a" className="text-sm" style={{ color: 'var(--text-2)' }}>Aktywny</label>
             </div>
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setShowModal(false)} className="flex-1 rounded-lg py-2 text-sm font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
-              <button type="submit" disabled={saving} className="flex-1 rounded-lg py-2 text-sm font-medium text-white" style={{ background: '#3b82f6', opacity: saving ? 0.7 : 1 }}>
+              <button type="submit" disabled={saving} className="flex-1 rounded-lg py-2 text-sm font-medium text-white" style={{ background: 'var(--c-action)', opacity: saving ? 0.7 : 1, minHeight: 44 }}>
                 {saving ? 'Zapisywanie...' : editItem ? 'Zapisz zmiany' : 'Dodaj magazyn'}
               </button>
             </div>
