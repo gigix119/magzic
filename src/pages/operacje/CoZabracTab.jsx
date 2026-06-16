@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../../supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import Spinner from '../../components/Spinner'
+import DateFilter, { isoToday, resolveFilterDate } from '../../components/ui/DateFilter'
 import { ShoppingBag, LayoutList, Layers, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react'
 import { aggregateDemand } from '../../utils/coZabracAggregation'
 
-function isoToday() { return new Date().toISOString().split('T')[0] }
+function isoTomorrow() {
+  const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]
+}
 
 function StatusDot({ brak, wymagane, dostepne }) {
   if (brak === null) return <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
@@ -30,31 +33,39 @@ function BrakBadge({ brak, wymagane }) {
   )
 }
 
+function formatDateLabel(isoDate) {
+  return new Date(isoDate + 'T00:00:00').toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
 export default function CoZabracTab() {
   const { workspaceId, wsQuery, addWsFilter } = useWorkspace()
 
+  const [selectedDate, setSelectedDate] = useState('today')
   const [zlecenia, setZlecenia] = useState([])
   const [pozycje, setPozycje] = useState([])
   const [aggregate, setAggregate] = useState([])
   const [loading, setLoading] = useState(true)
   const [tableExists, setTableExists] = useState(true)
-  const [viewMode, setViewMode] = useState('aggregate') // 'aggregate' | 'per_prep'
+  const [viewMode, setViewMode] = useState('aggregate')
 
   useEffect(() => {
     if (!workspaceId) { setLoading(false); return }
-    fetchData()
-  }, [workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchData(selectedDate)
+  }, [workspaceId, selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchData() {
+  async function fetchData(dateValue) {
     setLoading(true)
-    const today = isoToday()
+    const isoDate = resolveFilterDate(dateValue)
 
-    const { data: zl, error } = await addWsFilter(
+    let query = addWsFilter(
       wsQuery('zlecenia').select('id, nazwa, status, data_realizacji')
-    )
-      .in('status', ['nowe', 'w_realizacji'])
-      .eq('data_realizacji', today)
-      .order('nazwa')
+    ).in('status', ['nowe', 'w_realizacji']).order('nazwa')
+
+    if (isoDate) {
+      query = query.eq('data_realizacji', isoDate)
+    }
+
+    const { data: zl, error } = await query
 
     if (error) {
       if (error.code === '42P01') { setTableExists(false); setLoading(false); return }
@@ -80,7 +91,6 @@ export default function CoZabracTab() {
     const allPoz = poz || []
     setPozycje(allPoz)
 
-    // Build stock map by product name (since zlecenia_pozycje only stores nazwa_pozycji)
     const nameToId = {}
     for (const t of towary || []) nameToId[t.nazwa] = t.id
 
@@ -98,8 +108,6 @@ export default function CoZabracTab() {
     setLoading(false)
   }
 
-  if (loading) return <Spinner />
-
   if (!tableExists) {
     return (
       <div className="text-center py-16 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
@@ -110,10 +118,9 @@ export default function CoZabracTab() {
     )
   }
 
-  const today = isoToday()
-  const todayFmt = new Date(today).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+  const isoDate = resolveFilterDate(selectedDate)
+  const dateFmt = isoDate ? formatDateLabel(isoDate) : 'wszystkie dni'
 
-  // Pozycje grouped by zlecenie
   const pozByZlecenie = {}
   for (const p of pozycje) {
     if (!pozByZlecenie[p.zlecenie_id]) pozByZlecenie[p.zlecenie_id] = []
@@ -124,10 +131,10 @@ export default function CoZabracTab() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Co zabrać</h1>
-          <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--text-2)' }}>{todayFmt}</p>
+          <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--text-2)' }}>{dateFmt}</p>
         </div>
         {zlecenia.length > 0 && (
           <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
@@ -155,11 +162,16 @@ export default function CoZabracTab() {
         )}
       </div>
 
-      {zlecenia.length === 0 ? (
+      {/* Date filter */}
+      <div className="mb-4">
+        <DateFilter value={selectedDate} onChange={setSelectedDate} showAll={false} />
+      </div>
+
+      {loading ? <Spinner /> : zlecenia.length === 0 ? (
         <div className="text-center py-16 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <ShoppingBag size={40} className="mx-auto mb-3" style={{ color: 'var(--muted)', opacity: 0.4 }} />
-          <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>Brak przygotowań na dziś</p>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>Przygotowania zaplanowane na dziś pojawią się tutaj automatycznie.</p>
+          <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>Brak przygotowań na {dateFmt}</p>
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>Przygotowania zaplanowane na ten dzień pojawią się tutaj automatycznie.</p>
           <Link
             to="/operacje?tab=przygotowania"
             className="inline-flex items-center gap-2 mt-4 rounded-lg px-4 text-sm font-medium text-white"
@@ -178,7 +190,6 @@ export default function CoZabracTab() {
             </div>
           )}
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            {/* Header row — desktop */}
             <div className="hidden md:grid px-4 py-2.5 text-xs font-medium" style={{ gridTemplateColumns: '1fr 80px 80px 80px 100px', background: 'var(--table-head)', color: 'var(--text-2)', borderBottom: '1px solid var(--border)' }}>
               <span>Produkt</span>
               <span className="text-right">Wymagane</span>
@@ -196,7 +207,6 @@ export default function CoZabracTab() {
                   background: row.brak > 0 ? 'rgba(225,29,72,0.03)' : 'var(--card)',
                 }}
               >
-                {/* Mobile layout */}
                 <div className="md:hidden flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <StatusDot brak={row.brak} wymagane={row.wymagane} dostepne={row.dostepne} />
@@ -211,7 +221,6 @@ export default function CoZabracTab() {
                   <BrakBadge brak={row.brak} wymagane={row.wymagane} />
                 </div>
 
-                {/* Desktop layout */}
                 <div className="hidden md:grid items-center" style={{ gridTemplateColumns: '1fr 80px 80px 80px 100px' }}>
                   <div className="flex items-center gap-2 min-w-0">
                     <StatusDot brak={row.brak} wymagane={row.wymagane} dostepne={row.dostepne} />
@@ -232,11 +241,10 @@ export default function CoZabracTab() {
             ))}
           </div>
           <p className="text-xs mt-3 text-right" style={{ color: 'var(--muted)' }}>
-            {zlecenia.length} {zlecenia.length === 1 ? 'przygotowanie' : 'przygotowania'} na dziś · {aggregate.length} pozycji
+            {zlecenia.length} {zlecenia.length === 1 ? 'przygotowanie' : 'przygotowania'} · {aggregate.length} pozycji
           </p>
         </div>
       ) : (
-        /* Per preparation view */
         <div className="space-y-4">
           {zlecenia.map(z => {
             const poz = pozByZlecenie[z.id] || []
@@ -246,9 +254,7 @@ export default function CoZabracTab() {
                 <div className="px-4 py-3 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--table-sub)' }}>
                   <div className="min-w-0">
                     <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{z.nazwa}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-                      {wydano}/{poz.length} wydano
-                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{wydano}/{poz.length} wydano</p>
                   </div>
                   <Link
                     to={`/operacje/przygotowania/${z.id}`}
@@ -264,10 +270,7 @@ export default function CoZabracTab() {
                   poz.map((p, i) => (
                     <div key={p.id} className="flex items-center gap-3 px-4 py-2.5"
                       style={{ borderBottom: i < poz.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                      <div
-                        className="rounded flex-shrink-0"
-                        style={{ width: 8, height: 8, background: p.wydano ? 'var(--c-success)' : 'var(--border)', borderRadius: '50%' }}
-                      />
+                      <div className="rounded flex-shrink-0" style={{ width: 8, height: 8, background: p.wydano ? 'var(--c-success)' : 'var(--border)', borderRadius: '50%' }} />
                       <p className="flex-1 text-sm" style={{ color: p.wydano ? 'var(--muted)' : 'var(--text)', textDecoration: p.wydano ? 'line-through' : 'none' }}>
                         {p.nazwa_pozycji}
                       </p>

@@ -230,7 +230,7 @@ export default function PakietyTab() {
                     <Badge variant={pak.aktywny ? 'green' : 'zinc'}>{pak.aktywny ? 'Aktywny' : 'Nieaktywny'}</Badge>
                     {pak.aktywny && (
                       <button onClick={() => openExec(pak)} className="ml-auto flex items-center gap-1.5 px-4 rounded-lg text-xs font-medium text-white" style={{ background: '#8b5cf6', minHeight: 44 }}>
-                        <PlayCircle size={13} /> Wykonaj
+                        <PlayCircle size={13} /> Użyj w przygotowaniu
                       </button>
                     )}
                   </div>
@@ -259,8 +259,8 @@ export default function PakietyTab() {
                   </button>
                   <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                     {pak.aktywny && (
-                      <button onClick={() => openExec(pak)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#8b5cf6', minHeight: 40 }} title="Wykonaj pakiet">
-                        <PlayCircle size={13} /> Wykonaj
+                      <button onClick={() => openExec(pak)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: '#8b5cf6', minHeight: 40 }} title="Użyj w przygotowaniu">
+                        <PlayCircle size={13} /> Użyj w przygotowaniu
                       </button>
                     )}
                     <button onClick={() => openEdit(pak)} className="p-1.5 rounded-lg table-action-btn" style={{ color: 'var(--text-2)' }} title="Edytuj"><Pencil size={13} /></button>
@@ -271,7 +271,7 @@ export default function PakietyTab() {
                 {isOpen && (
                   <div style={{ borderTop: '1px solid var(--border)' }}>
                     {items.length === 0 ? (
-                      <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>Brak elementów w pakiecie</p>
+                      <p className="text-sm text-center py-6" style={{ color: 'var(--muted)' }}>Pusty pakiet — dodaj produkty</p>
                     ) : (
                       <div className="table-scroll-x">
                         <table className="w-full text-sm" style={{ minWidth: 400 }}>
