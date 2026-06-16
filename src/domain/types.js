@@ -84,3 +84,44 @@
  * @property {'zgloszone'|'w_realizacji'|'zakonczone'|'zweryfikowane'} to
  * @property {boolean} allowed
  */
+
+/**
+ * @typedef {Object} Lokal
+ * @property {string} id
+ * @property {string} workspace_id
+ * @property {string} nazwa
+ * @property {string|null} adres
+ * @property {string} typ - apartament | pokoj | studio | dom
+ * @property {number} pojemnosc
+ * @property {string|null} domyslny_pakiet_id
+ * @property {string|null} notatki
+ * @property {boolean} aktywny
+ */
+
+/**
+ * @typedef {Object} Rezerwacja
+ * @property {string} id
+ * @property {string} workspace_id
+ * @property {string|null} lokal_id
+ * @property {string|null} external_reservation_id
+ * @property {string|null} external_source
+ * @property {string|null} gosc_nazwa
+ * @property {string|null} gosc_email
+ * @property {string|null} gosc_telefon
+ * @property {number} liczba_gosci
+ * @property {string} checkin_at - ISO date
+ * @property {string} checkout_at - ISO date
+ * @property {'wstepna'|'potwierdzona'|'zameldowana'|'wymeldowana'|'anulowana'} status
+ * @property {string|null} notatki
+ * @property {Object} flagi
+ * @property {string|null} przygotowanie_id
+ */
+
+/**
+ * @typedef {Object} ReservationToPreparationResult
+ * @property {boolean} created
+ * @property {string} [reason] - 'already_exists' | 'no_lokal' | 'no_default_package' | 'insert_error'
+ * @property {string} [przygotowanie_id]
+ * @property {string} [nazwa]
+ * @property {unknown} [error]
+ */

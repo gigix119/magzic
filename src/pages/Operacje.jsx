@@ -5,6 +5,7 @@ import PrzygotowaniaTab from './operacje/PrzygotowaniaTab'
 import AlertyTab from './operacje/AlertyTab'
 import PakietyTab from './operacje/PakietyTab'
 import NaprawyTab from './operacje/NaprawyTab'
+import RezerwacjeTab from './operacje/RezerwacjeTab'
 
 const CLEANING_CATEGORIES = ['cleaning_facility', 'hospitality']
 
@@ -21,6 +22,7 @@ export default function Operacje() {
     { key: 'alerty',        label: 'Alerty', badge: alertCount },
     ...(hasPakiety ? [{ key: 'pakiety', label: 'Pakiety' }] : []),
     { key: 'naprawy',       label: 'Naprawy' },
+    { key: 'rezerwacje',    label: 'Rezerwacje' },
   ]
 
   const rawTab = params.get('tab') || 'przygotowania'
@@ -78,6 +80,7 @@ export default function Operacje() {
       {activeTab === 'alerty'        && <AlertyTab />}
       {hasPakiety && activeTab === 'pakiety' && <PakietyTab />}
       {activeTab === 'naprawy'       && <NaprawyTab />}
+      {activeTab === 'rezerwacje'    && <RezerwacjeTab />}
     </div>
   )
 }

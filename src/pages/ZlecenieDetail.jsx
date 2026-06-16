@@ -6,7 +6,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { getZlecenieConfigFor } from '../config/businessTypes'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
-import { ArrowLeft, Trash2, Pencil, Plus, Check, CalendarDays, User } from 'lucide-react'
+import { ArrowLeft, Trash2, Pencil, Plus, Check, CalendarDays, User, BedDouble } from 'lucide-react'
 
 const STATUS_COLORS = {
   nowe:         { bg: '#eff6ff', text: '#1e40af' },
@@ -47,6 +47,7 @@ export default function ZlecenieDetail() {
   const [pozycje, setPozycje] = useState([])
   const [kontrahent, setKontrahent] = useState(null)
   const [kontrahenci, setKontrahenci] = useState([])
+  const [linkedRez, setLinkedRez] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showAddItem, setShowAddItem] = useState(false)
   const [itemForm, setItemForm] = useState(emptyItem)
@@ -69,6 +70,12 @@ export default function ZlecenieDetail() {
       const { data: k } = await supabase.from('kontrahenci').select('id, nazwa').eq('id', z.kontrahent_id).single()
       setKontrahent(k)
     }
+    const { data: rez, error: rezErr } = await supabase
+      .from('rezerwacje')
+      .select('id, lokal_id, checkin_at, checkout_at, liczba_gosci, lokale(nazwa)')
+      .eq('przygotowanie_id', id)
+      .maybeSingle()
+    if (!rezErr) setLinkedRez(rez || null)
     setLoading(false)
   }
 
@@ -223,6 +230,17 @@ export default function ZlecenieDetail() {
             <User size={13} />
             <Link to="/kontrahenci" style={{ color: '#2563eb' }}>{kontrahent.nazwa}</Link>
           </p>
+        )}
+        {linkedRez && (
+          <Link
+            to="/operacje?tab=rezerwacje"
+            className="flex items-center gap-1.5 mt-2 text-sm"
+            style={{ color: '#059669', textDecoration: 'none' }}
+          >
+            <BedDouble size={13} />
+            Rezerwacja: {linkedRez.lokale?.nazwa || '—'}, {linkedRez.checkin_at}–{linkedRez.checkout_at}
+            {linkedRez.liczba_gosci != null && <>, {linkedRez.liczba_gosci} os.</>}
+          </Link>
         )}
       </div>
 

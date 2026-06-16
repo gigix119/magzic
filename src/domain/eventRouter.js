@@ -9,6 +9,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   'reservation.created',
   'reservation.updated',
   'reservation.cancelled',
+  'reservation.confirmed',
   'stay.checkout',
   'stay.checkin',
   'repair.created',
@@ -49,11 +50,12 @@ export function routeSyncEvent(event) {
         source: String(event.source ?? ''),
       }
       switch (event.event_type) {
-        case 'stay.checkout':      return { command: 'createPreparation',  normalizedPayload: normalized }
-        case 'stay.checkin':       return { command: 'alertIfNotReady',    normalizedPayload: normalized }
-        case 'reservation.created':return { command: 'upsertReservation',  normalizedPayload: normalized }
-        case 'reservation.updated':return { command: 'updateReservation',  normalizedPayload: normalized }
-        case 'reservation.cancelled': return { command: 'cancelPreparation', normalizedPayload: normalized }
+        case 'stay.checkout':         return { command: 'createPreparation',  normalizedPayload: normalized }
+        case 'stay.checkin':          return { command: 'alertIfNotReady',    normalizedPayload: normalized }
+        case 'reservation.created':   return { command: 'upsertReservation',  normalizedPayload: normalized }
+        case 'reservation.updated':   return { command: 'updateReservation',  normalizedPayload: normalized }
+        case 'reservation.cancelled': return { command: 'cancelPreparation',  normalizedPayload: normalized }
+        case 'reservation.confirmed': return { command: 'autoCreatePreparation', normalizedPayload: normalized }
       }
       break
     }

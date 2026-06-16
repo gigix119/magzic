@@ -132,6 +132,37 @@ export function buildRepairFromInput(input) {
   }
 }
 
+// ── Reservation commands ──────────────────────────────────────────────────────
+
+export const RESERVATION_STATUSES = ['wstepna', 'potwierdzona', 'zameldowana', 'wymeldowana', 'anulowana']
+
+const RESERVATION_TRANSITIONS = {
+  wstepna:     ['potwierdzona', 'anulowana'],
+  potwierdzona:['zameldowana', 'anulowana'],
+  zameldowana: ['wymeldowana'],
+  wymeldowana: [],
+  anulowana:   ['wstepna'],
+}
+
+/**
+ * @param {string} from
+ * @param {string} to
+ * @returns {boolean}
+ */
+export function canTransitionReservation(from, to) {
+  return (RESERVATION_TRANSITIONS[from] || []).includes(to)
+}
+
+/**
+ * @param {import('./types').Rezerwacja} rezerwacja
+ * @returns {boolean}
+ */
+export function shouldAutoCreatePreparation(rezerwacja) {
+  return rezerwacja.status === 'potwierdzona'
+    && !rezerwacja.przygotowanie_id
+    && Boolean(rezerwacja.lokal_id)
+}
+
 // ── Reservation diff ──────────────────────────────────────────────────────────
 
 /**

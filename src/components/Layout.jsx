@@ -8,7 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { AlertCountProvider } from '../context/AlertCountContext'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
-  ClipboardList, X, Shield, Settings, LogOut, Menu,
+  ClipboardList, X, Shield, Settings, LogOut, Menu, Building2,
 } from 'lucide-react'
 import Topbar from './ui/Topbar'
 
@@ -17,6 +17,7 @@ const ROUTE_TRACKING = {
   '/towary':     { module: 'inventory',  action: 'inventory_opened' },
   '/magazyny':   { module: 'warehouses', action: 'warehouses_opened' },
   '/kontrahenci':{ module: 'contractors',action: 'contractors_opened' },
+  '/lokale':     { module: 'lokale',     action: 'lokale_opened' },
   '/faktury':    { module: 'invoices',   action: 'invoices_opened' },
   '/operacje':   { module: 'operacje',   action: 'operacje_opened' },
 }
@@ -194,10 +195,11 @@ export default function Layout() {
 
             {/* MAGAZYN */}
             <div style={{ ...GROUP_LABEL_STYLE, marginTop: 4 }}>Magazyn</div>
-            <SidebarNavLink to="/towary"      icon={Package}   label="Towary"       onClick={close} alertCount={alertCount} />
-            <SidebarNavLink to="/magazyny"    icon={Warehouse} label="Magazyny"     onClick={close} alertCount={alertCount} />
-            <SidebarNavLink to="/kontrahenci" icon={Users}     label="Kontrahenci"  onClick={close} alertCount={alertCount} />
-            <SidebarNavLink to="/faktury"     icon={FileText}  label="Faktury"      onClick={close} alertCount={alertCount} />
+            <SidebarNavLink to="/towary"      icon={Package}    label="Towary"       onClick={close} alertCount={alertCount} />
+            <SidebarNavLink to="/magazyny"    icon={Warehouse}  label="Magazyny"     onClick={close} alertCount={alertCount} />
+            <SidebarNavLink to="/kontrahenci" icon={Users}      label="Kontrahenci"  onClick={close} alertCount={alertCount} />
+            <SidebarNavLink to="/lokale"      icon={Building2}  label="Lokale"       onClick={close} alertCount={alertCount} />
+            <SidebarNavLink to="/faktury"     icon={FileText}   label="Faktury"      onClick={close} alertCount={alertCount} />
 
             {/* SYSTEM */}
             <div style={{ ...GROUP_LABEL_STYLE, marginTop: 4 }}>System</div>

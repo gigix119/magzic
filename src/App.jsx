@@ -21,6 +21,7 @@ import Alerty from './pages/Alerty'
 import Zlecenia from './pages/Zlecenia'
 import ZlecenieDetail from './pages/ZlecenieDetail'
 import Operacje from './pages/Operacje'
+import Lokale from './pages/Lokale'
 import Ustawienia from './pages/Ustawienia'
 import Regulamin from './pages/Regulamin'
 import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
@@ -79,6 +80,7 @@ export default function App() {
                   <Route path="/towary" element={<Towary />} />
                   <Route path="/magazyny" element={<Magazyny />} />
                   <Route path="/kontrahenci" element={<Kontrahenci />} />
+                  <Route path="/lokale" element={<Lokale />} />
                   <Route path="/faktury" element={<Faktury />} />
                   <Route path="/ustawienia" element={<Ustawienia />} />
 
