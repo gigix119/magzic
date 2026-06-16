@@ -6,7 +6,8 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import BottomSheet from '../components/ui/BottomSheet'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
-import { Building2, Plus, Pencil, Trash2, Home, ChevronRight } from 'lucide-react'
+import { Building2, Plus, Pencil, Trash2, Home, ChevronRight, MapPin } from 'lucide-react'
+import { LOKALIZACJE } from '../utils/lokaleImportParser'
 
 const TYPY = [
   { value: 'apartament', label: 'Apartament' },
@@ -63,6 +64,7 @@ export default function Lokale() {
   const [form, setForm] = useState(emptyForm)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [lokFilter, setLokFilter] = useState('')
 
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
@@ -160,6 +162,8 @@ export default function Lokale() {
   }
 
   const pakietMap = Object.fromEntries(pakiety.map(p => [p.id, p.nazwa]))
+  const hasLokalizacja = items.some(i => i.lokalizacja_kod)
+  const filteredItems = lokFilter ? items.filter(i => i.lokalizacja_kod === lokFilter) : items
 
   const LokalForm = (
     <form onSubmit={handleSave} className="space-y-4">
@@ -224,21 +228,35 @@ export default function Lokale() {
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>Lokale</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{items.length} {items.length === 1 ? 'lokal' : 'lokale'}</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-2)' }}>{filteredItems.length} {filteredItems.length === 1 ? 'lokal' : 'lokale'}</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium text-white w-full sm:w-auto justify-center"
-          style={{ background: 'var(--c-action)', minHeight: 48 }}
-        >
-          <Plus size={16} /> Nowy lokal
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+          {hasLokalizacja && (
+            <select
+              value={lokFilter}
+              onChange={e => setLokFilter(e.target.value)}
+              style={{ background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '0 12px', fontSize: 13, minHeight: 44, flex: '1 1 auto' }}
+            >
+              <option value="">Wszystkie lokalizacje</option>
+              {Object.values(LOKALIZACJE).map(l => (
+                <option key={l.kod} value={l.kod}>{l.nazwa}</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium text-white flex-shrink-0"
+            style={{ background: 'var(--c-action)', minHeight: 44 }}
+          >
+            <Plus size={16} /> Nowy lokal
+          </button>
+        </div>
       </div>
 
-      {items.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <div className="text-center py-16 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <Building2 size={40} className="mx-auto mb-3" style={{ color: 'var(--muted)', opacity: 0.4 }} />
-          <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>Brak lokali</p>
+          <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>{lokFilter ? 'Brak lokali w tej lokalizacji' : 'Brak lokali'}</p>
           <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>Dodaj apartament, pokój lub dom, aby śledzić rezerwacje i przygotowania.</p>
           <button onClick={openCreate} className="rounded-lg px-4 text-sm font-medium text-white" style={{ background: 'var(--c-action)', minHeight: 44 }}>
             + Nowy lokal
@@ -246,7 +264,7 @@ export default function Lokale() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map(item => {
+          {filteredItems.map(item => {
             const pakietNazwa = item.domyslny_pakiet_id ? pakietMap[item.domyslny_pakiet_id] : null
             return (
               <div
@@ -267,6 +285,11 @@ export default function Lokale() {
                         {TYPY.find(t => t.value === item.typ)?.label || item.typ}
                       </span>
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.pojemnosc} os.</span>
+                      {item.lokalizacja && (
+                        <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: 'rgba(59,130,246,0.08)', color: 'var(--c-action)' }}>
+                          <MapPin size={10} />{item.lokalizacja}
+                        </span>
+                      )}
                       {!item.aktywny && (
                         <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: '#fee2e2', color: '#991b1b' }}>Nieaktywny</span>
                       )}

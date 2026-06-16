@@ -8,7 +8,8 @@ import { shouldAutoCreatePreparation, canTransitionReservation } from '../../dom
 import BottomSheet from '../../components/ui/BottomSheet'
 import Modal from '../../components/Modal'
 import Spinner from '../../components/Spinner'
-import { CalendarDays, Plus, Pencil, Trash2, ArrowRight, BedDouble, List, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, Plus, Pencil, Trash2, ArrowRight, BedDouble, List, Calendar, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
+import { LOKALIZACJE } from '../../utils/lokaleImportParser'
 
 const STATUS_COLORS = {
   wstepna:     { bg: '#f3f4f6', text: '#6b7280', label: 'Wstępna' },
@@ -296,6 +297,7 @@ export default function RezerwacjeTab() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
   const [lokalFilter, setLokalFilter] = useState('')
+  const [lokalizacjaFilter, setLokalizacjaFilter] = useState('')
   const [viewMode, setViewMode] = useState('lista') // 'lista' | 'kalendarz'
   const [calDetailRez, setCalDetailRez] = useState(null)
 
@@ -311,7 +313,7 @@ export default function RezerwacjeTab() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: rez, error }, { data: lok }] = await Promise.all([
       addWsFilter(wsQuery('rezerwacje').select('*')).order('checkin_at', { ascending: true }),
-      addWsFilter(wsQuery('lokale').select('id, nazwa')).order('nazwa'),
+      addWsFilter(wsQuery('lokale').select('id, nazwa, lokalizacja_kod')).order('nazwa'),
     ])
     if (error) {
       if (error.code === '42P01') { setTableExists(false); setLoading(false); return }
@@ -330,9 +332,11 @@ export default function RezerwacjeTab() {
 
   const today = isoToday()
 
+  const lokalLokalizacjaMap = Object.fromEntries(lokale.map(l => [l.id, l.lokalizacja_kod]))
   const filtered = items.filter(r => {
     if (statusFilter !== 'all' && r.status !== statusFilter) return false
     if (lokalFilter && r.lokal_id !== lokalFilter) return false
+    if (lokalizacjaFilter && lokalLokalizacjaMap[r.lokal_id] !== lokalizacjaFilter) return false
     if (dateFilter === 'today' && r.checkin_at !== today) return false
     if (dateFilter === 'week' && r.checkin_at > isoWeekEnd()) return false
     if (dateFilter === 'month' && r.checkin_at > isoMonthEnd()) return false
@@ -731,6 +735,18 @@ export default function RezerwacjeTab() {
                 {f.label}
               </button>
             ))}
+            {lokale.some(l => l.lokalizacja_kod) && (
+              <select
+                style={{ ...IS(), minHeight: 36, fontSize: 12, padding: '0 10px', width: 'auto' }}
+                value={lokalizacjaFilter}
+                onChange={e => { setLokalizacjaFilter(e.target.value); setLokalFilter('') }}
+              >
+                <option value=""><MapPin size={10} className="inline" /> Wszystkie lokalizacje</option>
+                {Object.values(LOKALIZACJE).map(l => (
+                  <option key={l.kod} value={l.kod}>{l.nazwa}</option>
+                ))}
+              </select>
+            )}
             {lokale.length > 0 && (
               <select
                 style={{ ...IS(), minHeight: 36, fontSize: 12, padding: '0 10px', width: 'auto' }}
@@ -738,7 +754,9 @@ export default function RezerwacjeTab() {
                 onChange={e => setLokalFilter(e.target.value)}
               >
                 <option value="">Wszystkie lokale</option>
-                {lokale.map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
+                {lokale
+                  .filter(l => !lokalizacjaFilter || l.lokalizacja_kod === lokalizacjaFilter)
+                  .map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
               </select>
             )}
           </div>

@@ -37,6 +37,7 @@ import BackendAudit from './pages/backend/BackendAudit'
 import BackendErrors from './pages/backend/BackendErrors'
 import BackendModel from './pages/backend/BackendModel'
 import BackendInventoryReconciliation from './pages/backend/BackendInventoryReconciliation'
+import ImportLokali from './pages/ImportLokali'
 
 function ZlecenieDetailRedirect() {
   const { id } = useParams()
@@ -99,6 +100,9 @@ export default function App() {
                   {/* Keep original pages accessible (used internally) */}
                   <Route path="/_zlecenia_legacy" element={<Zlecenia />} />
                   <Route path="/_alerty_legacy" element={<Alerty />} />
+
+                  {/* Import lokali — only for owner */}
+                  <Route path="/import-lokali" element={<OwnerRoute><ImportLokali /></OwnerRoute>} />
 
                   {/* Backend — only for owner role */}
                   <Route path="/backend" element={<OwnerRoute><BackendLayout /></OwnerRoute>}>
