@@ -6,7 +6,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { getZlecenieConfigFor } from '../config/businessTypes'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
-import { ArrowLeft, Trash2, Pencil, Plus, Check } from 'lucide-react'
+import { ArrowLeft, Trash2, Pencil, Plus, Check, CalendarDays, User } from 'lucide-react'
 
 const STATUS_COLORS = {
   nowe:         { bg: '#eff6ff', text: '#1e40af' },
@@ -18,7 +18,7 @@ const STATUS_COLORS = {
 const PRIORITY_COLORS = {
   niski:    { bg: '#f0fdf4', text: '#166534', label: 'Niski' },
   normalny: { bg: '#f8fafc', text: '#475569', label: 'Normalny' },
-  pilny:    { bg: '#fef2f2', text: '#991b1b', label: '🔴 Pilne' },
+  pilny:    { bg: '#fef2f2', text: '#991b1b', label: 'Pilne' },
 }
 
 const IS = (err) => ({
@@ -165,7 +165,7 @@ export default function ZlecenieDetail() {
     if (!window.confirm(`Usunąć to ${config.singularLabel.toLowerCase()}?`)) return
     await supabase.from('zlecenia').delete().eq('id', id)
     addToast(`${config.singularLabel} usunięte`, 'success')
-    navigate('/zlecenia')
+    navigate('/operacje?tab=przygotowania')
   }
 
   if (loading) return <Spinner />
@@ -180,7 +180,7 @@ export default function ZlecenieDetail() {
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <button
-        onClick={() => navigate('/zlecenia')}
+        onClick={() => navigate('/operacje?tab=przygotowania')}
         className="flex items-center gap-1 text-sm mb-4"
         style={{ color: 'var(--text-2)', minHeight: 44 }}
       >
@@ -210,16 +210,18 @@ export default function ZlecenieDetail() {
           </button>
         </div>
         {zlecenie.data_realizacji && (
-          <p className="text-sm mb-2" style={{ color: 'var(--text-2)' }}>
-            📅 {new Date(zlecenie.data_realizacji).toLocaleDateString('pl-PL')}
+          <p className="flex items-center gap-1.5 text-sm mb-2" style={{ color: 'var(--text-2)' }}>
+            <CalendarDays size={13} />
+            {new Date(zlecenie.data_realizacji).toLocaleDateString('pl-PL')}
           </p>
         )}
         {zlecenie.opis && (
           <p className="text-sm mb-2" style={{ color: 'var(--text-2)', whiteSpace: 'pre-wrap' }}>{zlecenie.opis}</p>
         )}
         {kontrahent && (
-          <p className="text-sm" style={{ color: 'var(--text-2)' }}>
-            👤 <Link to="/kontrahenci" style={{ color: '#2563eb' }}>{kontrahent.nazwa}</Link>
+          <p className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-2)' }}>
+            <User size={13} />
+            <Link to="/kontrahenci" style={{ color: '#2563eb' }}>{kontrahent.nazwa}</Link>
           </p>
         )}
       </div>

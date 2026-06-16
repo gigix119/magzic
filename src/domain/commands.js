@@ -83,6 +83,55 @@ export function recalculateDemand(draft, packageVersion, rules = {}) {
   })
 }
 
+// ── Repair commands ───────────────────────────────────────────────────────────
+
+/**
+ * Allowed status transitions for repairs.
+ * key = current status, value = set of valid next statuses.
+ * @type {Record<string, Set<string>>}
+ */
+const REPAIR_TRANSITIONS = {
+  zgloszone:      new Set(['w_realizacji']),
+  w_realizacji:   new Set(['zakonczone', 'zgloszone']),
+  zakonczone:     new Set(['zweryfikowane', 'w_realizacji']),
+  zweryfikowane:  new Set([]),
+}
+
+/**
+ * Returns whether transitioning a repair from `from` to `to` is allowed.
+ * Pure — no side effects.
+ *
+ * @param {string} from - Current status
+ * @param {string} to - Target status
+ * @returns {boolean}
+ */
+export function canTransitionRepair(from, to) {
+  return REPAIR_TRANSITIONS[from]?.has(to) ?? false
+}
+
+/**
+ * Builds a RepairDraft from raw user input.
+ * Validates required fields and normalises values.
+ * Pure — does not write anything.
+ *
+ * @param {{ tytul: string, lokal?: string, priorytet?: string, opis?: string, notatka_technika?: string, data_zgloszenia?: string }} input
+ * @returns {import('./types').RepairDraft}
+ * @throws {Error} if tytul is missing
+ */
+export function buildRepairFromInput(input) {
+  const tytul = (input.tytul ?? '').trim()
+  if (!tytul) throw new Error('tytul is required')
+  return {
+    tytul,
+    lokal: (input.lokal ?? '').trim() || null,
+    priorytet: ['niski', 'normalny', 'pilne'].includes(input.priorytet) ? input.priorytet : 'normalny',
+    status: 'zgloszone',
+    opis: (input.opis ?? '').trim() || null,
+    notatka_technika: (input.notatka_technika ?? '').trim() || null,
+    data_zgloszenia: input.data_zgloszenia || new Date().toISOString().split('T')[0],
+  }
+}
+
 // ── Reservation diff ──────────────────────────────────────────────────────────
 
 /**

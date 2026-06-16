@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './context/ToastContext'
 import { AuthProvider } from './context/AuthContext'
@@ -17,10 +17,10 @@ import Towary from './pages/Towary'
 import Magazyny from './pages/Magazyny'
 import Kontrahenci from './pages/Kontrahenci'
 import Faktury from './pages/Faktury'
-import Pakiety from './pages/Pakiety'
 import Alerty from './pages/Alerty'
 import Zlecenia from './pages/Zlecenia'
 import ZlecenieDetail from './pages/ZlecenieDetail'
+import Operacje from './pages/Operacje'
 import Ustawienia from './pages/Ustawienia'
 import Regulamin from './pages/Regulamin'
 import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
@@ -35,6 +35,11 @@ import BackendAudit from './pages/backend/BackendAudit'
 import BackendErrors from './pages/backend/BackendErrors'
 import BackendModel from './pages/backend/BackendModel'
 import BackendInventoryReconciliation from './pages/backend/BackendInventoryReconciliation'
+
+function ZlecenieDetailRedirect() {
+  const { id } = useParams()
+  return <Navigate replace to={`/operacje/przygotowania/${id}`} />
+}
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -75,11 +80,22 @@ export default function App() {
                   <Route path="/magazyny" element={<Magazyny />} />
                   <Route path="/kontrahenci" element={<Kontrahenci />} />
                   <Route path="/faktury" element={<Faktury />} />
-                  <Route path="/pakiety" element={<Pakiety />} />
-                  <Route path="/alerty" element={<Alerty />} />
-                  <Route path="/zlecenia" element={<Zlecenia />} />
-                  <Route path="/zlecenia/:id" element={<ZlecenieDetail />} />
                   <Route path="/ustawienia" element={<Ustawienia />} />
+
+                  {/* Operacje hub */}
+                  <Route path="/operacje" element={<Operacje />} />
+                  <Route path="/operacje/przygotowania/:id" element={<ZlecenieDetail />} />
+
+                  {/* Legacy redirects — preserve old bookmarks */}
+                  <Route path="/zlecenia" element={<Navigate replace to="/operacje?tab=przygotowania" />} />
+                  <Route path="/zlecenia/:id" element={<ZlecenieDetailRedirect />} />
+                  <Route path="/alerty" element={<Navigate replace to="/operacje?tab=alerty" />} />
+                  <Route path="/pakiety" element={<Navigate replace to="/operacje?tab=pakiety" />} />
+
+                  {/* Keep original pages accessible (used internally) */}
+                  <Route path="/_zlecenia_legacy" element={<Zlecenia />} />
+                  <Route path="/_alerty_legacy" element={<Alerty />} />
+
                   {/* Backend — only for owner role */}
                   <Route path="/backend" element={<OwnerRoute><BackendLayout /></OwnerRoute>}>
                     <Route index element={<BackendIndex />} />
