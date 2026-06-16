@@ -1,12 +1,22 @@
 export const LOKALIZACJE = {
-  'Hel':  { kod: 'hel',  nazwa: 'Hel' },
-  'Jas':  { kod: 'jas',  nazwa: 'Jastarnia' },
+  'Hel':  { kod: 'hel',    nazwa: 'Hel' },
+  'Jas':  { kod: 'jas',    nazwa: 'Jastarnia' },
   'Jur':  { kod: 'jurata', nazwa: 'Jurata' },
   'Jura': { kod: 'jurata', nazwa: 'Jurata' },
-  'Mech': { kod: 'mech', nazwa: 'Mechelinki' },
-  'Puck': { kod: 'puck', nazwa: 'Puck' },
-  'Wł':   { kod: 'wl',   nazwa: 'Władysławowo' },
+  'Mech': { kod: 'mech',   nazwa: 'Mechelinki' },
+  'Puck': { kod: 'puck',   nazwa: 'Puck' },
+  'Wł':   { kod: 'wl',     nazwa: 'Władysławowo' },
 }
+
+// Deduplicated list for dropdowns/display (Jur+Jura both → jurata)
+export const LOKALIZACJE_UNIKALNE = [
+  { kod: 'hel',    nazwa: 'Hel' },
+  { kod: 'jas',    nazwa: 'Jastarnia' },
+  { kod: 'jurata', nazwa: 'Jurata' },
+  { kod: 'mech',   nazwa: 'Mechelinki' },
+  { kod: 'puck',   nazwa: 'Puck' },
+  { kod: 'wl',     nazwa: 'Władysławowo' },
+]
 
 export function parseLokalRow({ nazwa, opis }) {
   const parts = nazwa.trim().split(/\s+/)

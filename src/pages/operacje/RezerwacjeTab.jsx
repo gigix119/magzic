@@ -9,7 +9,7 @@ import BottomSheet from '../../components/ui/BottomSheet'
 import Modal from '../../components/Modal'
 import Spinner from '../../components/Spinner'
 import { CalendarDays, Plus, Pencil, Trash2, ArrowRight, BedDouble, List, Calendar, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
-import { LOKALIZACJE } from '../../utils/lokaleImportParser'
+import { LOKALIZACJE_UNIKALNE } from '../../utils/lokaleImportParser'
 
 const STATUS_COLORS = {
   wstepna:     { bg: '#f3f4f6', text: '#6b7280', label: 'Wstępna' },
@@ -742,7 +742,7 @@ export default function RezerwacjeTab() {
                 onChange={e => { setLokalizacjaFilter(e.target.value); setLokalFilter('') }}
               >
                 <option value=""><MapPin size={10} className="inline" /> Wszystkie lokalizacje</option>
-                {Object.values(LOKALIZACJE).map(l => (
+                {LOKALIZACJE_UNIKALNE.map(l => (
                   <option key={l.kod} value={l.kod}>{l.nazwa}</option>
                 ))}
               </select>

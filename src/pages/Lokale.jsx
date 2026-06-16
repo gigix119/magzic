@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { useAuth } from '../context/AuthContext'
+import { isOwner } from '../utils/adminHelpers'
 import BottomSheet from '../components/ui/BottomSheet'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
-import { Building2, Plus, Pencil, Trash2, Home, ChevronRight, MapPin } from 'lucide-react'
-import { LOKALIZACJE } from '../utils/lokaleImportParser'
+import { Building2, Plus, Pencil, Trash2, Home, ChevronRight, MapPin, Upload } from 'lucide-react'
+import { LOKALIZACJE_UNIKALNE } from '../utils/lokaleImportParser'
 
 const TYPY = [
   { value: 'apartament', label: 'Apartament' },
@@ -34,6 +36,7 @@ const emptyForm = {
   adres: '',
   typ: 'apartament',
   pojemnosc: '2',
+  lokalizacja_kod: '',
   domyslny_pakiet_id: '',
   notatki: '',
   aktywny: true,
@@ -52,8 +55,10 @@ function useMobile() {
 export default function Lokale() {
   const { addToast } = useToast()
   const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
+  const { profile } = useAuth()
   const navigate = useNavigate()
   const isMobile = useMobile()
+  const ownerAccess = isOwner(profile)
 
   const [items, setItems] = useState([])
   const [pakiety, setPakiety] = useState([])
@@ -100,6 +105,7 @@ export default function Lokale() {
       adres: item.adres || '',
       typ: item.typ || 'apartament',
       pojemnosc: item.pojemnosc != null ? String(item.pojemnosc) : '2',
+      lokalizacja_kod: item.lokalizacja_kod || '',
       domyslny_pakiet_id: item.domyslny_pakiet_id || '',
       notatki: item.notatki || '',
       aktywny: item.aktywny !== false,
@@ -120,11 +126,14 @@ export default function Lokale() {
     if (!validate()) return
     setSaving(true)
 
+    const lokFound = LOKALIZACJE_UNIKALNE.find(l => l.kod === form.lokalizacja_kod)
     const payload = {
       nazwa: form.nazwa.trim(),
       adres: form.adres.trim() || null,
       typ: form.typ || 'apartament',
       pojemnosc: parseInt(form.pojemnosc, 10) || 2,
+      lokalizacja_kod: form.lokalizacja_kod || null,
+      lokalizacja: lokFound?.nazwa || null,
       domyslny_pakiet_id: form.domyslny_pakiet_id || null,
       notatki: form.notatki.trim() || null,
       aktywny: form.aktywny,
@@ -197,6 +206,14 @@ export default function Lokale() {
       </div>
 
       <div>
+        <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Lokalizacja</label>
+        <select style={IS()} value={form.lokalizacja_kod} onChange={e => setForm(f => ({ ...f, lokalizacja_kod: e.target.value }))}>
+          <option value="">— brak —</option>
+          {LOKALIZACJE_UNIKALNE.map(l => <option key={l.kod} value={l.kod}>{l.nazwa}</option>)}
+        </select>
+      </div>
+
+      <div>
         <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Domyślny pakiet sprzątania</label>
         <select style={IS()} value={form.domyslny_pakiet_id} onChange={e => setForm(f => ({ ...f, domyslny_pakiet_id: e.target.value }))}>
           <option value="">— brak —</option>
@@ -238,10 +255,19 @@ export default function Lokale() {
               style={{ background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '0 12px', fontSize: 13, minHeight: 44, flex: '1 1 auto' }}
             >
               <option value="">Wszystkie lokalizacje</option>
-              {Object.values(LOKALIZACJE).map(l => (
+              {LOKALIZACJE_UNIKALNE.map(l => (
                 <option key={l.kod} value={l.kod}>{l.nazwa}</option>
               ))}
             </select>
+          )}
+          {ownerAccess && (
+            <Link
+              to="/import-lokali"
+              className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium flex-shrink-0"
+              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', minHeight: 44, textDecoration: 'none' }}
+            >
+              <Upload size={15} /> Import CSV
+            </Link>
           )}
           <button
             onClick={openCreate}

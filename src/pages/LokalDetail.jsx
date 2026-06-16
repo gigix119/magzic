@@ -5,6 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
+import { LOKALIZACJE_UNIKALNE } from '../utils/lokaleImportParser'
 import {
   ArrowLeft, Home, MapPin, Users, Package2, BedDouble,
   ClipboardList, Wrench, Pencil, CalendarDays, ExternalLink,
@@ -153,6 +154,7 @@ export default function LokalDetail() {
       adres: lokal.adres || '',
       typ: lokal.typ || 'apartament',
       pojemnosc: lokal.pojemnosc != null ? String(lokal.pojemnosc) : '2',
+      lokalizacja_kod: lokal.lokalizacja_kod || '',
       domyslny_pakiet_id: lokal.domyslny_pakiet_id || '',
       notatki: lokal.notatki || '',
       aktywny: lokal.aktywny !== false,
@@ -164,11 +166,14 @@ export default function LokalDetail() {
     ev.preventDefault()
     if (!editForm.nazwa.trim()) return
     setEditSaving(true)
+    const lokFound = LOKALIZACJE_UNIKALNE.find(l => l.kod === editForm.lokalizacja_kod)
     const payload = {
       nazwa: editForm.nazwa.trim(),
       adres: editForm.adres.trim() || null,
       typ: editForm.typ || 'apartament',
       pojemnosc: parseInt(editForm.pojemnosc, 10) || 2,
+      lokalizacja_kod: editForm.lokalizacja_kod || null,
+      lokalizacja: lokFound?.nazwa || null,
       domyslny_pakiet_id: editForm.domyslny_pakiet_id || null,
       notatki: editForm.notatki.trim() || null,
       aktywny: editForm.aktywny,
@@ -217,6 +222,11 @@ export default function LokalDetail() {
               <p className="flex items-center gap-1.5 text-sm mt-1.5" style={{ color: 'var(--text-2)' }}>
                 <MapPin size={13} />{lokal.adres}
               </p>
+            )}
+            {lokal.lokalizacja && (
+              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium mt-1.5" style={{ background: 'rgba(59,130,246,0.08)', color: 'var(--c-action)' }}>
+                <MapPin size={10} />{lokal.lokalizacja}
+              </span>
             )}
             {pakiet && (
               <p className="flex items-center gap-1.5 text-sm mt-1" style={{ color: 'var(--text-2)' }}>
@@ -414,6 +424,13 @@ export default function LokalDetail() {
                 <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Pojemność (os.)</label>
                 <input type="number" min="1" style={IS()} value={editForm.pojemnosc} onChange={e => setEditForm(f => ({ ...f, pojemnosc: e.target.value }))} />
               </div>
+            </div>
+            <div>
+              <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Lokalizacja</label>
+              <select style={IS()} value={editForm.lokalizacja_kod} onChange={e => setEditForm(f => ({ ...f, lokalizacja_kod: e.target.value }))}>
+                <option value="">— brak —</option>
+                {LOKALIZACJE_UNIKALNE.map(l => <option key={l.kod} value={l.kod}>{l.nazwa}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Domyślny pakiet</label>

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
-import { parseCSV, LOKALIZACJE } from '../utils/lokaleImportParser'
+import { parseCSV, LOKALIZACJE_UNIKALNE } from '../utils/lokaleImportParser'
 import { pakietDlaPojemnosci, POJEMNOSCI } from '../utils/pakietyBazowe'
 import Spinner from '../components/Spinner'
 import { Upload, CheckCircle, AlertCircle, ChevronRight, Package, Building2 } from 'lucide-react'
@@ -325,8 +325,9 @@ export default function ImportLokali() {
 
             {/* Summary by location */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-              {Object.entries(LOKALIZACJE).map(([, loc]) => {
+                {[...LOKALIZACJE_UNIKALNE, { kod: 'inne', nazwa: 'Inne' }].map(loc => {
                 const count = csvRows.filter(r => r.lokalizacja_kod === loc.kod).length
+                if (loc.kod === 'inne' && count === 0) return null
                 return (
                   <div key={loc.kod} style={{ background: 'var(--table-sub)', borderRadius: 8, padding: '10px 12px' }}>
                     <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{loc.nazwa}</p>
