@@ -7,7 +7,7 @@ import { getZlecenieConfigFor } from '../../config/businessTypes'
 import { getZlecenieIcon } from '../../components/ui/categoryIcon'
 import Modal from '../../components/Modal'
 import Spinner from '../../components/Spinner'
-import { Plus, ChevronRight, CalendarDays } from 'lucide-react'
+import { Plus, ChevronRight, CalendarDays, Users, BedDouble } from 'lucide-react'
 
 const STATUS_COLORS = {
   nowe:         { bg: '#eff6ff', text: '#1e40af' },
@@ -54,6 +54,7 @@ export default function PrzygotowaniaTab() {
 
   const [items, setItems] = useState([])
   const [kontrahenci, setKontrahenci] = useState([])
+  const [rezMap, setRezMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
@@ -65,11 +66,29 @@ export default function PrzygotowaniaTab() {
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
     const [{ data: z }, { data: k }] = await Promise.all([
-      addWsFilter(wsQuery('zlecenia').select('*, zlecenia_pozycje(id)')).order('data_realizacji', { ascending: true, nullsFirst: false }),
+      addWsFilter(wsQuery('zlecenia').select('*, zlecenia_pozycje(id, wydano)')).order('data_realizacji', { ascending: true, nullsFirst: false }),
       addWsFilter(wsQuery('kontrahenci').select('id, nazwa').eq('aktywny', true)).order('nazwa'),
     ])
-    setItems(z || [])
+    const zl = z || []
+    setItems(zl)
     setKontrahenci(k || [])
+
+    // Fetch linked rezerwacje for these zlecenia
+    const ids = zl.map(i => i.id)
+    if (ids.length > 0) {
+      const { data: rez } = await supabase
+        .from('rezerwacje')
+        .select('przygotowanie_id, lokal_id, checkin_at, checkout_at, gosc_nazwa, liczba_gosci, lokale(nazwa)')
+        .in('przygotowanie_id', ids)
+      const map = {}
+      for (const r of rez || []) {
+        if (r.przygotowanie_id) map[r.przygotowanie_id] = r
+      }
+      setRezMap(map)
+    } else {
+      setRezMap({})
+    }
+
     setLoading(false)
   }
 
@@ -143,7 +162,6 @@ export default function PrzygotowaniaTab() {
     { key: 'gotowe', label: config.statusLabels.gotowe },
   ]
 
-  // Rental-specific placeholder override for hospitality
   const namePlaceholder = businessCategory === 'hospitality'
     ? 'np. Apartament 3B — checkout 15.06, check-in 16.06'
     : config.namePlaceholder
@@ -189,20 +207,14 @@ export default function PrzygotowaniaTab() {
         <div className="text-center py-16 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <ZlecenieIcon size={40} className="mx-auto mb-3" style={{ color: 'var(--muted)', opacity: 0.4 }} />
           <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>
-            {businessCategory === 'hospitality'
-              ? 'Brak przygotowań'
-              : config.emptyTitle}
+            {businessCategory === 'hospitality' ? 'Brak przygotowań' : config.emptyTitle}
           </p>
           <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
             {businessCategory === 'hospitality'
               ? 'Utwórz przygotowanie obiektu, aby zaplanować wydanie materiałów i kontrolę.'
               : config.emptyDescription}
           </p>
-          <button
-            onClick={openCreate}
-            className="rounded-lg px-4 text-sm font-medium text-white"
-            style={{ background: 'var(--c-action)', minHeight: 44 }}
-          >
+          <button onClick={openCreate} className="rounded-lg px-4 text-sm font-medium text-white" style={{ background: 'var(--c-action)', minHeight: 44 }}>
             + {config.createLabel}
           </button>
         </div>
@@ -211,46 +223,75 @@ export default function PrzygotowaniaTab() {
           {filtered.map(item => {
             const sc = STATUS_COLORS[item.status] || STATUS_COLORS.nowe
             const pc = PRIORITY_COLORS[item.priorytet] || PRIORITY_COLORS.normalny
-            const pozycjeCount = item.zlecenia_pozycje?.length || 0
+            const pozycje = item.zlecenia_pozycje || []
+            const total = pozycje.length
+            const wydano = pozycje.filter(p => p.wydano).length
+            const progressPct = total > 0 ? Math.round((wydano / total) * 100) : 0
+            const rez = rezMap[item.id]
+
             return (
               <div
                 key={item.id}
-                className="rounded-xl px-4 py-4 cursor-pointer"
+                className="rounded-xl overflow-hidden cursor-pointer"
                 style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
                 onClick={() => navigate(`/operacje/przygotowania/${item.id}`)}
               >
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold" style={{ color: 'var(--text)', fontSize: 16 }}>{item.nazwa}</p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap" style={{ fontSize: 13 }}>
-                      {item.data_realizacji && (
-                        <span className="flex items-center gap-1" style={{ color: 'var(--muted)' }}>
-                          <CalendarDays size={12} />
-                          {new Date(item.data_realizacji).toLocaleDateString('pl-PL')}
+                <div className="px-4 py-4">
+                  {/* Reservation context row */}
+                  {rez && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <BedDouble size={13} style={{ color: 'var(--c-success)', flexShrink: 0 }} />
+                      <p className="text-xs truncate" style={{ color: 'var(--text-2)' }}>
+                        {rez.lokale?.nazwa || '—'}
+                        {rez.gosc_nazwa && <> · {rez.gosc_nazwa}</>}
+                        {rez.liczba_gosci != null && <> · <Users size={10} className="inline" /> {rez.liczba_gosci} os.</>}
+                        {rez.checkin_at && <> · {rez.checkin_at}–{rez.checkout_at}</>}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold" style={{ color: 'var(--text)', fontSize: 16 }}>{item.nazwa}</p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap" style={{ fontSize: 13 }}>
+                        {item.data_realizacji && (
+                          <span className="flex items-center gap-1" style={{ color: 'var(--muted)' }}>
+                            <CalendarDays size={12} />
+                            {new Date(item.data_realizacji).toLocaleDateString('pl-PL')}
+                          </span>
+                        )}
+                        {item.priorytet === 'pilny' && (
+                          <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: pc.bg, color: pc.text }}>
+                            {pc.label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ background: sc.bg, color: sc.text }}>
+                          {config.statusLabels[item.status] || item.status}
                         </span>
-                      )}
-                      {item.priorytet === 'pilny' && (
-                        <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: pc.bg, color: pc.text }}>
-                          {pc.label}
-                        </span>
+                        {total > 0 && (
+                          <span className="text-xs num" style={{ color: 'var(--muted)' }}>
+                            {wydano}/{total} wydano
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Progress bar */}
+                      {total > 0 && (
+                        <div className="mt-2" style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden', maxWidth: 200 }}>
+                          <div style={{ width: `${progressPct}%`, height: '100%', background: progressPct === 100 ? 'var(--c-success)' : 'var(--c-action)', borderRadius: 2, transition: 'width 0.3s' }} />
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ background: sc.bg, color: sc.text }}>
-                        {config.statusLabels[item.status] || item.status}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                        {pozycjeCount} {pozycjeCount === 1 ? 'pozycja' : 'pozycji'}
-                      </span>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/operacje/przygotowania/${item.id}`) }}
+                      className="flex items-center gap-1 rounded-lg px-2 text-sm font-medium flex-shrink-0"
+                      style={{ color: 'var(--c-action)', minHeight: 44 }}
+                    >
+                      Otwórz <ChevronRight size={14} />
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/operacje/przygotowania/${item.id}`) }}
-                    className="flex items-center gap-1 rounded-lg px-2 text-sm font-medium flex-shrink-0"
-                    style={{ color: 'var(--c-action)', minHeight: 44 }}
-                  >
-                    Otwórz <ChevronRight size={14} />
-                  </button>
                 </div>
               </div>
             )

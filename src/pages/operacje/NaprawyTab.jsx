@@ -66,6 +66,7 @@ export default function NaprawyTab() {
   const isMobile = useMobile()
 
   const [items, setItems] = useState([])
+  const [lokale, setLokale] = useState([])
   const [loading, setLoading] = useState(true)
   const [tableExists, setTableExists] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
@@ -78,9 +79,11 @@ export default function NaprawyTab() {
 
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
-    const { data, error } = await addWsFilter(
-      wsQuery('naprawy').select('*')
-    ).order('data_zgloszenia', { ascending: false })
+    const [{ data, error }, { data: lok }] = await Promise.all([
+      addWsFilter(wsQuery('naprawy').select('*')).order('data_zgloszenia', { ascending: false }),
+      addWsFilter(wsQuery('lokale').select('id, nazwa').eq('aktywny', true)).order('nazwa'),
+    ])
+    setLokale(lok || [])
 
     if (error) {
       if (error.code === '42P01') { setTableExists(false); setLoading(false); return }
@@ -91,6 +94,11 @@ export default function NaprawyTab() {
       setTableExists(true)
     }
     setLoading(false)
+  }
+
+  function pickLokal(lokalId) {
+    const l = lokale.find(x => x.id === lokalId)
+    setForm(f => ({ ...f, apartament: l ? l.nazwa : '' }))
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,6 +199,16 @@ export default function NaprawyTab() {
     <form onSubmit={handleSave} className="space-y-4">
       <div>
         <label className="block text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>Apartament / obiekt *</label>
+        {lokale.length > 0 && (
+          <select
+            style={{ ...IS(), marginBottom: 6 }}
+            defaultValue=""
+            onChange={e => e.target.value && pickLokal(e.target.value)}
+          >
+            <option value="">— wybierz z listy lokali (opcjonalnie) —</option>
+            {lokale.map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
+          </select>
+        )}
         <input
           style={IS(errors.apartament)}
           value={form.apartament}

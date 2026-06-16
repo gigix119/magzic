@@ -7,6 +7,7 @@ import { getZlecenieConfigFor } from '../config/businessTypes'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
 import { ArrowLeft, Trash2, Pencil, Plus, Check, CalendarDays, User, BedDouble } from 'lucide-react'
+import DemandExplanation from '../components/ui/DemandExplanation'
 
 const STATUS_COLORS = {
   nowe:         { bg: '#eff6ff', text: '#1e40af' },
@@ -375,6 +376,13 @@ export default function ZlecenieDetail() {
                   {p.ilosc} {p.jednostka || ''}
                   {p.notatka ? ` · ${p.notatka}` : ''}
                 </p>
+                {p.notatka === 'Z pakietu (auto)' && !p.wydano && (
+                  <DemandExplanation
+                    steps={[{ label: 'Standard pakietu', value: p.ilosc }]}
+                    ilosc={p.ilosc}
+                    jednostka={p.jednostka || 'szt.'}
+                  />
+                )}
               </div>
               <button
                 onClick={() => handleDeleteItem(p.id)}

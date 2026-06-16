@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import BottomSheet from '../components/ui/BottomSheet'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
-import { Building2, Plus, Pencil, Trash2, Home } from 'lucide-react'
+import { Building2, Plus, Pencil, Trash2, Home, ChevronRight } from 'lucide-react'
 
 const TYPY = [
   { value: 'apartament', label: 'Apartament' },
@@ -50,6 +51,7 @@ function useMobile() {
 export default function Lokale() {
   const { addToast } = useToast()
   const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
+  const navigate = useNavigate()
   const isMobile = useMobile()
 
   const [items, setItems] = useState([])
@@ -247,7 +249,12 @@ export default function Lokale() {
           {items.map(item => {
             const pakietNazwa = item.domyslny_pakiet_id ? pakietMap[item.domyslny_pakiet_id] : null
             return (
-              <div key={item.id} className="rounded-xl p-4" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              <div
+                key={item.id}
+                className="rounded-xl p-4 cursor-pointer"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+                onClick={() => navigate(`/lokale/${item.id}`)}
+              >
                 <div className="flex items-start gap-3">
                   <div className="rounded-lg flex-shrink-0 flex items-center justify-center" style={{ width: 40, height: 40, background: 'rgba(59,130,246,0.1)' }}>
                     <Home size={18} style={{ color: 'var(--c-action)' }} />
@@ -270,13 +277,14 @@ export default function Lokale() {
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => openEdit(item)} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 38, minHeight: 38 }} title="Edytuj">
+                  <div className="flex gap-1 flex-shrink-0 items-center">
+                    <button onClick={e => { e.stopPropagation(); openEdit(item) }} className="flex items-center justify-center rounded-lg" style={{ color: 'var(--text-2)', minWidth: 38, minHeight: 38 }} title="Edytuj">
                       <Pencil size={13} />
                     </button>
-                    <button onClick={() => handleDelete(item)} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 38, minHeight: 38 }} title="Usuń">
+                    <button onClick={e => { e.stopPropagation(); handleDelete(item) }} className="flex items-center justify-center rounded-lg" style={{ color: '#dc2626', minWidth: 38, minHeight: 38 }} title="Usuń">
                       <Trash2 size={13} />
                     </button>
+                    <ChevronRight size={16} style={{ color: 'var(--muted)' }} />
                   </div>
                 </div>
               </div>

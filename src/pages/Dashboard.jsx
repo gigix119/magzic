@@ -7,7 +7,7 @@ import Badge from '../components/Badge'
 import FirstUseSteps from '../components/FirstUseSteps'
 import BriefingCard from '../components/BriefingCard'
 import WeeklyReport from '../components/WeeklyReport'
-import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock } from 'lucide-react'
+import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock, KeyRound, DoorOpen, ClipboardList } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 function StatCard({ icon: Icon, label, value, color = 'var(--c-action)', sub }) {
@@ -75,6 +75,126 @@ function OnboardingScreen() {
             {label}
           </Link>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function isoToday() { return new Date().toISOString().split('T')[0] }
+
+function DzisPanel({ workspaceId, wsQuery, addWsFilter }) {
+  const [checkins, setCheckins] = useState([])
+  const [checkouts, setCheckouts] = useState([])
+  const [preps, setPreps] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [hasLokale, setHasLokale] = useState(false)
+
+  useEffect(() => {
+    if (!workspaceId) return
+    fetchDzis()
+  }, [workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function fetchDzis() {
+    const today = isoToday()
+    const [
+      { count: lokaleCount },
+      { data: cin },
+      { data: cout },
+      { data: prep },
+    ] = await Promise.all([
+      addWsFilter(wsQuery('lokale').select('*', { count: 'exact', head: true })).eq('aktywny', true),
+      addWsFilter(wsQuery('rezerwacje').select('id, gosc_nazwa, checkin_at, lokal_id, lokale(nazwa)'))
+        .eq('checkin_at', today).eq('status', 'potwierdzona').order('checkin_at'),
+      addWsFilter(wsQuery('rezerwacje').select('id, gosc_nazwa, checkout_at, lokal_id, lokale(nazwa)'))
+        .eq('checkout_at', today).eq('status', 'zameldowana').order('checkout_at'),
+      addWsFilter(wsQuery('zlecenia').select('id, nazwa, status, data_realizacji'))
+        .eq('data_realizacji', today).neq('status', 'gotowe').order('nazwa'),
+    ])
+    setHasLokale((lokaleCount || 0) > 0)
+    setCheckins(cin || [])
+    setCheckouts(cout || [])
+    setPreps(prep || [])
+    setLoading(false)
+  }
+
+  if (loading || !hasLokale) return null
+
+  const CARDS = [
+    {
+      title: 'Przyjazdy',
+      icon: KeyRound,
+      color: 'var(--c-action)',
+      items: checkins,
+      count: checkins.length,
+      renderItem: r => `${r.lokale?.nazwa || '—'}`,
+      link: '/operacje?tab=rezerwacje',
+      linkLabel: 'Rezerwacje',
+    },
+    {
+      title: 'Wyjazdy',
+      icon: DoorOpen,
+      color: 'var(--c-attention)',
+      items: checkouts,
+      count: checkouts.length,
+      renderItem: r => `${r.lokale?.nazwa || '—'}`,
+      link: '/operacje?tab=rezerwacje',
+      linkLabel: 'Rezerwacje',
+    },
+    {
+      title: 'Do zrobienia',
+      icon: ClipboardList,
+      color: preps.length > 0 ? 'var(--c-critical)' : 'var(--c-success)',
+      items: preps,
+      count: preps.length,
+      renderItem: z => z.nazwa,
+      link: '/operacje?tab=przygotowania',
+      linkLabel: 'Przygotowania',
+    },
+  ]
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-2)' }}>Dziś w obiektach</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {CARDS.map(card => {
+          const Icon = card.icon
+          const visible = card.items.slice(0, 4)
+          const extra = card.items.length - visible.length
+          return (
+            <div key={card.title} className="rounded-xl p-4 flex flex-col gap-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, background: card.color + '1a' }}>
+                  <Icon size={16} style={{ color: card.color }} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{card.title}</p>
+                  <p className="text-xl font-bold num leading-tight" style={{ color: 'var(--text)' }}>{card.count}</p>
+                </div>
+              </div>
+              {visible.length > 0 ? (
+                <div className="space-y-1">
+                  {visible.map(item => (
+                    <p key={item.id} className="text-xs truncate" style={{ color: 'var(--text-2)' }}>
+                      {card.renderItem(item)}
+                    </p>
+                  ))}
+                  {extra > 0 && (
+                    <p className="text-xs" style={{ color: 'var(--muted)' }}>i {extra} więcej…</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>Brak na dziś</p>
+              )}
+              <Link
+                to={card.link}
+                className="mt-auto text-xs font-medium"
+                style={{ color: card.color, textDecoration: 'none' }}
+              >
+                → {card.linkLabel}
+              </Link>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -206,6 +326,7 @@ export default function Dashboard() {
       </div>
 
       <FirstUseSteps />
+      <DzisPanel workspaceId={workspaceId} wsQuery={wsQuery} addWsFilter={addWsFilter} />
       {showBriefing && <BriefingCard />}
       {showWeeklyReport && <WeeklyReport workspaceId={workspaceId} businessCategory={getBusinessCategory()} />}
 
