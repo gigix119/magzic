@@ -129,7 +129,7 @@ export default function ImportLokali() {
       .replace(/[^a-z0-9-]/g, '') || `towar-${Date.now()}`
     const { data, error } = await supabase
       .from('towary')
-      .insert([{ ...wsData(), nazwa: name, sku, jednostka: 'szt.', aktywny: true }])
+      .insert([{ ...wsData(), nazwa: name, typ: 'towar', sku, jednostka: 'szt.', aktywny: true }])
       .select('id, nazwa')
       .single()
     if (error) { addToast(`Błąd tworzenia "${name}": ${error.message}`, 'error'); return null }
