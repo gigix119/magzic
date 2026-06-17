@@ -3,12 +3,16 @@ import { supabase } from '../../supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useToast } from '../../context/ToastContext'
 import { parseKwHotelReport, decodeKwHotelFile, PRIORYTETY } from '../../utils/kwHotelReportParser'
+import { parseKwHotelXls, isSpreadsheetMlContent } from '../../utils/kwHotelXlsParser'
+import { normalizeName, matchLokal, fuzzyTopMatches } from '../../utils/fuzzyMatch'
 import { LOKALIZACJE_UNIKALNE } from '../../utils/lokaleImportParser'
 import { buildChecklistRows } from '../../utils/defaultChecklist'
+import { calculateForecast } from '../../utils/forecastEngine'
+import { planTeams, estimateWorkload, hoursPerPerson, buildPlanText } from '../../utils/teamPlanner'
 import Modal from '../../components/Modal'
 import BottomSheet from '../../components/ui/BottomSheet'
 import Spinner from '../../components/Spinner'
-import { Upload, CheckCircle, AlertTriangle, ChevronLeft, MapPin } from 'lucide-react'
+import { Upload, CheckCircle, AlertTriangle, ChevronLeft, MapPin, Copy, Check, Users } from 'lucide-react'
 
 const PRIORYTET_TO_FIELD = { 1: 'pilny', 2: 'normalny', 3: 'niski' }
 const PRIORYTET_TO_TYP = { 1: 'zmiana', 2: 'przyjazd', 3: 'wyjazd' }
@@ -17,8 +21,18 @@ const PRIORYTET_BADGE = {
   2: { emoji: '🟡', bg: '#fff7ed', text: '#9a3412' },
   3: { emoji: '🔵', bg: '#eff6ff', text: '#1e40af' },
 }
+const WORKLOAD_BADGE = {
+  niskie: { emoji: '🟢', label: 'NISKIE', text: '#166534' },
+  srednie: { emoji: '🟡', label: 'ŚREDNIE', text: '#9a3412' },
+  wysokie: { emoji: '🔴', label: 'WYSOKIE', text: '#991b1b' },
+}
 
 function isoToday() { return new Date().toISOString().split('T')[0] }
+function dmyDate(iso) {
+  if (!iso) return iso
+  const [y, m, d] = iso.split('-')
+  return `${d}.${m}.${y}`
+}
 
 function useMobile() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
@@ -28,21 +42,6 @@ function useMobile() {
     return () => window.removeEventListener('resize', h)
   }, [])
   return isMobile
-}
-
-function normalizeName(s) {
-  return (s || '').trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-function matchLokal(nazwa, lokale) {
-  const n = normalizeName(nazwa)
-  const exact = lokale.find(l => normalizeName(l.nazwa) === n)
-  if (exact) return exact
-  const fuzzy = lokale.find(l => {
-    const ln = normalizeName(l.nazwa)
-    return ln.includes(n) || n.includes(ln)
-  })
-  return fuzzy || null
 }
 
 async function insertZlecenieRow(payload) {
@@ -56,6 +55,12 @@ async function insertZlecenieRow(payload) {
   return { data, error }
 }
 
+function rememberAlias(workspaceId, nazwaKw, lokalId) {
+  supabase.from('kwhotel_aliasy')
+    .upsert({ workspace_id: workspaceId, nazwa_kw: nazwaKw, lokal_id: lokalId }, { onConflict: 'workspace_id,nazwa_kw' })
+    .then(() => {})
+}
+
 export default function KwHotelImport({ onClose, onCreated }) {
   const { workspaceId } = useWorkspace()
   const { addToast } = useToast()
@@ -64,6 +69,7 @@ export default function KwHotelImport({ onClose, onCreated }) {
 
   const [step, setStep] = useState(1)
   const [fileName, setFileName] = useState('')
+  const [detectedFormat, setDetectedFormat] = useState('')
   const [parsed, setParsed] = useState(null)
   const [parseError, setParseError] = useState('')
   const [forceImport, setForceImport] = useState(false)
@@ -72,6 +78,9 @@ export default function KwHotelImport({ onClose, onCreated }) {
   const [loadingLokale, setLoadingLokale] = useState(false)
   const [lokale, setLokale] = useState([])
   const [rows, setRows] = useState([])
+  const [stockMaps, setStockMaps] = useState({ pakietyMap: {}, towaryMap: {}, stanyMap: {}, towaryByName: {} })
+  const [headcount, setHeadcount] = useState(6)
+  const [copied, setCopied] = useState(false)
 
   const [creating, setCreating] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0, skipped: 0, errors: [] })
@@ -85,39 +94,79 @@ export default function KwHotelImport({ onClose, onCreated }) {
     setForceImport(false)
     try {
       const buffer = await file.arrayBuffer()
-      const text = decodeKwHotelFile(buffer)
-      const result = parseKwHotelReport(text)
+      const utf8Text = new TextDecoder('utf-8').decode(buffer)
+      let result, format
+      if (isSpreadsheetMlContent(utf8Text)) {
+        result = parseKwHotelXls(utf8Text)
+        format = 'XLS'
+      } else {
+        result = parseKwHotelReport(decodeKwHotelFile(buffer))
+        format = 'CSV'
+      }
       if (!result.records.length) {
         setParseError('Nie znaleziono żadnych wierszy z wyjazdem/przyjazdem — sprawdź czy to właściwy raport.')
         setParsed(null)
+        setDetectedFormat('')
         return
       }
       setParsed(result)
+      setDetectedFormat(format)
       setDate(result.date || isoToday())
     } catch (err) {
       setParseError(`Błąd odczytu pliku: ${err.message}`)
       setParsed(null)
+      setDetectedFormat('')
     }
   }
 
   async function goToPreview() {
     setLoadingLokale(true)
-    const { data: lok } = await supabase
-      .from('lokale')
-      .select('id, nazwa, lokalizacja, domyslny_pakiet_id')
-      .eq('workspace_id', workspaceId)
-      .eq('aktywny', true)
-      .order('nazwa')
+    const [{ data: lok }, { data: aliasy }, { data: towary }, { data: stany }] = await Promise.all([
+      supabase.from('lokale').select('id, nazwa, lokalizacja, domyslny_pakiet_id').eq('workspace_id', workspaceId).eq('aktywny', true).order('nazwa'),
+      supabase.from('kwhotel_aliasy').select('nazwa_kw, lokal_id').eq('workspace_id', workspaceId),
+      supabase.from('towary').select('id, nazwa, jednostka').eq('aktywny', true),
+      supabase.from('stany_magazynowe').select('towar_id, ilosc'),
+    ])
     const lokaleList = lok || []
     setLokale(lokaleList)
 
+    const lokaleById = {}
+    for (const l of lokaleList) lokaleById[l.id] = l
+
+    const aliasMap = {}
+    for (const a of aliasy || []) aliasMap[normalizeName(a.nazwa_kw)] = a.lokal_id
+
+    const pakietIds = new Set(lokaleList.filter(l => l.domyslny_pakiet_id).map(l => l.domyslny_pakiet_id))
+    const pakietyMap = {}
+    if (pakietIds.size > 0) {
+      const { data: elementy } = await supabase
+        .from('elementy_pakietu')
+        .select('pakiet_id, towar_id, ilosc')
+        .in('pakiet_id', [...pakietIds])
+      for (const e of elementy || []) {
+        if (!pakietyMap[e.pakiet_id]) pakietyMap[e.pakiet_id] = []
+        pakietyMap[e.pakiet_id].push({ towar_id: e.towar_id, ilosc: e.ilosc })
+      }
+    }
+
+    const towaryMap = {}
+    const towaryByName = {}
+    for (const t of towary || []) {
+      towaryMap[t.id] = t
+      towaryByName[t.nazwa.toLowerCase().trim()] = t.id
+    }
+    const stanyMap = {}
+    for (const s of stany || []) stanyMap[s.towar_id] = (stanyMap[s.towar_id] || 0) + Number(s.ilosc)
+    setStockMaps({ pakietyMap, towaryMap, stanyMap, towaryByName })
+
     setRows(parsed.records.map((r, i) => {
-      const matched = matchLokal(r.nazwa, lokaleList)
+      const aliasLokalId = aliasMap[normalizeName(r.nazwa)] && lokaleById[aliasMap[normalizeName(r.nazwa)]] ? aliasMap[normalizeName(r.nazwa)] : null
+      const matched = (aliasLokalId && lokaleById[aliasLokalId]) || matchLokal(r.nazwa, lokaleList)
       return {
         _id: i,
         ...r,
         include: true,
-        matchedLokalId: matched?.id || null,
+        matchedLokalId: matched?.id || aliasLokalId || null,
       }
     }))
     setLoadingLokale(false)
@@ -126,6 +175,10 @@ export default function KwHotelImport({ onClose, onCreated }) {
 
   function updateRow(id, changes) {
     setRows(rs => rs.map(r => r._id === id ? { ...r, ...changes } : r))
+    if (changes.matchedLokalId) {
+      const row = rows.find(r => r._id === id)
+      if (row) rememberAlias(workspaceId, row.nazwa, changes.matchedLokalId)
+    }
   }
 
   async function runCreate() {
@@ -232,6 +285,35 @@ export default function KwHotelImport({ onClose, onCreated }) {
     return LOKALIZACJE_UNIKALNE.find(l => l.kod === kod)?.nazwa || 'Inne'
   }
 
+  const teamPlan = planTeams(includedRows)
+  const workload = estimateWorkload(includedRows)
+  const perPerson = hoursPerPerson(workload.totalHours, headcount)
+
+  const stockForecast = (() => {
+    const lokaleMap = {}
+    for (const l of lokale) lokaleMap[l.id] = l
+    const rezerwacje = includedRows
+      .filter(r => r.matchedLokalId)
+      .map(r => ({ lokal_id: r.matchedLokalId, przygotowanie_id: null }))
+    if (!rezerwacje.length) return []
+    return calculateForecast({
+      rezerwacje,
+      lokaleMap,
+      pakietyMap: stockMaps.pakietyMap,
+      stanyMap: stockMaps.stanyMap,
+      towaryMap: stockMaps.towaryMap,
+      towaryByName: stockMaps.towaryByName,
+    }).filter(line => line.doZamowienia > 0)
+  })()
+
+  function handleCopyPlan() {
+    const text = buildPlanText(dmyDate(date), includedRows, teamPlan)
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   const title = step === 1 ? 'Import z KW Hotel' : step === 2 ? 'Podgląd i priorytety' : 'Tworzenie przygotowań'
 
   const content = (
@@ -240,7 +322,7 @@ export default function KwHotelImport({ onClose, onCreated }) {
       {step === 1 && (
         <div className="space-y-4">
           <p className="text-sm" style={{ color: 'var(--text-2)' }}>
-            W KW Hotel: Raporty → Wykaz sprzątania → szablon „In Out 1" → Generuj → Save → CSV.
+            W KW Hotel: Raporty → Wykaz sprzątania → szablon „In Out 1" → Generuj → Save → CSV lub XLS.
           </p>
           <button
             onClick={() => fileRef.current?.click()}
@@ -248,9 +330,9 @@ export default function KwHotelImport({ onClose, onCreated }) {
             style={{ background: 'var(--table-sub)', color: 'var(--text-2)', minHeight: 48, border: '1px dashed var(--border)' }}
           >
             <Upload size={15} />
-            {fileName || 'Wgraj raport „Rozkład dnia" (.csv z KW Hotel)'}
+            {fileName || 'Wgraj raport „Rozkład dnia" (.csv lub .xls z KW Hotel)'}
           </button>
-          <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleFileChange} />
+          <input ref={fileRef} type="file" accept=".csv,.xls,text/csv" style={{ display: 'none' }} onChange={handleFileChange} />
 
           {parseError && (
             <div className="flex items-start gap-2 rounded-lg p-3" style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.25)' }}>
@@ -261,6 +343,10 @@ export default function KwHotelImport({ onClose, onCreated }) {
 
           {parsed && (
             <div className="space-y-3">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                Wykryto format: <strong style={{ color: 'var(--text)' }}>{detectedFormat}</strong>
+              </p>
+
               {parsed.checksumOk ? (
                 <div className="flex items-center gap-2 rounded-lg p-3" style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)' }}>
                   <CheckCircle size={15} style={{ color: 'var(--c-success)', flexShrink: 0 }} />
@@ -327,6 +413,72 @@ export default function KwHotelImport({ onClose, onCreated }) {
             )}
           </div>
 
+          {/* Plan dnia wg stref + sugerowane ekipy */}
+          {teamPlan.strefy.length > 0 && (
+            <div className="rounded-xl p-3 space-y-2" style={{ border: '1px solid var(--border)' }}>
+              <p className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                <Users size={14} /> Plan dnia wg lokalizacji
+              </p>
+              {teamPlan.strefy.map(s => (
+                <p key={s.key} className="text-xs" style={{ color: 'var(--text-2)' }}>
+                  <strong style={{ color: 'var(--text)' }}>{s.nazwa}</strong> — {s.total} przygotowań · {s.zmiany} zmian (pilne) · sugerowane ekipy: {s.sugerowaneEkipy}
+                </p>
+              ))}
+              {teamPlan.strefy.length > 1 && (
+                <p className="text-xs" style={{ color: 'var(--c-attention)' }}>
+                  ⚠️ Sugestia: {teamPlan.totalSugerowaneEkipy} ekip łącznie — strefy są od siebie oddalone, nie łącz trasy.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Obciążenie dnia */}
+          <div className="rounded-xl p-3 space-y-2" style={{ border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold" style={{ color: WORKLOAD_BADGE[workload.level].text }}>
+                {WORKLOAD_BADGE[workload.level].emoji} Obciążenie dnia: {WORKLOAD_BADGE[workload.level].label}
+              </p>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+              {workload.breakdown.zmiana} zmian · {workload.breakdown.przyjazd} przyjazdów · {workload.breakdown.wyjazd} wyjazdów —
+              {' '}szac. <strong style={{ color: 'var(--text)' }}>~{workload.totalHours.toFixed(1)}h</strong>
+            </p>
+            <div className="flex items-center gap-2">
+              <label className="text-xs" style={{ color: 'var(--text-2)' }}>Liczba osób:</label>
+              <input
+                type="number"
+                min={1}
+                value={headcount}
+                onChange={e => setHeadcount(Math.max(1, Number(e.target.value) || 1))}
+                style={{ width: 56, background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', padding: '4px 6px', fontSize: 13 }}
+              />
+              {perPerson != null && (
+                <span className="text-xs" style={{ color: 'var(--text-2)' }}>≈ {perPerson.toFixed(1)}h / osobę</span>
+              )}
+            </div>
+          </div>
+
+          {/* Braki magazynowe */}
+          {stockForecast.length > 0 && (
+            <div className="space-y-1.5 rounded-lg p-3" style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)' }}>
+              <p className="text-sm font-medium" style={{ color: '#dc2626' }}>⚠️ Może zabraknąć materiałów:</p>
+              {stockForecast.map(line => (
+                <p key={line.towar_id} className="text-xs" style={{ color: '#dc2626' }}>
+                  {line.nazwa}: potrzeba {line.potrzebne}, masz {line.dostepne} {line.jednostka} — brak {line.doZamowienia}
+                </p>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleCopyPlan}
+            className="flex items-center gap-2 rounded-lg text-sm font-medium w-full justify-center"
+            style={{ background: 'var(--table-sub)', color: 'var(--text-2)', minHeight: 44, border: '1px solid var(--border)' }}
+          >
+            {copied ? <Check size={14} style={{ color: 'var(--c-success)' }} /> : <Copy size={14} />}
+            {copied ? 'Skopiowano!' : 'Kopiuj plan dnia (WhatsApp/SMS)'}
+          </button>
+
           {grouped.map(({ priorytet, rowsForP, byLoc }) => {
             if (!rowsForP.length) return null
             const badge = PRIORYTET_BADGE[priorytet]
@@ -348,7 +500,7 @@ export default function KwHotelImport({ onClose, onCreated }) {
                       </p>
                       <div className="space-y-1.5">
                         {locRows.map(row => (
-                          <div key={row._id} className="flex items-center gap-2">
+                          <div key={row._id} className="flex items-center gap-2 flex-wrap">
                             <input
                               type="checkbox"
                               checked={row.include}
@@ -359,14 +511,26 @@ export default function KwHotelImport({ onClose, onCreated }) {
                             {row.matchedLokalId ? (
                               <CheckCircle size={13} style={{ color: 'var(--c-success)', flexShrink: 0 }} />
                             ) : (
-                              <select
-                                value=""
-                                onChange={e => updateRow(row._id, { matchedLokalId: e.target.value || null })}
-                                style={{ background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '4px 6px', maxWidth: 140 }}
-                              >
-                                <option value="">⚠️ nie znaleziono</option>
-                                {lokale.map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
-                              </select>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {fuzzyTopMatches(row.nazwa, lokale, 3).map(cand => (
+                                  <button
+                                    key={cand.id}
+                                    onClick={() => updateRow(row._id, { matchedLokalId: cand.id })}
+                                    className="text-xs px-1.5 py-0.5 rounded"
+                                    style={{ background: 'var(--table-sub)', border: '1px solid var(--border)', color: 'var(--text)' }}
+                                  >
+                                    {cand.nazwa}
+                                  </button>
+                                ))}
+                                <select
+                                  value=""
+                                  onChange={e => updateRow(row._id, { matchedLokalId: e.target.value || null })}
+                                  style={{ background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 12, padding: '4px 6px', maxWidth: 110 }}
+                                >
+                                  <option value="">⚠️ inne…</option>
+                                  {lokale.map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
+                                </select>
+                              </div>
                             )}
                           </div>
                         ))}
