@@ -13,9 +13,13 @@ function buildXls({ rows, checksumWyjazdy, checksumPrzyjazdy }) {
   ]
   const body = rows.map(([nazwa, wyjazd, przyjazd]) =>
     cell(1, nazwa) + (wyjazd ? cell(3, 'X') : '') + (przyjazd ? cell(5, 'X') : ''))
+  // Prawdziwa struktura podsumowania w XLS z KW Hotel: nagłówek "Podsumowanie" +
+  // etykiety w tych samych kolumnach co dane (Index 3/5), PUSTY wiersz-separator,
+  // a liczby (jako String!) w odrębnym wierszu, też w Index 3/5.
   const footer = [
-    cell(1, 'Podsumowanie'),
-    cell(1, String(checksumWyjazdy), 'Number') + cell(2, String(checksumPrzyjazdy), 'Number'),
+    cell(1, 'Podsumowanie') + cell(3, 'Wyjazdów (łącznie)') + cell(5, 'Przyjazdów (łącznie)'),
+    '',
+    cell(3, String(checksumWyjazdy)) + cell(5, String(checksumPrzyjazdy)),
   ]
   const allRows = [...header, ...body, ...footer].map(r => `<Row>${r}</Row>`).join('\n')
   return `<?xml version="1.0"?>
@@ -129,6 +133,36 @@ describe('parseKwHotelXls — polskie znaki i puste komórki', () => {
     expect(result.records).toHaveLength(1)
     expect(result.records[0].przyjazd).toBe(true)
     expect(result.checksumOk).toBe(true)
+  })
+})
+
+describe('parseKwHotelXls — fix: wiersz Podsumowanie oddzielony pustym wierszem (bug zgłoszony)', () => {
+  function buildRealSummaryXls(checksumWyjazdy, checksumPrzyjazdy) {
+    // Dokładnie struktura z PROMPT_FIX_XLS_CHECKSUM.md: 3 osobne <Row>,
+    // nagłówek z ss:MergeAcross, pusty wiersz z samozamykającymi się <Cell/>,
+    // liczby jako ss:Type="String" w Index 3/5 (te same kolumny co dane).
+    return `<?xml version="1.0"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet><Table>
+<Row><Cell ss:Index="1"><Data ss:Type="String">Apartament</Data></Cell><Cell ss:Index="3"><Data ss:Type="String">Wyjazdy</Data></Cell><Cell ss:Index="5"><Data ss:Type="String">Przyjazdy</Data></Cell></Row>
+<Row><Cell ss:Index="1"><Data ss:Type="String">Hel CasaBaia 04</Data></Cell><Cell ss:Index="5"><Data ss:Type="String">X</Data></Cell></Row>
+<Row><Cell ss:Index="1" ss:MergeAcross="1"><Data ss:Type="String">Podsumowanie</Data></Cell><Cell ss:Index="3"><Data ss:Type="String">Wyjazdów (łącznie)</Data></Cell><Cell ss:Index="5" ss:MergeAcross="1"><Data ss:Type="String">Przyjazdów (łącznie)</Data></Cell></Row>
+<Row><Cell ss:Index="1"/><Cell ss:Index="2"/><Cell ss:Index="3"/><Cell ss:Index="4"/><Cell ss:Index="5"/><Cell ss:Index="6"/><Cell ss:Index="7"/><Cell ss:Index="8"/></Row>
+<Row><Cell ss:Index="3"><Data ss:Type="String">${checksumWyjazdy}</Data></Cell><Cell ss:Index="5"><Data ss:Type="String">${checksumPrzyjazdy}</Data></Cell></Row>
+</Table></Worksheet>
+</Workbook>`
+  }
+
+  it('znajduje sumę kontrolną mimo pustego wiersza między nagłówkiem i liczbami (32/49 zgodne → checksumOk)', () => {
+    const result = parseKwHotelXls(buildRealSummaryXls(0, 1))
+    expect(result.reportChecksum).toEqual({ wyjazdy: 0, przyjazdy: 1 })
+    expect(result.checksumOk).toBe(true)
+  })
+
+  it('checksumOk = false gdy podsumowanie nie zgadza się z policzonymi danymi', () => {
+    const result = parseKwHotelXls(buildRealSummaryXls(5, 1))
+    expect(result.reportChecksum).toEqual({ wyjazdy: 5, przyjazdy: 1 })
+    expect(result.checksumOk).toBe(false)
   })
 })
 

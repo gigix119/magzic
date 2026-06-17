@@ -31,6 +31,7 @@ export function parseKwHotelRows(rowsOfCols) {
   let prjIdx = null
   let date = null
   let afterPodsumowanie = false
+  let sawPodsumowanie = false
   let reportChecksum = null
 
   const records = []
@@ -53,14 +54,28 @@ export function parseKwHotelRows(rowsOfCols) {
 
     if (/^Rozkład/.test(first) || /^Podsumowanie/.test(first)) {
       afterPodsumowanie = /^Podsumowanie/.test(first)
+      if (afterPodsumowanie) sawPodsumowanie = true
       continue
     }
 
-    if (/^\d+$/.test(first)) {
-      if (afterPodsumowanie) {
+    if (afterPodsumowanie) {
+      // CSV: liczby w pierwszych dwóch kolumnach wiersza, np. "32";"45".
+      // XLS: liczby są w TYCH SAMYCH kolumnach co Wyjazdy/Przyjazdy w danych
+      // (Index 3 / Index 5), w odrębnym wierszu po nagłówku podsumowania —
+      // czasem oddzielonym pustym wierszem, który po prostu pomijamy.
+      const wyjCell = wyjIdx != null ? cols[wyjIdx] : undefined
+      const prjCell = prjIdx != null ? cols[prjIdx] : undefined
+      if (/^\d+$/.test(wyjCell || '') && /^\d+$/.test(prjCell || '')) {
+        reportChecksum = { wyjazdy: Number(wyjCell), przyjazdy: Number(prjCell) }
+        afterPodsumowanie = false
+        continue
+      }
+      if (/^\d+$/.test(cols[0] || '') && /^\d+$/.test(cols[1] || '')) {
         reportChecksum = { wyjazdy: Number(cols[0]), przyjazdy: Number(cols[1]) }
         afterPodsumowanie = false
+        continue
       }
+      if (!first) continue // pusty wiersz-separator między nagłówkiem podsumowania i liczbami
       continue
     }
 
@@ -80,6 +95,18 @@ export function parseKwHotelRows(rowsOfCols) {
       priorytetLabel: PRIORYTETY[priorytet].label,
       lokalizacjaKod: detectLokalizacjaKod(first),
     })
+  }
+
+  if (!reportChecksum && sawPodsumowanie) {
+    // Fallback: ostatni niepusty wiersz pliku z dokładnie dwiema liczbami
+    // to prawie zawsze podsumowanie, nawet jeśli układ kolumn jest nietypowy.
+    for (let i = rowsOfCols.length - 1; i >= 0; i--) {
+      const nonEmpty = rowsOfCols[i].filter(c => c !== '')
+      if (nonEmpty.length === 2 && nonEmpty.every(c => /^\d+$/.test(c))) {
+        reportChecksum = { wyjazdy: Number(nonEmpty[0]), przyjazdy: Number(nonEmpty[1]) }
+        break
+      }
+    }
   }
 
   const summary = {
