@@ -9,6 +9,11 @@ import { RefreshCw, MapPin, Users, Package, CheckSquare, CalendarDays, ArrowRigh
 function isoToday() { return new Date().toISOString().split('T')[0] }
 
 const PRIORITY_BORDER = { pilny: 'var(--c-critical)', normalny: 'var(--c-action)', niski: 'var(--muted)' }
+const PRIORYTET_TYP_BADGE = {
+  zmiana:   { emoji: '🔴', label: 'ZMIANA',   bg: 'rgba(225,29,72,0.1)', text: 'var(--c-critical)' },
+  przyjazd: { emoji: '🟡', label: 'PRZYJAZD', bg: 'rgba(217,119,6,0.1)', text: '#9a3412' },
+  wyjazd:   { emoji: '🔵', label: 'WYJAZD',   bg: 'rgba(37,99,235,0.1)', text: '#1e40af' },
+}
 
 function StatTile({ icon: Icon, value, label, color }) {
   return (
@@ -153,7 +158,11 @@ export default function WorkerDzis() {
                 style={{ background: 'var(--c-surface)', borderLeft: `4px solid ${PRIORITY_BORDER[item.priorytet] || PRIORITY_BORDER.normalny}`, border: '1px solid var(--border)', borderLeftWidth: 4 }}
               >
                 <div className="p-4">
-                  {isPilny && (
+                  {item.priorytet_typ && PRIORYTET_TYP_BADGE[item.priorytet_typ] ? (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold mb-2" style={{ background: PRIORYTET_TYP_BADGE[item.priorytet_typ].bg, color: PRIORYTET_TYP_BADGE[item.priorytet_typ].text }}>
+                      {PRIORYTET_TYP_BADGE[item.priorytet_typ].emoji} {PRIORYTET_TYP_BADGE[item.priorytet_typ].label}
+                    </span>
+                  ) : isPilny && (
                     <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold mb-2" style={{ background: 'rgba(225,29,72,0.1)', color: 'var(--c-critical)' }}>
                       🔴 PILNE
                     </span>

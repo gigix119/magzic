@@ -10,7 +10,17 @@ import BottomSheet from '../../components/ui/BottomSheet'
 import Spinner from '../../components/Spinner'
 import DateFilter, { isoToday, resolveFilterDate } from '../../components/ui/DateFilter'
 import { buildChecklistRows } from '../../utils/defaultChecklist'
-import { Plus, ChevronRight, CalendarDays, Users, BedDouble, Minus, Trash2, ChevronLeft } from 'lucide-react'
+import { detectLokalizacjaKod } from '../../utils/kwHotelReportParser'
+import { LOKALIZACJE_UNIKALNE } from '../../utils/lokaleImportParser'
+import KwHotelImport from './KwHotelImport'
+import { Plus, ChevronRight, CalendarDays, Users, BedDouble, Minus, Trash2, ChevronLeft, Upload } from 'lucide-react'
+
+const PRIORYTET_TYP_BADGE = {
+  zmiana:   { emoji: '🔴', bg: '#fef2f2', text: '#991b1b', label: 'ZMIANA' },
+  przyjazd: { emoji: '🟡', bg: '#fff7ed', text: '#9a3412', label: 'PRZYJAZD' },
+  wyjazd:   { emoji: '🔵', bg: '#eff6ff', text: '#1e40af', label: 'WYJAZD' },
+}
+const PRIORYTET_TYP_RANK = { zmiana: 0, przyjazd: 1, wyjazd: 2 }
 
 const STATUS_COLORS = {
   nowe:         { bg: '#eff6ff', text: '#1e40af' },
@@ -117,6 +127,9 @@ export default function PrzygotowaniaTab() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('today')
+  const [priorytetTypFilter, setPriorytetTypFilter] = useState('all')
+  const [lokalizacjaFilter, setLokalizacjaFilter] = useState('all')
+  const [showKwImport, setShowKwImport] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -185,6 +198,19 @@ export default function PrzygotowaniaTab() {
   const filteredDate = resolveFilterDate(dateFilter)
   const filtered = (statusFilter === 'all' ? items : items.filter(i => i.status === statusFilter))
     .filter(i => !filteredDate || i.data_realizacji === filteredDate)
+    .filter(i => priorytetTypFilter === 'all' || i.priorytet_typ === priorytetTypFilter)
+    .filter(i => lokalizacjaFilter === 'all' || detectLokalizacjaKod(i.nazwa) === lokalizacjaFilter)
+    .slice()
+    .sort((a, b) => {
+      const ra = PRIORYTET_TYP_RANK[a.priorytet_typ] ?? 3
+      const rb = PRIORYTET_TYP_RANK[b.priorytet_typ] ?? 3
+      if (ra !== rb) return ra - rb
+      return (a.data_realizacji || '').localeCompare(b.data_realizacji || '')
+    })
+
+  const lokalizacjeWidoczne = LOKALIZACJE_UNIKALNE.filter(loc =>
+    items.some(i => detectLokalizacjaKod(i.nazwa) === loc.kod)
+  )
 
   // ── Edit modal (legacy form for editing existing) ──────────────────────────
 
@@ -662,13 +688,24 @@ export default function PrzygotowaniaTab() {
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
           {config.moduleLabel}
         </h1>
-        <button
-          onClick={openWizard}
-          className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium text-white w-full sm:w-auto justify-center"
-          style={{ background: 'var(--c-action)', minHeight: 48 }}
-        >
-          <Plus size={16} /> {config.createLabel}
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={openWizard}
+            className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium text-white flex-1 sm:flex-initial justify-center"
+            style={{ background: 'var(--c-action)', minHeight: 48 }}
+          >
+            <Plus size={16} /> {config.createLabel}
+          </button>
+          {businessCategory === 'hospitality' && (
+            <button
+              onClick={() => setShowKwImport(true)}
+              className="flex items-center gap-2 rounded-lg px-4 text-sm font-medium flex-1 sm:flex-initial justify-center"
+              style={{ background: 'var(--table-sub)', color: 'var(--text-2)', border: '1px solid var(--border)', minHeight: 48 }}
+            >
+              <Upload size={15} /> Import z KW Hotel
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Date filter */}
@@ -694,6 +731,50 @@ export default function PrzygotowaniaTab() {
           </button>
         ))}
       </div>
+
+      {/* Priority type filter (KW Hotel: zmiana/przyjazd/wyjazd) */}
+      {items.some(i => i.priorytet_typ) && (
+        <div className="flex gap-2 mb-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          {[{ key: 'all', label: 'Wszystkie' }, { key: 'zmiana', label: '🔴 Zmiana' }, { key: 'przyjazd', label: '🟡 Przyjazd' }, { key: 'wyjazd', label: '🔵 Wyjazd' }].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setPriorytetTypFilter(tab.key)}
+              className="rounded-full px-3 text-xs font-medium flex-shrink-0 transition-colors"
+              style={{
+                minHeight: 36,
+                background: priorytetTypFilter === tab.key ? 'var(--c-action)' : 'var(--card)',
+                color: priorytetTypFilter === tab.key ? '#fff' : 'var(--text-2)',
+                border: `1px solid ${priorytetTypFilter === tab.key ? 'var(--c-action)' : 'var(--border)'}`,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Location filter */}
+      {lokalizacjeWidoczne.length > 1 && (
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => setLokalizacjaFilter('all')}
+            className="rounded-full px-3 text-xs font-medium flex-shrink-0 transition-colors"
+            style={{ minHeight: 36, background: lokalizacjaFilter === 'all' ? 'var(--c-action)' : 'var(--card)', color: lokalizacjaFilter === 'all' ? '#fff' : 'var(--text-2)', border: `1px solid ${lokalizacjaFilter === 'all' ? 'var(--c-action)' : 'var(--border)'}` }}
+          >
+            Wszystkie lokalizacje
+          </button>
+          {lokalizacjeWidoczne.map(loc => (
+            <button
+              key={loc.kod}
+              onClick={() => setLokalizacjaFilter(loc.kod)}
+              className="rounded-full px-3 text-xs font-medium flex-shrink-0 transition-colors"
+              style={{ minHeight: 36, background: lokalizacjaFilter === loc.kod ? 'var(--c-action)' : 'var(--card)', color: lokalizacjaFilter === loc.kod ? '#fff' : 'var(--text-2)', border: `1px solid ${lokalizacjaFilter === loc.kod ? 'var(--c-action)' : 'var(--border)'}` }}
+            >
+              {loc.nazwa}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* List / empty state */}
       {filtered.length === 0 ? (
@@ -753,7 +834,11 @@ export default function PrzygotowaniaTab() {
                             {new Date(item.data_realizacji).toLocaleDateString('pl-PL')}
                           </span>
                         )}
-                        {item.priorytet === 'pilny' && (
+                        {item.priorytet_typ && PRIORYTET_TYP_BADGE[item.priorytet_typ] ? (
+                          <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: PRIORYTET_TYP_BADGE[item.priorytet_typ].bg, color: PRIORYTET_TYP_BADGE[item.priorytet_typ].text }}>
+                            {PRIORYTET_TYP_BADGE[item.priorytet_typ].emoji} {PRIORYTET_TYP_BADGE[item.priorytet_typ].label}
+                          </span>
+                        ) : item.priorytet === 'pilny' && (
                           <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: pc.bg, color: pc.text }}>
                             {pc.label}
                           </span>
@@ -880,6 +965,11 @@ export default function PrzygotowaniaTab() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* KW Hotel import */}
+      {showKwImport && (
+        <KwHotelImport onClose={() => setShowKwImport(false)} onCreated={fetchData} />
       )}
     </div>
   )
