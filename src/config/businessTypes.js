@@ -714,7 +714,7 @@ const ZLECENIE_CONFIGS = {
     namePlaceholder: 'np. Apartament 3B – zameldowanie 15.06',
     descriptionLabel: 'Opis / notatki',
     dateLabel: 'Data realizacji',
-    itemsLabel: 'Produkty do przygotowania',
+    itemsLabel: 'Materiały do wydania',
     addItemLabel: 'Dodaj produkt',
     emptyTitle: 'Brak przygotowań',
     emptyDescription: 'Utwórz przygotowanie obiektu – lista rzeczy do wydania i sprawdzenia.',

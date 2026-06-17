@@ -9,6 +9,7 @@ import Modal from '../../components/Modal'
 import BottomSheet from '../../components/ui/BottomSheet'
 import Spinner from '../../components/Spinner'
 import DateFilter, { isoToday, resolveFilterDate } from '../../components/ui/DateFilter'
+import { buildChecklistRows } from '../../utils/defaultChecklist'
 import { Plus, ChevronRight, CalendarDays, Users, BedDouble, Minus, Trash2, ChevronLeft } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -112,6 +113,7 @@ export default function PrzygotowaniaTab() {
   const [items, setItems] = useState([])
   const [kontrahenci, setKontrahenci] = useState([])
   const [rezMap, setRezMap] = useState({})
+  const [checklistMap, setChecklistMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('today')
@@ -149,17 +151,29 @@ export default function PrzygotowaniaTab() {
 
     const ids = zl.map(i => i.id)
     if (ids.length > 0) {
-      const { data: rez } = await supabase
-        .from('rezerwacje')
-        .select('przygotowanie_id, lokal_id, checkin_at, checkout_at, gosc_nazwa, liczba_gosci, lokale(nazwa)')
-        .in('przygotowanie_id', ids)
+      const [{ data: rez }, { data: cl }] = await Promise.all([
+        supabase
+          .from('rezerwacje')
+          .select('przygotowanie_id, lokal_id, checkin_at, checkout_at, gosc_nazwa, liczba_gosci, lokale(nazwa)')
+          .in('przygotowanie_id', ids),
+        supabase.from('checklist_items').select('zlecenie_id, checked').in('zlecenie_id', ids),
+      ])
       const map = {}
       for (const r of rez || []) {
         if (r.przygotowanie_id) map[r.przygotowanie_id] = r
       }
       setRezMap(map)
+
+      const clMap = {}
+      for (const c of cl || []) {
+        if (!clMap[c.zlecenie_id]) clMap[c.zlecenie_id] = { checked: 0, total: 0 }
+        clMap[c.zlecenie_id].total++
+        if (c.checked) clMap[c.zlecenie_id].checked++
+      }
+      setChecklistMap(clMap)
     } else {
       setRezMap({})
+      setChecklistMap({})
     }
     setLoading(false)
   }
@@ -346,6 +360,8 @@ export default function PrzygotowaniaTab() {
         }))
       )
     }
+
+    await supabase.from('checklist_items').insert(buildChecklistRows(zlecenie.id, workspaceId))
 
     addToast(`Utworzono przygotowanie: ${wizardSelectedLokal?.nazwa || nazwa} — ${wizardDate}`, 'success')
     setShowWizard(false)
@@ -705,6 +721,7 @@ export default function PrzygotowaniaTab() {
             const wydano = pozycje.filter(p => p.wydano).length
             const progressPct = total > 0 ? Math.round((wydano / total) * 100) : 0
             const rez = rezMap[item.id]
+            const cl = checklistMap[item.id]
 
             return (
               <div
@@ -749,6 +766,11 @@ export default function PrzygotowaniaTab() {
                         {total > 0 && (
                           <span className="text-xs num" style={{ color: 'var(--muted)' }}>
                             {wydano}/{total} wydano
+                          </span>
+                        )}
+                        {cl && cl.total > 0 && (
+                          <span className="text-xs num" style={{ color: 'var(--muted)' }}>
+                            · {cl.checked}/{cl.total} checklista
                           </span>
                         )}
                       </div>

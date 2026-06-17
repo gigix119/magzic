@@ -88,6 +88,7 @@ export default function ZlecenieDetail() {
 
   // --- checklista ---
   const [checklistItems, setChecklistItems] = useState([])
+  const [checklistError, setChecklistError] = useState(null)
   const [showAddChecklist, setShowAddChecklist] = useState(false)
   const [newChecklistLabel, setNewChecklistLabel] = useState('')
   const [checklistSaving, setChecklistSaving] = useState(false)
@@ -111,6 +112,7 @@ export default function ZlecenieDetail() {
     if (!z) { navigate('/zlecenia'); return }
     setZlecenie(z)
     setPozycje(p || [])
+    setReadinessChecked(!!z.readiness_confirmed)
 
     if (z.kontrahent_id) {
       const { data: k } = await supabase.from('kontrahenci').select('id, nazwa').eq('id', z.kontrahent_id).single()
@@ -125,12 +127,13 @@ export default function ZlecenieDetail() {
     if (!rezErr) setLinkedRez(rez || null)
 
     // Checklista
-    const { data: cl } = await supabase
+    const { data: cl, error: clErr } = await supabase
       .from('checklist_items')
       .select('*')
       .eq('zlecenie_id', id)
       .order('sort_order')
     setChecklistItems(cl || [])
+    setChecklistError(clErr ? clErr.message : null)
 
     // Zdjęcia
     const { data: ph } = await supabase
@@ -210,6 +213,14 @@ export default function ZlecenieDetail() {
       .eq('id', id)
     if (error) { addToast(error.message, 'error') }
     else { setZlecenie(z => ({ ...z, status: newStatus })) }
+  }
+
+  async function toggleReadiness() {
+    const newVal = !readinessChecked
+    const { error } = await supabase.from('zlecenia').update({ readiness_confirmed: newVal }).eq('id', id)
+    if (error) { addToast(error.message, 'error'); return }
+    setReadinessChecked(newVal)
+    setZlecenie(z => ({ ...z, readiness_confirmed: newVal }))
   }
 
   async function toggleWydano(pozycja) {
@@ -594,9 +605,13 @@ export default function ZlecenieDetail() {
         )}
 
         {/* Lista punktów */}
-        {checklistItems.length === 0 && !showAddChecklist ? (
+        {checklistError ? (
+          <div className="text-center py-6 text-sm px-4" style={{ color: 'var(--c-critical)' }}>
+            Uruchom migrację checklist_zdjecia_migration.sql w Supabase, aby włączyć checklisty.
+          </div>
+        ) : checklistItems.length === 0 && !showAddChecklist ? (
           <div className="text-center py-6 text-sm" style={{ color: 'var(--muted)' }}>
-            Brak punktów – dodaj lub uruchom migrację checklist_items
+            Brak punktów – dodaj punkt powyżej
           </div>
         ) : (
           checklistItems.map((item, i) => (
@@ -719,7 +734,7 @@ export default function ZlecenieDetail() {
           <div
             className="flex items-center gap-3 mt-3 rounded-lg px-3 py-3 cursor-pointer"
             style={{ background: 'var(--hover-bg)', border: '1px solid var(--border)' }}
-            onClick={() => setReadinessChecked(v => !v)}
+            onClick={toggleReadiness}
           >
             <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {readinessChecked

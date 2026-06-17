@@ -5,7 +5,7 @@
  * @module domain/reservationAutomation
  */
 
-import { DEFAULT_CHECKLIST } from '../utils/defaultChecklist'
+import { buildChecklistRows } from '../utils/defaultChecklist'
 
 /**
  * Gdy rezerwacja jest potwierdzona i nie ma jeszcze przygotowania:
@@ -66,13 +66,7 @@ export async function autoCreatePreparation(rezerwacja, { supabase, workspaceId 
 
   // Wstaw domyślną checklistę (ignoruj błąd jeśli tabela nie istnieje — migracja nie uruchomiona)
   try {
-    const checklistRows = DEFAULT_CHECKLIST.map((label, i) => ({
-      zlecenie_id: zlecenie.id,
-      workspace_id: workspaceId,
-      label,
-      sort_order: i,
-    }))
-    await supabase.from('checklist_items').insert(checklistRows)
+    await supabase.from('checklist_items').insert(buildChecklistRows(zlecenie.id, workspaceId))
   } catch {
     // Migracja checklist_zdjecia_migration.sql nie została jeszcze uruchomiona
   }

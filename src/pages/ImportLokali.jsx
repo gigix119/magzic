@@ -261,7 +261,7 @@ export default function ImportLokali() {
       pakietyInserted[n] = pakietId
 
       const { data: existingEl } = await supabase
-        .from('pakiet_elementy')
+        .from('elementy_pakietu')
         .select('id')
         .eq('pakiet_id', pakietId)
 
@@ -269,12 +269,13 @@ export default function ImportLokali() {
         for (const el of def.elementy) {
           const towarId = matchMap[el.towar]
           if (!towarId) continue
-          await supabase.from('pakiet_elementy').insert([{
+          const { error: elErr } = await supabase.from('elementy_pakietu').insert([{
             ...wsData(),
             pakiet_id: pakietId,
             towar_id: towarId,
             ilosc: el.ilosc,
           }])
+          if (elErr) errors.push(`Element pakietu ${def.nazwa} – ${el.towar}: ${elErr.message}`)
         }
       }
     }

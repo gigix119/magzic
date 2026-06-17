@@ -12,3 +12,12 @@ export const DEFAULT_CHECKLIST = [
   'Kosmetyki uzupełnione',
   'Drzwi zamknięte na klucz',
 ]
+
+export function buildChecklistRows(zlecenieId, workspaceId) {
+  return DEFAULT_CHECKLIST.map((label, i) => ({
+    zlecenie_id: zlecenieId,
+    workspace_id: workspaceId,
+    label,
+    sort_order: i,
+  }))
+}
