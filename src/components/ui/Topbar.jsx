@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, NavLink } from 'react-router-dom'
-import { Menu, Search, X, Bell, Plus, ChevronDown, Sun, Moon, Settings, LogOut, Calendar } from 'lucide-react'
+import { Menu, Search, X, Bell, Plus, ChevronDown, Sun, Moon, Settings, LogOut, Calendar, HardHat } from 'lucide-react'
 
 /* OperationalDatePicker – stan lokalny, onChange no-op */
 function OperationalDatePicker() {
@@ -246,6 +246,18 @@ function ProfileMenu({ user, dark, toggleTheme, handleSignOut }) {
           >
             <Settings size={15} />
             <span>Ustawienia</span>
+          </button>
+
+          {/* Widok pracownika */}
+          <button
+            onClick={() => { navigate('/pracownik'); setOpen(false) }}
+            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors"
+            style={{ color: 'var(--text)', minHeight: 44 }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--hover-bg)'}
+            onMouseLeave={e => e.currentTarget.style.background = ''}
+          >
+            <HardHat size={15} />
+            <span>Tryb pracownika</span>
           </button>
 
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />

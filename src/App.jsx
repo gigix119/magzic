@@ -38,6 +38,12 @@ import BackendErrors from './pages/backend/BackendErrors'
 import BackendModel from './pages/backend/BackendModel'
 import BackendInventoryReconciliation from './pages/backend/BackendInventoryReconciliation'
 import ImportLokali from './pages/ImportLokali'
+import WorkerLayout from './components/WorkerLayout'
+import WorkerDzis from './pages/worker/WorkerDzis'
+import WorkerZabrac from './pages/worker/WorkerZabrac'
+import WorkerGotowe from './pages/worker/WorkerGotowe'
+import WorkerProfil from './pages/worker/WorkerProfil'
+import WorkerZadanie from './pages/worker/WorkerZadanie'
 
 function ZlecenieDetailRedirect() {
   const { id } = useParams()
@@ -116,6 +122,15 @@ export default function App() {
                     <Route path="model" element={<BackendModel />} />
                     <Route path="reconciliation" element={<BackendInventoryReconciliation />} />
                   </Route>
+                </Route>
+
+                {/* Widok pracownika — uproszczona, mobilna ścieżka (bez sidebara) */}
+                <Route element={<ProtectedRoute><WorkerLayout /></ProtectedRoute>}>
+                  <Route path="/pracownik" element={<WorkerDzis />} />
+                  <Route path="/pracownik/zabrac" element={<WorkerZabrac />} />
+                  <Route path="/pracownik/gotowe" element={<WorkerGotowe />} />
+                  <Route path="/pracownik/profil" element={<WorkerProfil />} />
+                  <Route path="/pracownik/zadanie/:id" element={<WorkerZadanie />} />
                 </Route>
               </Routes>
             </BrowserRouter>

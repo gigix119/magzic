@@ -1,0 +1,12 @@
+{
+  "name": "Magzic",
+  "short_name": "Magzic",
+  "start_url": "/pracownik",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
