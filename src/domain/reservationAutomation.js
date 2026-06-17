@@ -5,11 +5,14 @@
  * @module domain/reservationAutomation
  */
 
+import { DEFAULT_CHECKLIST } from '../utils/defaultChecklist'
+
 /**
  * Gdy rezerwacja jest potwierdzona i nie ma jeszcze przygotowania:
  * 1. Znajdź domyślny pakiet lokalu
  * 2. Zbuduj zlecenie (przygotowanie) z pozycjami z pakietu
- * 3. Zapisz zlecenie i podlinkuj do rezerwacji
+ * 3. Wstaw domyślną checklistę
+ * 4. Zapisz zlecenie i podlinkuj do rezerwacji
  *
  * @param {Object} rezerwacja - Row z tabeli rezerwacje
  * @param {{ supabase: import('@supabase/supabase-js').SupabaseClient, workspaceId: string }} ctx
@@ -59,6 +62,19 @@ export async function autoCreatePreparation(rezerwacja, { supabase, workspaceId 
       wydano: false,
     }))
     await supabase.from('zlecenia_pozycje').insert(pozycje)
+  }
+
+  // Wstaw domyślną checklistę (ignoruj błąd jeśli tabela nie istnieje — migracja nie uruchomiona)
+  try {
+    const checklistRows = DEFAULT_CHECKLIST.map((label, i) => ({
+      zlecenie_id: zlecenie.id,
+      workspace_id: workspaceId,
+      label,
+      sort_order: i,
+    }))
+    await supabase.from('checklist_items').insert(checklistRows)
+  } catch {
+    // Migracja checklist_zdjecia_migration.sql nie została jeszcze uruchomiona
   }
 
   await supabase

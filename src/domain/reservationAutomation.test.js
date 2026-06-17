@@ -4,6 +4,7 @@ import { autoCreatePreparation } from './reservationAutomation'
 function makeSupabase({ lokal = null, elementy = [], zlecenieId = 'zl-1', insertError = null } = {}) {
   const updateFn = vi.fn().mockReturnValue({ error: null })
   const insertPozFn = vi.fn().mockReturnValue({ error: null })
+  const insertChecklistFn = vi.fn().mockReturnValue({ error: null })
 
   return {
     from: vi.fn((table) => {
@@ -38,12 +39,16 @@ function makeSupabase({ lokal = null, elementy = [], zlecenieId = 'zl-1', insert
       if (table === 'zlecenia_pozycje') {
         return { insert: insertPozFn }
       }
+      if (table === 'checklist_items') {
+        return { insert: insertChecklistFn }
+      }
       if (table === 'rezerwacje') {
         return { update: () => ({ eq: updateFn }) }
       }
     }),
     _updateFn: updateFn,
     _insertPozFn: insertPozFn,
+    _insertChecklistFn: insertChecklistFn,
   }
 }
 
@@ -72,6 +77,21 @@ describe('autoCreatePreparation', () => {
     expect(result.created).toBe(true)
     expect(result.przygotowanie_id).toBe('zl-99')
     expect(result.nazwa).toContain('Apartament 3B')
+  })
+
+  it('wstawia domyślną checklistę przy tworzeniu', async () => {
+    const supabase = makeSupabase({
+      lokal: { id: 'lok-1', nazwa: 'Apartament 3B', domyslny_pakiet_id: 'pak-1' },
+      elementy: [],
+      zlecenieId: 'zl-99',
+    })
+
+    await autoCreatePreparation(baseRez, { supabase, workspaceId: 'ws-1' })
+
+    expect(supabase._insertChecklistFn).toHaveBeenCalledOnce()
+    const inserted = supabase._insertChecklistFn.mock.calls[0][0]
+    expect(inserted).toHaveLength(12)
+    expect(inserted[0]).toMatchObject({ zlecenie_id: 'zl-99', workspace_id: 'ws-1', sort_order: 0 })
   })
 
   it('zwraca already_exists gdy przygotowanie_id jest ustawione', async () => {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { getWorkspaceSetting } from '../utils/workspaceSettings'
 import Spinner from '../components/Spinner'
@@ -7,7 +8,8 @@ import Badge from '../components/Badge'
 import FirstUseSteps from '../components/FirstUseSteps'
 import BriefingCard from '../components/BriefingCard'
 import WeeklyReport from '../components/WeeklyReport'
-import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock, KeyRound, DoorOpen, ClipboardList } from 'lucide-react'
+import { calculateForecast } from '../utils/forecastEngine'
+import { Package, Warehouse, Users, FileText, AlertTriangle, TrendingDown, CheckCircle2, Bell, Clock, KeyRound, DoorOpen, ClipboardList, ShoppingCart } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 function StatCard({ icon: Icon, label, value, color = 'var(--c-action)', sub }) {
@@ -81,6 +83,119 @@ function OnboardingScreen() {
 }
 
 function isoToday() { return new Date().toISOString().split('T')[0] }
+
+function addDays(days) {
+  const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().split('T')[0]
+}
+
+function ForecastCard({ workspaceId, wsQuery, addWsFilter }) {
+  const [braki, setBraki] = useState([])
+  const [totalPreps, setTotalPreps] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [hasLokale, setHasLokale] = useState(false)
+
+  useEffect(() => {
+    if (!workspaceId) return
+    fetchForecast()
+  }, [workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function fetchForecast() {
+    const today = isoToday()
+    const end7 = addDays(7)
+
+    const [{ count: lokaleCount }, { data: rezerwacje }, { data: lokale }, { data: towary }, { data: stany }] = await Promise.all([
+      addWsFilter(wsQuery('lokale').select('*', { count: 'exact', head: true })).eq('aktywny', true),
+      addWsFilter(wsQuery('rezerwacje').select('id, lokal_id, przygotowanie_id'))
+        .gte('checkin_at', today).lte('checkin_at', end7)
+        .in('status', ['potwierdzona', 'zameldowana']),
+      addWsFilter(wsQuery('lokale').select('id, domyslny_pakiet_id')).eq('aktywny', true),
+      addWsFilter(wsQuery('towary').select('id, nazwa, jednostka')).eq('aktywny', true),
+      addWsFilter(wsQuery('stany_magazynowe').select('towar_id, ilosc')),
+    ])
+
+    if (!(lokaleCount > 0)) { setLoading(false); return }
+    setHasLokale(true)
+    setTotalPreps((rezerwacje || []).length)
+
+    if (!(rezerwacje || []).length) { setLoading(false); return }
+
+    const lokaleMap = {}
+    const pakietIds = new Set()
+    for (const l of lokale || []) {
+      lokaleMap[l.id] = l
+      if (l.domyslny_pakiet_id) pakietIds.add(l.domyslny_pakiet_id)
+    }
+
+    const pakietyMap = {}
+    if (pakietIds.size > 0) {
+      const { data: elementy } = await supabase
+        .from('elementy_pakietu')
+        .select('pakiet_id, towar_id, ilosc')
+        .in('pakiet_id', [...pakietIds])
+      for (const e of elementy || []) {
+        if (!pakietyMap[e.pakiet_id]) pakietyMap[e.pakiet_id] = []
+        pakietyMap[e.pakiet_id].push({ towar_id: e.towar_id, ilosc: e.ilosc })
+      }
+    }
+
+    const towaryMap = {}
+    for (const t of towary || []) towaryMap[t.id] = t
+
+    const stanyMap = {}
+    for (const s of stany || []) stanyMap[s.towar_id] = (stanyMap[s.towar_id] || 0) + Number(s.ilosc)
+
+    const forecast = calculateForecast({ rezerwacje: rezerwacje || [], lokaleMap, pakietyMap, stanyMap, towaryMap })
+    setBraki(forecast.filter(r => r.doZamowienia > 0))
+    setLoading(false)
+  }
+
+  if (loading || !hasLokale) return null
+
+  const visible = braki.slice(0, 5)
+  const okCount = totalPreps
+
+  return (
+    <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, background: 'var(--c-action)' + '1a' }}>
+          <ShoppingCart size={16} style={{ color: 'var(--c-action)' }} />
+        </div>
+        <div>
+          <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>Prognoza – najbliższe 7 dni</p>
+          <p className="text-xs" style={{ color: 'var(--text-2)' }}>{okCount} {okCount === 1 ? 'przygotowanie' : 'przygotowań'} zaplanowanych</p>
+        </div>
+      </div>
+
+      {braki.length === 0 ? (
+        <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--c-success)' }}>
+          <CheckCircle2 size={14} />
+          Wszystko w magazynie — brak braków
+        </div>
+      ) : (
+        <>
+          <p className="text-xs font-medium mb-2" style={{ color: 'var(--c-critical)' }}>Brakuje:</p>
+          <div className="space-y-1.5 mb-3">
+            {visible.map(row => (
+              <div key={row.towar_id} className="flex items-center justify-between gap-3">
+                <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{row.nazwa}</p>
+                <span className="text-xs num flex-shrink-0" style={{ color: 'var(--c-critical)', background: 'rgba(225,29,72,0.08)', borderRadius: 10, padding: '1px 8px', fontWeight: 600 }}>
+                  zamów {row.doZamowienia} {row.jednostka}
+                </span>
+              </div>
+            ))}
+            {braki.length > 5 && (
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>i {braki.length - 5} więcej braków…</p>
+            )}
+          </div>
+        </>
+      )}
+
+      <Link to="/operacje?tab=prognoza" className="text-xs font-medium" style={{ color: 'var(--c-action)', textDecoration: 'none' }}>
+        → Pełna prognoza
+      </Link>
+    </div>
+  )
+}
 
 function DzisPanel({ workspaceId, wsQuery, addWsFilter }) {
   const [checkins, setCheckins] = useState([])
@@ -327,6 +442,7 @@ export default function Dashboard() {
 
       <FirstUseSteps />
       <DzisPanel workspaceId={workspaceId} wsQuery={wsQuery} addWsFilter={addWsFilter} />
+      <ForecastCard workspaceId={workspaceId} wsQuery={wsQuery} addWsFilter={addWsFilter} />
       {showBriefing && <BriefingCard />}
       {showWeeklyReport && <WeeklyReport workspaceId={workspaceId} businessCategory={getBusinessCategory()} />}
 
