@@ -154,11 +154,29 @@ export default function TablicaBoard() {
     if (error) addToast(error.message, 'error')
   }
 
-  async function handleDeleteCard(cardId) {
+  async function handleArchiveCard(cardId) {
     const container = findContainer(cardId, cardsByList)
     if (!container) return
     setCardsByList(prev => ({ ...prev, [container]: prev[container].filter(c => c.id !== cardId) }))
     const { error } = await supabase.from('karty').update({ archiwum: true }).eq('id', cardId)
+    if (error) addToast(error.message, 'error')
+  }
+
+  async function handleDeleteCard(cardId) {
+    const container = findContainer(cardId, cardsByList)
+    if (!container) return
+    setCardsByList(prev => ({ ...prev, [container]: prev[container].filter(c => c.id !== cardId) }))
+    const { error } = await supabase.from('karty').delete().eq('id', cardId)
+    if (error) addToast(error.message, 'error')
+  }
+
+  function handleRenameCard(cardId, tytul) {
+    handleSaveCard(cardId, { tytul })
+  }
+
+  async function handleChangeListColor(listaId, kolor) {
+    setLists(prev => prev.map(l => (l.id === listaId ? { ...l, kolor } : l)))
+    const { error } = await supabase.from('listy').update({ kolor }).eq('id', listaId)
     if (error) addToast(error.message, 'error')
   }
 
@@ -335,6 +353,8 @@ export default function TablicaBoard() {
                 onAddCard={handleAddCard}
                 onArchiveList={handleArchiveList}
                 onRenameList={handleRenameList}
+                onRenameCard={handleRenameCard}
+                onChangeListColor={handleChangeListColor}
               />
             ))}
           </SortableContext>
@@ -397,6 +417,7 @@ export default function TablicaBoard() {
           card={openCard}
           onClose={() => setOpenCard(null)}
           onSave={handleSaveCard}
+          onArchive={handleArchiveCard}
           onDelete={handleDeleteCard}
         />
       )}

@@ -3,13 +3,15 @@ import { useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Archive } from 'lucide-react'
+import { Plus, MoreHorizontal, Archive, Palette } from 'lucide-react'
 import BoardCard from './BoardCard'
+import { TABLICA_COLORS } from './tablicaTokens'
 
-export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList }) {
+export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor }) {
   const [composerOpen, setComposerOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(column.nazwa)
   const textareaRef = useRef(null)
@@ -100,16 +102,46 @@ export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onAr
           {menuOpen && (
             <div
               className="absolute right-0 top-7 z-10 rounded-lg py-1 text-sm"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', minWidth: 160 }}
-              onMouseLeave={() => setMenuOpen(false)}
+              style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', minWidth: 180 }}
+              onMouseLeave={() => { setMenuOpen(false); setColorPickerOpen(false) }}
             >
-              <button
-                onClick={() => { setMenuOpen(false); onArchiveList(column.id) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-left"
-                style={{ color: 'var(--text)' }}
-              >
-                <Archive size={14} /> Archiwizuj listę
-              </button>
+              {colorPickerOpen ? (
+                <div className="px-3 py-2">
+                  <div className="flex gap-1.5 flex-wrap">
+                    {TABLICA_COLORS.map(c => (
+                      <button
+                        key={c.value}
+                        type="button"
+                        title={c.label}
+                        onClick={() => { onChangeListColor(column.id, c.value); setMenuOpen(false); setColorPickerOpen(false) }}
+                        className="rounded-full"
+                        style={{
+                          width: 22, height: 22, background: c.value,
+                          outline: column.kolor === c.value ? '2px solid var(--text)' : 'none',
+                          outlineOffset: 2,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setColorPickerOpen(true)}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-left"
+                    style={{ color: 'var(--text)' }}
+                  >
+                    <Palette size={14} /> Zmień kolor listy
+                  </button>
+                  <button
+                    onClick={() => { setMenuOpen(false); onArchiveList(column.id) }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-left"
+                    style={{ color: 'var(--text)' }}
+                  >
+                    <Archive size={14} /> Archiwizuj listę
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -118,7 +150,7 @@ export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onAr
       <div ref={setBodyRef} className="board-column-body flex-1 px-2 pt-2 overflow-y-auto">
         <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
           {cards.map(card => (
-            <BoardCard key={card.id} card={card} onOpen={onOpenCard} />
+            <BoardCard key={card.id} card={card} onOpen={onOpenCard} onRename={onRenameCard} />
           ))}
         </SortableContext>
 
