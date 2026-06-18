@@ -11,10 +11,11 @@ import {
 import { supabase } from '../../supabase'
 import { useToast } from '../../context/ToastContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { ArrowLeft, Plus, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, Plus, MoreHorizontal, Zap } from 'lucide-react'
 import Spinner from '../../components/Spinner'
 import BoardColumn from './BoardColumn'
 import CardDetailModal from './CardDetailModal'
+import AutomationModal from './AutomationModal'
 import { TABLICA_COLORS, positionBetween } from './tablicaTokens'
 
 function findContainer(id, cardsByList) {
@@ -47,6 +48,7 @@ export default function TablicaBoard() {
 
   const [addingList, setAddingList] = useState(false)
   const [listDraft, setListDraft] = useState('')
+  const [automationOpen, setAutomationOpen] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
@@ -314,6 +316,13 @@ export default function TablicaBoard() {
               style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', minWidth: 200 }}
               onMouseLeave={() => setBoardMenuOpen(false)}
             >
+              <button
+                onClick={() => { setBoardMenuOpen(false); setAutomationOpen(true) }}
+                className="flex items-center gap-2 w-full px-1 py-1.5 mb-2 text-left text-sm"
+                style={{ color: 'var(--text)' }}
+              >
+                <Zap size={14} /> Automatyzacja
+              </button>
               <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>Kolor tablicy</p>
               <div className="flex gap-2 flex-wrap">
                 {TABLICA_COLORS.map(c => (
@@ -419,6 +428,14 @@ export default function TablicaBoard() {
           onSave={handleSaveCard}
           onArchive={handleArchiveCard}
           onDelete={handleDeleteCard}
+        />
+      )}
+
+      {automationOpen && (
+        <AutomationModal
+          tablicaId={id}
+          lists={lists}
+          onClose={() => setAutomationOpen(false)}
         />
       )}
     </div>

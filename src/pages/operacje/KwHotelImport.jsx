@@ -9,10 +9,11 @@ import { LOKALIZACJE_UNIKALNE } from '../../utils/lokaleImportParser'
 import { buildChecklistRows } from '../../utils/defaultChecklist'
 import { calculateForecast } from '../../utils/forecastEngine'
 import { planTeams, estimateWorkload, hoursPerPerson, buildPlanText } from '../../utils/teamPlanner'
+import { positionBetween } from '../tablice/tablicaTokens'
 import Modal from '../../components/Modal'
 import BottomSheet from '../../components/ui/BottomSheet'
 import Spinner from '../../components/Spinner'
-import { Upload, CheckCircle, AlertTriangle, ChevronLeft, MapPin, Copy, Check, Users } from 'lucide-react'
+import { Upload, CheckCircle, AlertTriangle, ChevronLeft, MapPin, Copy, Check, Users, LayoutGrid } from 'lucide-react'
 
 const PRIORYTET_TO_FIELD = { 1: 'pilny', 2: 'normalny', 3: 'niski' }
 const PRIORYTET_TO_TYP = { 1: 'zmiana', 2: 'przyjazd', 3: 'wyjazd' }
@@ -82,6 +83,10 @@ export default function KwHotelImport({ onClose, onCreated }) {
   const [headcount, setHeadcount] = useState(6)
   const [copied, setCopied] = useState(false)
 
+  const [boards, setBoards] = useState([])
+  const [selectedBoardId, setSelectedBoardId] = useState('')
+  const [generatingCards, setGeneratingCards] = useState(false)
+
   const [creating, setCreating] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0, skipped: 0, errors: [] })
   const [finished, setFinished] = useState(false)
@@ -121,14 +126,17 @@ export default function KwHotelImport({ onClose, onCreated }) {
 
   async function goToPreview() {
     setLoadingLokale(true)
-    const [{ data: lok }, { data: aliasy }, { data: towary }, { data: stany }] = await Promise.all([
+    const [{ data: lok }, { data: aliasy }, { data: towary }, { data: stany }, { data: tabliceLokale }] = await Promise.all([
       supabase.from('lokale').select('id, nazwa, lokalizacja, domyslny_pakiet_id').eq('workspace_id', workspaceId).eq('aktywny', true).order('nazwa'),
       supabase.from('kwhotel_aliasy').select('nazwa_kw, lokal_id').eq('workspace_id', workspaceId),
       supabase.from('towary').select('id, nazwa, jednostka').eq('aktywny', true),
       supabase.from('stany_magazynowe').select('towar_id, ilosc'),
+      supabase.from('tablice').select('id, nazwa').eq('workspace_id', workspaceId).eq('typ', 'lokale').eq('archiwum', false).order('nazwa'),
     ])
     const lokaleList = lok || []
     setLokale(lokaleList)
+    setBoards(tabliceLokale || [])
+    setSelectedBoardId(tabliceLokale?.[0]?.id || '')
 
     const lokaleById = {}
     for (const l of lokaleList) lokaleById[l.id] = l
@@ -261,6 +269,59 @@ export default function KwHotelImport({ onClose, onCreated }) {
       addToast(`Utworzono ${done} przygotowań, ${errors.length} błędów`, 'warning')
     }
     onCreated?.()
+  }
+
+  async function generateBoardCards() {
+    if (!selectedBoardId) return
+    setGeneratingCards(true)
+
+    const [{ data: lists }, { data: existingCards }] = await Promise.all([
+      supabase.from('listy').select('id, nazwa, pozycja').eq('tablica_id', selectedBoardId).eq('archiwum', false).order('pozycja'),
+      supabase.from('karty').select('lista_id, pozycja, meta').eq('tablica_id', selectedBoardId).eq('archiwum', false),
+    ])
+    const targetList = (lists || []).find(l => l.nazwa === 'Do przygotowania') || (lists || [])[0]
+    if (!targetList) {
+      addToast('Wybrana tablica nie ma żadnej listy', 'error')
+      setGeneratingCards(false)
+      return
+    }
+
+    const existingKeys = new Set((existingCards || []).map(c => c.meta?.dedupe_key).filter(Boolean))
+    let lastPos = (existingCards || [])
+      .filter(c => c.lista_id === targetList.id)
+      .reduce((max, c) => (max == null || c.pozycja > max ? c.pozycja : max), null)
+
+    const lokaleById = {}
+    for (const l of lokale) lokaleById[l.id] = l
+
+    const toInsert = []
+    for (const row of rows.filter(r => r.include)) {
+      const dedupeKey = `${row.nazwa}|${date}|${row.priorytet}`
+      if (existingKeys.has(dedupeKey)) continue
+      const lokal = row.matchedLokalId ? lokaleById[row.matchedLokalId] : null
+      const displayName = lokal ? lokal.nazwa : row.nazwa
+      lastPos = positionBetween(lastPos, null)
+      toInsert.push({
+        workspace_id: workspaceId,
+        tablica_id: selectedBoardId,
+        lista_id: targetList.id,
+        tytul: `${displayName} – ${dmyDate(date)}`,
+        pozycja: lastPos,
+        lokal_id: row.matchedLokalId || null,
+        meta: { priorytet: PRIORYTET_TO_TYP[row.priorytet], zrodlo: 'kw_hotel', dedupe_key: dedupeKey },
+      })
+    }
+
+    if (toInsert.length === 0) {
+      addToast('Wszystkie karty z tego importu już istnieją na tablicy', 'info')
+      setGeneratingCards(false)
+      return
+    }
+
+    const { error } = await supabase.from('karty').insert(toInsert)
+    setGeneratingCards(false)
+    if (error) addToast(error.message, 'error')
+    else addToast(`Wygenerowano ${toInsert.length} kart na tablicy`, 'success')
   }
 
   const includedRows = rows.filter(r => r.include)
@@ -541,6 +602,29 @@ export default function KwHotelImport({ onClose, onCreated }) {
               </div>
             )
           })}
+
+          {boards.length > 0 && (
+            <div className="rounded-xl p-3 space-y-2" style={{ border: '1px solid var(--border)' }}>
+              <p className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                <LayoutGrid size={14} /> Wygeneruj karty na tablicy
+              </p>
+              <select
+                value={selectedBoardId}
+                onChange={e => setSelectedBoardId(e.target.value)}
+                style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px', fontSize: 14, minHeight: 40 }}
+              >
+                {boards.map(b => <option key={b.id} value={b.id}>{b.nazwa}</option>)}
+              </select>
+              <button
+                onClick={generateBoardCards}
+                disabled={generatingCards || includedRows.length === 0}
+                className="w-full rounded-lg text-sm font-medium"
+                style={{ background: 'var(--table-sub)', color: 'var(--text)', minHeight: 44, border: '1px solid var(--border)', opacity: includedRows.length === 0 ? 0.5 : 1 }}
+              >
+                {generatingCards ? 'Generowanie…' : `Wygeneruj ${includedRows.length} kart na tablicy`}
+              </button>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button onClick={() => setStep(1)} className="flex items-center gap-1 rounded-lg text-sm font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)', minHeight: 48, padding: '0 16px' }}>
