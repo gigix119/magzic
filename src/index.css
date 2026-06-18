@@ -414,3 +414,66 @@ body {
   flex: 1;
 }
 
+/* ── Tablice (Kanban) ── */
+.board-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.board-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.board-column {
+  width: 272px;
+  background: var(--hover-bg);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+}
+
+.board-column-body {
+  scrollbar-width: thin;
+}
+
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.board-card {
+  background: var(--c-surface);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  transition: box-shadow 0.15s ease-out, transform 0.15s ease-out;
+  animation: cardFadeIn 0.18s ease-out;
+}
+.board-card:hover { box-shadow: var(--shadow-md); }
+.board-card:active { transform: scale(1.02); }
+
+.board-card-overlay {
+  background: var(--c-surface);
+  box-shadow: var(--shadow-md), 0 8px 20px rgba(0,0,0,0.18);
+  border: 1px solid var(--border);
+  transform: scale(1.03) rotate(1.5deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-card { animation: none; }
+}
+
+/* Mobile: jedna kolumna ~85vw, scroll-snap jak karuzela */
+@media (max-width: 767px) {
+  .board-scroll { scroll-snap-type: x mandatory; }
+  .board-column {
+    width: 85vw;
+    scroll-snap-align: start;
+    max-height: calc(100vh - 280px);
+  }
+}
+

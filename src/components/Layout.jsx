@@ -8,7 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { AlertCountProvider } from '../context/AlertCountContext'
 import {
   LayoutDashboard, Package, Warehouse, Users, FileText,
-  ClipboardList, X, Shield, Settings, LogOut, Menu, Building2,
+  ClipboardList, X, Shield, Settings, LogOut, Menu, Building2, Kanban,
 } from 'lucide-react'
 import Topbar from './ui/Topbar'
 
@@ -20,6 +20,7 @@ const ROUTE_TRACKING = {
   '/lokale':     { module: 'lokale',     action: 'lokale_opened' },
   '/faktury':    { module: 'invoices',   action: 'invoices_opened' },
   '/operacje':   { module: 'operacje',   action: 'operacje_opened' },
+  '/tablice':    { module: 'tablice',    action: 'tablice_opened' },
 }
 
 const GROUP_LABEL_STYLE = {
@@ -192,6 +193,7 @@ export default function Layout() {
             {/* OPERACJE — single unified link with alert badge */}
             <div style={{ ...GROUP_LABEL_STYLE, marginTop: 4 }}>Operacje</div>
             <SidebarNavLink to="/operacje" icon={ClipboardList} label="Operacje" showBadge onClick={close} alertCount={alertCount} />
+            <SidebarNavLink to="/tablice" icon={Kanban} label="Tablice" onClick={close} alertCount={alertCount} />
 
             {/* MAGAZYN */}
             <div style={{ ...GROUP_LABEL_STYLE, marginTop: 4 }}>Magazyn</div>
