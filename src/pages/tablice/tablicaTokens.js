@@ -45,3 +45,7 @@ export function terminStatus(termin, zakonczona) {
   if (diff < 1000 * 60 * 60 * 24) return 'soon'
   return 'neutral'
 }
+
+export function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+}

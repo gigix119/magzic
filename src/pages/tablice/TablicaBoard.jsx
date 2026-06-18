@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   DndContext, closestCorners, DragOverlay,
@@ -11,12 +11,13 @@ import {
 import { supabase } from '../../supabase'
 import { useToast } from '../../context/ToastContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { ArrowLeft, Plus, MoreHorizontal, Zap } from 'lucide-react'
-import Spinner from '../../components/Spinner'
+import { ArrowLeft, Plus, MoreHorizontal, Zap, Search, X, LayoutGrid } from 'lucide-react'
+import EmptyState from '../../components/ui/EmptyState'
+import BottomSheet from '../../components/ui/BottomSheet'
 import BoardColumn from './BoardColumn'
 import CardDetailModal from './CardDetailModal'
 import AutomationModal from './AutomationModal'
-import { TABLICA_COLORS, positionBetween } from './tablicaTokens'
+import { TABLICA_COLORS, positionBetween, prefersReducedMotion } from './tablicaTokens'
 
 function findContainer(id, cardsByList) {
   if (typeof id === 'string' && id.startsWith('colbody:')) return id.slice(8)
@@ -25,6 +26,24 @@ function findContainer(id, cardsByList) {
     if (arr.some(c => c.id === id)) return listaId
   }
   return null
+}
+
+function BoardSkeleton() {
+  return (
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 96px)' }}>
+      <div className="rounded-[var(--radius-card)] mb-3 flex-shrink-0" style={{ height: 52, background: 'var(--hover-bg)' }} />
+      <div className="flex gap-3 flex-1">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="board-column flex-shrink-0 flex flex-col rounded-[var(--radius-card)] p-2.5" style={{ background: 'var(--hover-bg)' }}>
+            <div className="skeleton-shimmer rounded mb-3" style={{ height: 16, width: '60%' }} />
+            {[0, 1, 2].map(j => (
+              <div key={j} className="skeleton-shimmer rounded-[12px] mb-2" style={{ height: 58 }} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function TablicaBoard() {
@@ -36,19 +55,36 @@ export default function TablicaBoard() {
   const [board, setBoard] = useState(null)
   const [lists, setLists] = useState([])
   const [cardsByList, setCardsByList] = useState({})
+  const [boards, setBoards] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [activeId, setActiveId] = useState(null)
   const [activeType, setActiveType] = useState(null)
   const [openCard, setOpenCard] = useState(null)
+  const [dragOverList, setDragOverList] = useState(null)
+  const [removingCardIds, setRemovingCardIds] = useState(() => new Set())
 
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [boardMenuOpen, setBoardMenuOpen] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   const [addingList, setAddingList] = useState(false)
   const [listDraft, setListDraft] = useState('')
   const [automationOpen, setAutomationOpen] = useState(false)
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchInput, setSearchInput] = useState('')
+  const searchQuery = searchInput.trim().toLowerCase()
+
+  const [activeColumnIndex, setActiveColumnIndex] = useState(0)
+  const scrollRef = useRef(null)
+  const columnRefs = useRef({})
+
+  const listsRef = useRef(lists)
+  const cardsByListRef = useRef(cardsByList)
+  useEffect(() => { listsRef.current = lists }, [lists])
+  useEffect(() => { cardsByListRef.current = cardsByList }, [cardsByList])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
@@ -56,14 +92,16 @@ export default function TablicaBoard() {
   )
 
   const fetchData = useCallback(async () => {
-    const [{ data: b, error: be }, { data: l }, { data: k }] = await Promise.all([
+    const [{ data: b, error: be }, { data: l }, { data: k }, { data: allBoards }] = await Promise.all([
       addWsFilter(wsQuery('tablice').select('*')).eq('id', id).maybeSingle(),
       addWsFilter(wsQuery('listy').select('*')).eq('tablica_id', id).eq('archiwum', false).order('pozycja'),
       addWsFilter(wsQuery('karty').select('*')).eq('tablica_id', id).eq('archiwum', false).order('pozycja'),
+      addWsFilter(wsQuery('tablice').select('id,nazwa,kolor_tla')).eq('archiwum', false).order('pozycja'),
     ])
     if (be) addToast(be.message, 'error')
     setBoard(b || null)
     setLists(l || [])
+    setBoards(allBoards || [])
     const grouped = {}
     for (const list of l || []) grouped[list.id] = []
     for (const c of k || []) { (grouped[c.lista_id] ??= []).push(c) }
@@ -91,8 +129,8 @@ export default function TablicaBoard() {
     if (error) addToast(error.message, 'error')
   }
 
-  async function handleAddCard(listaId, tytul) {
-    const items = cardsByList[listaId] || []
+  const handleAddCard = useCallback(async (listaId, tytul) => {
+    const items = cardsByListRef.current[listaId] || []
     const lastPos = items.length ? items[items.length - 1].pozycja : null
     const newPos = positionBetween(lastPos, null)
     const tempId = `temp-${Date.now()}`
@@ -112,20 +150,26 @@ export default function TablicaBoard() {
     } else {
       setCardsByList(prev => ({ ...prev, [listaId]: prev[listaId].map(c => (c.id === tempId ? data : c)) }))
     }
-  }
+  }, [id, addToast, wsData])
 
-  async function handleRenameList(listaId, nazwa) {
+  const handleRenameList = useCallback(async (listaId, nazwa) => {
     setLists(prev => prev.map(l => (l.id === listaId ? { ...l, nazwa } : l)))
     const { error } = await supabase.from('listy').update({ nazwa }).eq('id', listaId)
     if (error) addToast(error.message, 'error')
-  }
+  }, [addToast])
 
-  async function handleArchiveList(listaId) {
-    const snapshot = lists
+  const handleArchiveList = useCallback(async (listaId) => {
+    const snapshot = listsRef.current
     setLists(prev => prev.filter(l => l.id !== listaId))
     const { error } = await supabase.from('listy').update({ archiwum: true }).eq('id', listaId)
     if (error) { addToast(error.message, 'error'); setLists(snapshot) }
-  }
+  }, [addToast])
+
+  const handleChangeListColor = useCallback(async (listaId, kolor) => {
+    setLists(prev => prev.map(l => (l.id === listaId ? { ...l, kolor } : l)))
+    const { error } = await supabase.from('listy').update({ kolor }).eq('id', listaId)
+    if (error) addToast(error.message, 'error')
+  }, [addToast])
 
   async function handleAddList(e) {
     e.preventDefault()
@@ -145,8 +189,8 @@ export default function TablicaBoard() {
     setAddingList(false)
   }
 
-  async function handleSaveCard(cardId, fields) {
-    const container = findContainer(cardId, cardsByList)
+  const handleSaveCard = useCallback(async (cardId, fields) => {
+    const container = findContainer(cardId, cardsByListRef.current)
     if (!container) return
     setCardsByList(prev => ({
       ...prev,
@@ -154,33 +198,114 @@ export default function TablicaBoard() {
     }))
     const { error } = await supabase.from('karty').update(fields).eq('id', cardId)
     if (error) addToast(error.message, 'error')
+  }, [addToast])
+
+  const handleRenameCard = useCallback((cardId, tytul) => {
+    handleSaveCard(cardId, { tytul })
+  }, [handleSaveCard])
+
+  function restoreCard(container, index, card) {
+    setCardsByList(prev => {
+      const arr = [...(prev[container] || [])]
+      arr.splice(Math.min(index, arr.length), 0, card)
+      return { ...prev, [container]: arr }
+    })
   }
 
-  async function handleArchiveCard(cardId) {
-    const container = findContainer(cardId, cardsByList)
+  function animateRemoval(cardId) {
+    const ms = prefersReducedMotion() ? 0 : 180
+    return new Promise(resolve => {
+      setRemovingCardIds(prev => new Set(prev).add(cardId))
+      setTimeout(() => {
+        setRemovingCardIds(prev => { const next = new Set(prev); next.delete(cardId); return next })
+        resolve()
+      }, ms)
+    })
+  }
+
+  const handleArchiveCard = useCallback(async (cardId) => {
+    const container = findContainer(cardId, cardsByListRef.current)
     if (!container) return
+    const items = cardsByListRef.current[container]
+    const index = items.findIndex(c => c.id === cardId)
+    const snapshot = items[index]
+    await animateRemoval(cardId)
     setCardsByList(prev => ({ ...prev, [container]: prev[container].filter(c => c.id !== cardId) }))
     const { error } = await supabase.from('karty').update({ archiwum: true }).eq('id', cardId)
-    if (error) addToast(error.message, 'error')
-  }
+    if (error) { addToast(error.message, 'error'); restoreCard(container, index, snapshot); return }
+    addToast('Karta zarchiwizowana', 'success', {
+      duration: 5000,
+      action: {
+        label: 'Cofnij',
+        onClick: async () => {
+          restoreCard(container, index, snapshot)
+          const { error: ue } = await supabase.from('karty').update({ archiwum: false }).eq('id', cardId)
+          if (ue) addToast(ue.message, 'error')
+        },
+      },
+    })
+  }, [addToast])
 
-  async function handleDeleteCard(cardId) {
-    const container = findContainer(cardId, cardsByList)
+  const handleDeleteCard = useCallback(async (cardId) => {
+    const container = findContainer(cardId, cardsByListRef.current)
     if (!container) return
+    const items = cardsByListRef.current[container]
+    const index = items.findIndex(c => c.id === cardId)
+    const snapshot = items[index]
+    await animateRemoval(cardId)
     setCardsByList(prev => ({ ...prev, [container]: prev[container].filter(c => c.id !== cardId) }))
     const { error } = await supabase.from('karty').delete().eq('id', cardId)
-    if (error) addToast(error.message, 'error')
-  }
+    if (error) { addToast(error.message, 'error'); restoreCard(container, index, snapshot); return }
+    addToast('Karta usunięta', 'success', {
+      duration: 5000,
+      action: {
+        label: 'Cofnij',
+        onClick: async () => {
+          restoreCard(container, index, snapshot)
+          const { error: ue } = await supabase.from('karty').insert([snapshot])
+          if (ue) addToast(ue.message, 'error')
+        },
+      },
+    })
+  }, [addToast])
 
-  function handleRenameCard(cardId, tytul) {
-    handleSaveCard(cardId, { tytul })
-  }
+  const handleMoveCard = useCallback(async (cardId, targetListaId) => {
+    const container = findContainer(cardId, cardsByListRef.current)
+    if (!container || container === targetListaId) return
+    const card = cardsByListRef.current[container].find(c => c.id === cardId)
+    if (!card) return
+    const targetItems = cardsByListRef.current[targetListaId] || []
+    const newPos = positionBetween(targetItems.length ? targetItems[targetItems.length - 1].pozycja : null, null)
+    setCardsByList(prev => ({
+      ...prev,
+      [container]: prev[container].filter(c => c.id !== cardId),
+      [targetListaId]: [...(prev[targetListaId] || []), { ...card, lista_id: targetListaId, pozycja: newPos }],
+    }))
+    const { error } = await supabase.rpc('przenies_karte', { p_karta_id: cardId, p_lista_id: targetListaId, p_pozycja: newPos })
+    if (error) addToast('Nie udało się przenieść karty', 'error')
+    else addToast('Karta przeniesiona', 'success')
+  }, [addToast])
 
-  async function handleChangeListColor(listaId, kolor) {
-    setLists(prev => prev.map(l => (l.id === listaId ? { ...l, kolor } : l)))
-    const { error } = await supabase.from('listy').update({ kolor }).eq('id', listaId)
-    if (error) addToast(error.message, 'error')
-  }
+  const handleCopyCard = useCallback(async (cardId, targetListaId) => {
+    const container = findContainer(cardId, cardsByListRef.current)
+    if (!container) return
+    const card = cardsByListRef.current[container].find(c => c.id === cardId)
+    if (!card) return
+    const targetItems = cardsByListRef.current[targetListaId] || []
+    const newPos = positionBetween(targetItems.length ? targetItems[targetItems.length - 1].pozycja : null, null)
+    const { data, error } = await supabase
+      .from('karty')
+      .insert([{
+        tytul: card.tytul, opis: card.opis, termin: card.termin, etykiety: card.etykiety,
+        przypisani: card.przypisani, zakonczona: card.zakonczona,
+        tablica_id: id, lista_id: targetListaId, pozycja: newPos, ...wsData(),
+      }])
+      .select()
+      .single()
+    if (error) { addToast(error.message, 'error'); return }
+    setCardsByList(prev => ({ ...prev, [targetListaId]: [...(prev[targetListaId] || []), data] }))
+    addToast('Karta skopiowana', 'success')
+  }, [id, addToast, wsData])
 
   function handleDragStart(event) {
     setActiveId(event.active.id)
@@ -189,9 +314,10 @@ export default function TablicaBoard() {
 
   function handleDragOver(event) {
     const { active, over } = event
-    if (!over || active.data.current?.type !== 'card') return
+    if (!over || active.data.current?.type !== 'card') { setDragOverList(null); return }
     const activeContainer = findContainer(active.id, cardsByList)
     const overContainer = findContainer(over.id, cardsByList)
+    setDragOverList(overContainer)
     if (!activeContainer || !overContainer || activeContainer === overContainer) return
 
     setCardsByList(prev => {
@@ -213,6 +339,7 @@ export default function TablicaBoard() {
     const { active, over } = event
     setActiveId(null)
     setActiveType(null)
+    setDragOverList(null)
     if (!over) return
     const type = active.data.current?.type
 
@@ -262,7 +389,20 @@ export default function TablicaBoard() {
     }
   }
 
-  if (loading) return <Spinner />
+  function handleBoardScroll() {
+    const el = scrollRef.current
+    if (!el || lists.length === 0) return
+    const colWidth = el.clientWidth * 0.85 + 12
+    const idx = Math.round(el.scrollLeft / colWidth)
+    setActiveColumnIndex(Math.min(Math.max(idx, 0), lists.length - 1))
+  }
+
+  function handleFabAddCard() {
+    const list = lists[activeColumnIndex] || lists[0]
+    if (list) columnRefs.current[list.id]?.openComposer()
+  }
+
+  if (loading) return <BoardSkeleton />
   if (!board) {
     return (
       <div className="text-sm" style={{ color: 'var(--text-2)' }}>
@@ -279,11 +419,14 @@ export default function TablicaBoard() {
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 96px)' }}>
       <div
-        className="board-topbar flex items-center gap-3 px-4 py-3 rounded-[var(--radius-card)] mb-3 flex-shrink-0"
+        className="board-topbar flex items-center gap-2 px-4 py-3 rounded-[var(--radius-card)] mb-2 flex-shrink-0"
         style={{ background: `${board.kolor_tla || '#5B8DEF'}e6` }}
       >
-        <button onClick={() => navigate('/tablice')} className="p-1 rounded-lg text-white opacity-90">
+        <button onClick={() => navigate('/tablice')} className="p-1 rounded-lg text-white opacity-90 flex-shrink-0">
           <ArrowLeft size={18} />
+        </button>
+        <button onClick={() => setSwitcherOpen(true)} className="p-1 rounded-lg text-white opacity-90 flex-shrink-0" title="Przełącz tablicę">
+          <LayoutGrid size={17} />
         </button>
         {editingTitle ? (
           <input
@@ -306,6 +449,9 @@ export default function TablicaBoard() {
             {board.nazwa}
           </h1>
         )}
+        <button onClick={() => setSearchOpen(o => !o)} className="p-1.5 rounded-lg text-white opacity-90 flex-shrink-0" title="Szukaj kart">
+          <Search size={17} />
+        </button>
         <div className="relative">
           <button onClick={() => setBoardMenuOpen(o => !o)} className="p-1.5 rounded-lg text-white opacity-90">
             <MoreHorizontal size={18} />
@@ -344,6 +490,43 @@ export default function TablicaBoard() {
         </div>
       </div>
 
+      {searchOpen && (
+        <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+          <div className="relative flex-1">
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+            <input
+              autoFocus
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              placeholder="Szukaj kart po tytule…"
+              style={{
+                width: '100%', fontSize: 14, padding: '8px 10px 8px 30px', borderRadius: 10,
+                border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)', outline: 'none',
+              }}
+            />
+          </div>
+          <button
+            onClick={() => { setSearchOpen(false); setSearchInput('') }}
+            className="p-1.5 rounded-lg flex-shrink-0"
+            style={{ color: 'var(--muted)' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {lists.length > 1 && (
+        <div className="board-dots flex-shrink-0">
+          {lists.map((l, i) => (
+            <span
+              key={l.id}
+              className="board-dot"
+              style={{ background: i === activeColumnIndex ? 'var(--c-action)' : 'var(--border)' }}
+            />
+          ))}
+        </div>
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -351,11 +534,21 @@ export default function TablicaBoard() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="board-scroll flex gap-3 flex-1 pb-2">
+        <div ref={scrollRef} onScroll={handleBoardScroll} className="board-scroll flex gap-3 flex-1 pb-2">
+          {lists.length === 0 && !addingList && (
+            <EmptyState
+              icon={LayoutGrid}
+              title="Brak list"
+              description="Dodaj pierwszą listę, by zacząć organizować karty."
+              className="flex-1"
+            />
+          )}
+
           <SortableContext items={lists.map(l => l.id)} strategy={horizontalListSortingStrategy}>
             {lists.map(list => (
               <BoardColumn
                 key={list.id}
+                ref={el => { columnRefs.current[list.id] = el }}
                 column={list}
                 cards={cardsByList[list.id] || []}
                 onOpenCard={setOpenCard}
@@ -364,6 +557,9 @@ export default function TablicaBoard() {
                 onRenameList={handleRenameList}
                 onRenameCard={handleRenameCard}
                 onChangeListColor={handleChangeListColor}
+                isDropTarget={dragOverList === list.id}
+                removingCardIds={removingCardIds}
+                searchQuery={searchQuery}
               />
             ))}
           </SortableContext>
@@ -421,13 +617,26 @@ export default function TablicaBoard() {
         </DragOverlay>
       </DndContext>
 
+      {lists.length > 0 && (
+        <button
+          onClick={handleFabAddCard}
+          className="board-fab-add"
+          aria-label="Dodaj kartę"
+        >
+          <Plus size={22} />
+        </button>
+      )}
+
       {openCard && (
         <CardDetailModal
           card={openCard}
+          lists={lists}
           onClose={() => setOpenCard(null)}
           onSave={handleSaveCard}
           onArchive={handleArchiveCard}
           onDelete={handleDeleteCard}
+          onMove={handleMoveCard}
+          onCopy={handleCopyCard}
         />
       )}
 
@@ -438,6 +647,22 @@ export default function TablicaBoard() {
           onClose={() => setAutomationOpen(false)}
         />
       )}
+
+      <BottomSheet open={switcherOpen} onClose={() => setSwitcherOpen(false)} title="Przełącz tablicę">
+        <div className="flex flex-col gap-1">
+          {boards.map(b => (
+            <button
+              key={b.id}
+              onClick={() => { setSwitcherOpen(false); if (b.id !== id) navigate(`/tablice/${b.id}`) }}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left"
+              style={{ background: b.id === id ? 'var(--hover-bg)' : 'transparent', minHeight: 44 }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: b.kolor_tla || '#5B8DEF', flexShrink: 0 }} />
+              <span className="text-sm font-medium flex-1 truncate" style={{ color: 'var(--text)' }}>{b.nazwa}</span>
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
     </div>
   )
 }

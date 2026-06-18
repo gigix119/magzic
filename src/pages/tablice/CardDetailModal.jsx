@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Modal from '../../components/Modal'
-import { Trash2, Archive, CheckCircle2, Circle, X } from 'lucide-react'
+import { Trash2, Archive, CheckCircle2, Circle, X, ArrowRightLeft, Copy } from 'lucide-react'
 import { TABLICA_COLORS } from './tablicaTokens'
 
 const inputStyle = {
@@ -23,7 +23,7 @@ function toLocalDatetimeValue(termin) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export default function CardDetailModal({ card, onClose, onSave, onArchive, onDelete }) {
+export default function CardDetailModal({ card, lists, onClose, onSave, onArchive, onDelete, onMove, onCopy }) {
   const [tytul, setTytul] = useState(card.tytul || '')
   const [opis, setOpis] = useState(card.opis || '')
   const [termin, setTermin] = useState(toLocalDatetimeValue(card.termin))
@@ -31,6 +31,8 @@ export default function CardDetailModal({ card, onClose, onSave, onArchive, onDe
   const [etykiety, setEtykiety] = useState(Array.isArray(card.etykiety) ? card.etykiety : [])
   const [przypisaniText, setPrzypisaniText] = useState((card.przypisani || []).join(', '))
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const otherLists = (lists || []).filter(l => l.id !== card.lista_id)
+  const [targetListaId, setTargetListaId] = useState(otherLists[0]?.id || '')
 
   function save(fields) {
     onSave(card.id, fields)
@@ -89,6 +91,18 @@ export default function CardDetailModal({ card, onClose, onSave, onArchive, onDe
 
   async function handleArchive() {
     await onArchive(card.id)
+    onClose()
+  }
+
+  function handleMove() {
+    if (!targetListaId) return
+    onMove(card.id, targetListaId)
+    onClose()
+  }
+
+  function handleCopy() {
+    if (!targetListaId) return
+    onCopy(card.id, targetListaId)
     onClose()
   }
 
@@ -175,6 +189,35 @@ export default function CardDetailModal({ card, onClose, onSave, onArchive, onDe
             </div>
           )}
         </div>
+
+        {otherLists.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>Przenieś / kopiuj do listy</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select style={{ ...inputStyle, minHeight: 40, flex: '1 1 140px' }} value={targetListaId} onChange={e => setTargetListaId(e.target.value)}>
+                {otherLists.map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={handleMove}
+                title="Przenieś do wybranej listy"
+                className="flex items-center gap-1.5 px-3 rounded-[var(--radius-control)] text-sm font-medium flex-shrink-0"
+                style={{ background: 'var(--hover-bg)', color: 'var(--text)', minHeight: 40 }}
+              >
+                <ArrowRightLeft size={14} /> Przenieś
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                title="Skopiuj do wybranej listy"
+                className="flex items-center gap-1.5 px-3 rounded-[var(--radius-control)] text-sm font-medium flex-shrink-0"
+                style={{ background: 'var(--hover-bg)', color: 'var(--text)', minHeight: 40 }}
+              >
+                <Copy size={14} /> Kopiuj
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mt-1">
           <div className="flex items-center gap-3">

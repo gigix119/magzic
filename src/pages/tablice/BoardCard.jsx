@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CheckCircle2, Calendar } from 'lucide-react'
@@ -10,7 +10,7 @@ const TERMIN_COLOR = {
   neutral: 'var(--text-2)',
 }
 
-export default function BoardCard({ card, onOpen, onRename }) {
+function BoardCard({ card, onOpen, onRename, removing, hidden }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     data: { type: 'card', listaId: card.lista_id },
@@ -23,6 +23,7 @@ export default function BoardCard({ card, onOpen, onRename }) {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
+    display: hidden ? 'none' : undefined,
   }
 
   const etykiety = Array.isArray(card.etykiety) ? card.etykiety : []
@@ -48,7 +49,7 @@ export default function BoardCard({ card, onOpen, onRename }) {
       {...attributes}
       {...listeners}
       onClick={() => !isDragging && !editingTitle && onOpen(card)}
-      className="board-card rounded-[12px] p-3 mb-2 cursor-pointer select-none"
+      className={`board-card rounded-[12px] p-3 mb-2 cursor-pointer select-none${removing ? ' board-card-removing' : ''}`}
     >
       {etykiety.length > 0 && (
         <div className="flex gap-1 mb-1.5 flex-wrap">
@@ -112,3 +113,5 @@ export default function BoardCard({ card, onOpen, onRename }) {
     </div>
   )
 }
+
+export default memo(BoardCard)

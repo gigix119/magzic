@@ -477,3 +477,98 @@ body {
   }
 }
 
+/* Lekka "wirtualizacja" kart bez biblioteki: przeglądarka nie renderuje
+   zawartości kart poza viewportem kolumny, ale box (i pozycja dla dnd-kit)
+   zostają zachowane — bezpieczne z drag&drop. */
+.board-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 70px;
+}
+
+/* Usuwanie/archiwizacja karty: fade + collapse */
+@keyframes cardCollapse {
+  from { opacity: 1; max-height: 160px; transform: scale(1); }
+  to   { opacity: 0; max-height: 0; transform: scale(0.96); margin-bottom: 0; padding-top: 0; padding-bottom: 0; }
+}
+.board-card-removing {
+  animation: cardCollapse 0.18s ease-out forwards;
+  overflow: hidden;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-card-removing { animation: none; opacity: 0; }
+}
+
+/* Podświetlenie kolumny-celu podczas przeciągania karty */
+.board-column-droptarget {
+  outline: 2px dashed var(--c-action);
+  outline-offset: -2px;
+  background: var(--c-action-subtle, rgba(91,141,239,0.08));
+  transition: background 0.15s ease-out, outline-color 0.15s ease-out;
+}
+
+/* Zwinięta kolumna — wąski pasek jak w Trello */
+.board-column-collapsed {
+  width: 44px;
+  background: var(--hover-bg);
+  min-height: 120px;
+}
+
+/* Wskaźnik aktywnej kolumny (karuzela) — tylko mobile */
+.board-dots {
+  display: none;
+}
+.board-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background 0.15s ease-out;
+}
+@media (max-width: 767px) {
+  .board-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+}
+
+/* FAB "Dodaj kartę" — kciukiem, dół ekranu, tylko mobile */
+.board-fab-add {
+  display: none;
+}
+@media (max-width: 767px) {
+  .board-fab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 16px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--c-action);
+    color: #fff;
+    box-shadow: var(--shadow-md), 0 6px 16px rgba(0,0,0,0.25);
+    z-index: 30;
+    border: none;
+  }
+}
+
+/* Skeleton boardu podczas ładowania (zamiast spinnera na środku) */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--border) 25%, var(--hover-bg) 37%, var(--border) 63%);
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeletonShimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer { animation: none; }
+}
+

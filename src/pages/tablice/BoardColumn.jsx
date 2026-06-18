@@ -1,20 +1,29 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useImperativeHandle, forwardRef, memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Archive, Palette } from 'lucide-react'
+import { Plus, MoreHorizontal, Archive, Palette, ChevronLeft, ChevronRight } from 'lucide-react'
 import BoardCard from './BoardCard'
 import { TABLICA_COLORS } from './tablicaTokens'
 
-export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor }) {
+function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor, isDropTarget, removingCardIds, searchQuery }, ref) {
   const [composerOpen, setComposerOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(column.nazwa)
+  const [collapsed, setCollapsed] = useState(false)
   const textareaRef = useRef(null)
+
+  useImperativeHandle(ref, () => ({
+    openComposer: () => { setCollapsed(false); setComposerOpen(true) },
+  }))
+
+  const visibleCount = searchQuery
+    ? cards.filter(c => c.tytul?.toLowerCase().includes(searchQuery)).length
+    : cards.length
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -53,11 +62,43 @@ export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onAr
     else setNameDraft(column.nazwa)
   }
 
+  if (collapsed) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="board-column board-column-collapsed flex-shrink-0 flex flex-col items-center rounded-[var(--radius-card)] cursor-pointer"
+        onClick={() => setCollapsed(false)}
+        title={`Rozwiń „${column.nazwa}"`}
+      >
+        <button
+          onClick={e => { e.stopPropagation(); setCollapsed(false) }}
+          className="p-1 mt-2 rounded"
+          style={{ color: 'var(--muted)' }}
+        >
+          <ChevronRight size={15} />
+        </button>
+        <span
+          className="text-[13px] font-semibold mt-2"
+          style={{ color: 'var(--text)', writingMode: 'vertical-rl' }}
+        >
+          {column.nazwa}
+        </span>
+        <span
+          className="text-[11px] font-medium rounded-full px-1.5 mb-3 mt-auto"
+          style={{ background: 'var(--hover-bg)', color: 'var(--text-2)' }}
+        >
+          {cards.length}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="board-column flex-shrink-0 flex flex-col rounded-[var(--radius-card)]"
+      className={`board-column flex-shrink-0 flex flex-col rounded-[var(--radius-card)]${isDropTarget ? ' board-column-droptarget' : ''}`}
     >
       <div
         {...attributes}
@@ -88,8 +129,17 @@ export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onAr
           className="text-[11px] font-medium rounded-full px-1.5"
           style={{ background: 'var(--hover-bg)', color: 'var(--text-2)', minWidth: 20, textAlign: 'center' }}
         >
-          {cards.length}
+          {searchQuery ? `${visibleCount}/${cards.length}` : cards.length}
         </span>
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={() => setCollapsed(true)}
+          className="p-1 rounded"
+          title="Zwiń kolumnę"
+          style={{ color: 'var(--muted)' }}
+        >
+          <ChevronLeft size={15} />
+        </button>
         <div className="relative">
           <button
             onPointerDown={e => e.stopPropagation()}
@@ -150,7 +200,14 @@ export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onAr
       <div ref={setBodyRef} className="board-column-body flex-1 px-2 pt-2 overflow-y-auto">
         <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
           {cards.map(card => (
-            <BoardCard key={card.id} card={card} onOpen={onOpenCard} onRename={onRenameCard} />
+            <BoardCard
+              key={card.id}
+              card={card}
+              onOpen={onOpenCard}
+              onRename={onRenameCard}
+              removing={removingCardIds?.has(card.id)}
+              hidden={!!searchQuery && !card.tytul?.toLowerCase().includes(searchQuery)}
+            />
           ))}
         </SortableContext>
 
@@ -201,3 +258,5 @@ export default function BoardColumn({ column, cards, onOpenCard, onAddCard, onAr
     </div>
   )
 }
+
+export default memo(forwardRef(BoardColumn))

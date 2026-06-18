@@ -39,6 +39,15 @@ function ToastItem({ toast, onRemove }) {
     >
       <Icon size={16} style={{ flexShrink: 0, marginTop: 1 }} />
       <span className="flex-1 leading-snug">{toast.message}</span>
+      {toast.action && (
+        <button
+          onClick={() => { toast.action.onClick(); onRemove(toast.id) }}
+          className="underline flex-shrink-0"
+          style={{ fontWeight: 700 }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button onClick={() => onRemove(toast.id)} style={{ opacity: 0.7, flexShrink: 0 }}>
         <X size={14} />
       </button>
@@ -49,10 +58,10 @@ function ToastItem({ toast, onRemove }) {
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
-  const addToast = useCallback((message, type = 'success') => {
+  const addToast = useCallback((message, type = 'success', options = {}) => {
     const id = Date.now() + Math.random()
-    setToasts(prev => [...prev, { id, message, type }])
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+    setToasts(prev => [...prev, { id, message, type, action: options.action }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), options.duration ?? 4000)
   }, [])
 
   const removeToast = useCallback((id) => {
