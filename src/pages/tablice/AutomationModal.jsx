@@ -4,7 +4,7 @@ import { useToast } from '../../context/ToastContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import Modal from '../../components/Modal'
 import Spinner from '../../components/Spinner'
-import { Plus, Trash2, Pencil, Zap } from 'lucide-react'
+import { Plus, Trash2, Pencil, Zap, Sparkles } from 'lucide-react'
 
 const inputStyle = {
   background: 'var(--input-bg)',
@@ -19,6 +19,24 @@ const inputStyle = {
   boxSizing: 'border-box',
 }
 
+function stripPl(s) {
+  return (s || '').toLowerCase()
+    .replace(/ą/g, 'a').replace(/ć/g, 'c').replace(/ę/g, 'e').replace(/ł/g, 'l')
+    .replace(/ń/g, 'n').replace(/ó/g, 'o').replace(/ś/g, 's').replace(/ź/g, 'z').replace(/ż/g, 'z')
+}
+
+const CORE_TEMPLATE = [
+  { symbol: '!', keyword: 'zmiana', label: 'Zmiana' },
+  { symbol: '+', keyword: 'przyjazd', label: 'Przyjazd' },
+  { symbol: '-', keyword: 'wyjazd', label: 'Wyjazd' },
+]
+
+const REGIONAL_TEMPLATE = [
+  { targetKeyword: 'polwysep', label: 'Półwysep', symbols: ['hel', 'jas', 'jur'] },
+  { targetKeyword: 'mechelinki', label: 'Mechelinki', symbols: ['mech'] },
+  { targetKeyword: 'zagranica', label: 'Zagranica', symbols: ['wł', 'puck'] },
+]
+
 export default function AutomationModal({ tablicaId, lists, onClose }) {
   const { addToast } = useToast()
   const { wsData } = useWorkspace()
@@ -30,6 +48,10 @@ export default function AutomationModal({ tablicaId, lists, onClose }) {
   const [slowo, setSlowo] = useState('')
   const [listaId, setListaId] = useState(lists[0]?.id || '')
   const [saving, setSaving] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [templatePicks, setTemplatePicks] = useState({ '!': '', '+': '', '-': '' })
+  const [applyingTemplate, setApplyingTemplate] = useState(false)
 
   async function fetchRules() {
     const { data, error } = await supabase
@@ -48,10 +70,15 @@ export default function AutomationModal({ tablicaId, lists, onClose }) {
     return lists.find(l => l.id === id)?.nazwa || '?'
   }
 
+  function findListId(keyword) {
+    return lists.find(l => stripPl(l.nazwa).includes(keyword))?.id || ''
+  }
+
   function openAddForm() {
     setEditingId(null)
     setSlowo('')
     setListaId(lists[0]?.id || '')
+    setConfirmDeleteId(null)
     setFormOpen(true)
   }
 
@@ -59,6 +86,7 @@ export default function AutomationModal({ tablicaId, lists, onClose }) {
     setEditingId(rule.id)
     setSlowo(rule.slowo_kluczowe)
     setListaId(rule.lista_docelowa_id)
+    setConfirmDeleteId(null)
     setFormOpen(true)
   }
 
@@ -92,9 +120,63 @@ export default function AutomationModal({ tablicaId, lists, onClose }) {
   }
 
   async function deleteRule(ruleId) {
+    setConfirmDeleteId(null)
     setRules(prev => prev.filter(r => r.id !== ruleId))
     const { error } = await supabase.from('reguly_tablic').delete().eq('id', ruleId)
     if (error) { addToast(error.message, 'error'); fetchRules() }
+  }
+
+  function nextPozycja(count) {
+    return rules.length ? Math.max(...rules.map(r => r.pozycja)) + 1 + count : count
+  }
+
+  async function insertTemplateRules(rows) {
+    const existingSymbols = new Set(rules.map(r => r.slowo_kluczowe))
+    const toInsert = rows.filter(r => !existingSymbols.has(r.slowo_kluczowe))
+    if (toInsert.length === 0) {
+      addToast('Te reguły już istnieją', 'info')
+      return
+    }
+    setApplyingTemplate(true)
+    const { error } = await supabase.from('reguly_tablic').insert(
+      toInsert.map((r, i) => ({
+        tablica_id: tablicaId,
+        slowo_kluczowe: r.slowo_kluczowe,
+        lista_docelowa_id: r.lista_docelowa_id,
+        pozycja: nextPozycja(i),
+        ...wsData(),
+      }))
+    )
+    if (error) addToast(error.message, 'error')
+    else addToast('Dodano reguły', 'success')
+    setApplyingTemplate(false)
+    fetchRules()
+  }
+
+  function handleBlueApartClick() {
+    const picks = {}
+    CORE_TEMPLATE.forEach(t => { picks[t.symbol] = findListId(t.keyword) })
+    if (CORE_TEMPLATE.every(t => picks[t.symbol])) {
+      insertTemplateRules(CORE_TEMPLATE.map(t => ({ slowo_kluczowe: t.symbol, lista_docelowa_id: picks[t.symbol] })))
+    } else {
+      setTemplatePicks(picks)
+      setTemplatePickerOpen(true)
+    }
+  }
+
+  async function applyTemplatePicks() {
+    if (!CORE_TEMPLATE.every(t => templatePicks[t.symbol])) return
+    await insertTemplateRules(CORE_TEMPLATE.map(t => ({ slowo_kluczowe: t.symbol, lista_docelowa_id: templatePicks[t.symbol] })))
+    setTemplatePickerOpen(false)
+  }
+
+  const regionalMatches = REGIONAL_TEMPLATE
+    .map(t => ({ ...t, listaId: findListId(t.targetKeyword) }))
+    .filter(t => t.listaId)
+
+  function handleRegionalClick() {
+    const rows = regionalMatches.flatMap(t => t.symbols.map(symbol => ({ slowo_kluczowe: symbol, lista_docelowa_id: t.listaId })))
+    insertTemplateRules(rows)
   }
 
   return (
@@ -131,14 +213,83 @@ export default function AutomationModal({ tablicaId, lists, onClose }) {
                     width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.15s',
                   }} />
                 </button>
-                <button onClick={() => openEditForm(rule)} className="p-1 rounded flex-shrink-0" style={{ color: 'var(--muted)' }}>
-                  <Pencil size={14} />
-                </button>
-                <button onClick={() => deleteRule(rule.id)} className="p-1 rounded flex-shrink-0" style={{ color: 'var(--c-danger, #dc2626)' }}>
-                  <Trash2 size={14} />
-                </button>
+                {confirmDeleteId === rule.id ? (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => deleteRule(rule.id)} className="rounded-lg px-2 py-1 text-xs font-medium text-white" style={{ background: 'var(--c-critical)' }}>Usuń</button>
+                    <button onClick={() => setConfirmDeleteId(null)} className="rounded-lg px-2 py-1 text-xs font-medium" style={{ background: 'var(--table-sub)', color: 'var(--text-2)' }}>Anuluj</button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => openEditForm(rule)} className="p-1 rounded flex-shrink-0" style={{ color: 'var(--muted)' }}>
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => setConfirmDeleteId(rule.id)} className="p-1 rounded flex-shrink-0" style={{ color: 'var(--c-critical)' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
               </div>
             ))}
+          </div>
+        )}
+
+        {!formOpen && !templatePickerOpen && (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleBlueApartClick}
+              disabled={applyingTemplate}
+              className="flex items-center gap-1.5 w-full px-3 py-2.5 rounded-[var(--radius-card)] text-sm font-medium"
+              style={{ background: 'var(--c-action-subtle)', color: 'var(--c-action)', minHeight: 44, opacity: applyingTemplate ? 0.6 : 1 }}
+            >
+              <Sparkles size={15} /> Dodaj gotowe reguły (Zmiana / Przyjazd / Wyjazd)
+            </button>
+            {regionalMatches.length > 0 && (
+              <button
+                onClick={handleRegionalClick}
+                disabled={applyingTemplate}
+                className="flex items-center gap-1.5 w-full px-3 py-2.5 rounded-[var(--radius-card)] text-sm font-medium"
+                style={{ background: 'var(--hover-bg)', color: 'var(--text-2)', minHeight: 44, opacity: applyingTemplate ? 0.6 : 1 }}
+              >
+                <Sparkles size={15} /> Dodaj reguły regionalne ({regionalMatches.map(t => t.label).join(' / ')})
+              </button>
+            )}
+          </div>
+        )}
+
+        {templatePickerOpen && (
+          <div className="flex flex-col gap-3 rounded-lg p-3" style={{ border: '1px solid var(--border)' }}>
+            <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+              Ta tablica nie ma list Zmiana/Przyjazd/Wyjazd — utwórz je albo wybierz listy docelowe niżej.
+            </p>
+            {CORE_TEMPLATE.map(t => (
+              <div key={t.symbol}>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
+                  „{t.symbol}" → {t.label}
+                </label>
+                <select
+                  style={inputStyle}
+                  value={templatePicks[t.symbol]}
+                  onChange={e => setTemplatePicks(prev => ({ ...prev, [t.symbol]: e.target.value }))}
+                >
+                  <option value="">— wybierz listę —</option>
+                  {lists.map(l => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
+                </select>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={applyTemplatePicks}
+                disabled={applyingTemplate || !CORE_TEMPLATE.every(t => templatePicks[t.symbol])}
+                className="flex-1 rounded-[var(--radius-control)] text-sm font-medium text-white"
+                style={{ background: 'var(--c-action)', minHeight: 40, opacity: applyingTemplate || !CORE_TEMPLATE.every(t => templatePicks[t.symbol]) ? 0.6 : 1 }}
+              >
+                Zastosuj
+              </button>
+              <button type="button" onClick={() => setTemplatePickerOpen(false)} className="px-3 text-sm" style={{ color: 'var(--muted)' }}>
+                Anuluj
+              </button>
+            </div>
           </div>
         )}
 
@@ -168,7 +319,7 @@ export default function AutomationModal({ tablicaId, lists, onClose }) {
               </button>
             </div>
           </form>
-        ) : (
+        ) : !templatePickerOpen && (
           <button
             onClick={openAddForm}
             disabled={lists.length === 0}
