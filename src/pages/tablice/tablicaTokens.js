@@ -16,12 +16,14 @@ export const TYP_OPTIONS = [
   { value: 'lokale', label: 'Lokale' },
   { value: 'serwis', label: 'Serwis' },
   { value: 'ogolna', label: 'Ogólna' },
+  { value: 'robocza', label: 'Robocza' },
 ]
 
 export const TYP_LABELS = {
   lokale: 'Lokale',
   serwis: 'Serwis',
   ogolna: 'Ogólna',
+  robocza: 'Robocza',
 }
 
 // Fractional indexing: nowa pozycja pomiędzy prev i next (brzegi: null = brak sąsiada)

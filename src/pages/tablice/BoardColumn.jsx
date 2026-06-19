@@ -104,7 +104,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
         {...attributes}
         {...listeners}
         className="flex items-center gap-2 px-3 py-2.5 rounded-t-[var(--radius-card)] cursor-grab"
-        style={{ borderTop: `3px solid ${column.kolor || 'var(--c-action)'}` }}
+        style={{ borderTop: `3px solid ${column.kolor || 'var(--c-action)'}`, touchAction: 'none' }}
       >
         {editingName ? (
           <input

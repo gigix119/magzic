@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   DndContext, closestCorners, DragOverlay,
-  PointerSensor, KeyboardSensor, useSensor, useSensors,
+  MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
   SortableContext, horizontalListSortingStrategy,
@@ -87,7 +87,8 @@ export default function TablicaBoard() {
   useEffect(() => { cardsByListRef.current = cardsByList }, [cardsByList])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 

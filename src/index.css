@@ -452,6 +452,7 @@ body {
   border: 1px solid var(--border);
   transition: box-shadow 0.15s ease-out, transform 0.15s ease-out;
   animation: cardFadeIn 0.18s ease-out;
+  touch-action: none;
 }
 .board-card:hover { box-shadow: var(--shadow-md); }
 .board-card:active { transform: scale(1.02); }
