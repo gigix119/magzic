@@ -7,7 +7,8 @@ import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import { Kanban, Plus, LayoutGrid } from 'lucide-react'
-import { TABLICA_COLORS, TYP_OPTIONS, TYP_LABELS } from './tablice/tablicaTokens'
+import { TABLICA_COLORS, TYP_OPTIONS, TYP_LABELS, getBoardBackgroundStyle } from './tablice/tablicaTokens'
+import BoardBackgroundPicker from './tablice/BoardBackgroundPicker'
 
 const inputStyle = {
   background: 'var(--input-bg)',
@@ -32,7 +33,7 @@ export default function Tablice() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ nazwa: '', typ: 'ogolna', kolor: TABLICA_COLORS[0].value })
+  const [form, setForm] = useState({ nazwa: '', typ: 'ogolna', kolor: TABLICA_COLORS[0].value, tloTyp: 'solid' })
 
   async function fetchData() {
     if (!workspaceId) { setLoading(false); return }
@@ -55,7 +56,7 @@ export default function Tablice() {
   useEffect(() => { fetchData() }, [workspaceId])
 
   function openCreate() {
-    setForm({ nazwa: '', typ: 'ogolna', kolor: TABLICA_COLORS[Math.floor(Math.random() * TABLICA_COLORS.length)].value })
+    setForm({ nazwa: '', typ: 'ogolna', kolor: TABLICA_COLORS[Math.floor(Math.random() * TABLICA_COLORS.length)].value, tloTyp: 'solid' })
     setShowCreate(true)
   }
 
@@ -73,7 +74,7 @@ export default function Tablice() {
       setSaving(false)
       return
     }
-    await supabase.from('tablice').update({ kolor_tla: form.kolor }).eq('id', newId)
+    await supabase.from('tablice').update({ kolor_tla: form.kolor, tlo_typ: form.tloTyp }).eq('id', newId)
     setSaving(false)
     setShowCreate(false)
     navigate(`/tablice/${newId}`)
@@ -115,7 +116,7 @@ export default function Tablice() {
               onClick={() => navigate(`/tablice/${board.id}`)}
               className="text-left rounded-[var(--radius-card)] p-4 flex flex-col justify-between transition-transform"
               style={{
-                background: board.kolor_tla || '#5B8DEF',
+                ...getBoardBackgroundStyle(board.kolor_tla, board.tlo_typ),
                 minHeight: 120,
                 boxShadow: 'var(--shadow-sm)',
                 color: '#fff',
@@ -130,7 +131,7 @@ export default function Tablice() {
                 >
                   {TYP_LABELS[board.typ] || board.typ}
                 </span>
-                <h3 className="font-semibold text-[15px] leading-snug">{board.nazwa}</h3>
+                <h3 className="font-semibold text-[15px] leading-snug" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.35)' }}>{board.nazwa}</h3>
               </div>
               <div className="text-xs opacity-90 mt-3">
                 {cardCounts[board.id] || 0} {(cardCounts[board.id] || 0) === 1 ? 'karta' : 'kart'}
@@ -190,25 +191,13 @@ export default function Tablice() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>Kolor</label>
-              <div className="flex gap-2 flex-wrap">
-                {TABLICA_COLORS.map(c => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    title={c.label}
-                    onClick={() => setForm(f => ({ ...f, kolor: c.value }))}
-                    className="rounded-full transition-transform"
-                    style={{
-                      width: 32, height: 32,
-                      background: c.value,
-                      outline: form.kolor === c.value ? '2px solid var(--text)' : 'none',
-                      outlineOffset: 2,
-                      transform: form.kolor === c.value ? 'scale(1.1)' : 'none',
-                    }}
-                  />
-                ))}
-              </div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>Tło</label>
+              <BoardBackgroundPicker
+                kolorTla={form.kolor}
+                tloTyp={form.tloTyp}
+                onChange={(value, tloTyp) => setForm(f => ({ ...f, kolor: value, tloTyp }))}
+                showPhotos={false}
+              />
             </div>
 
             <button

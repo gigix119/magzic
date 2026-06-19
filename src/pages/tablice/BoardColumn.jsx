@@ -3,9 +3,9 @@ import { useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Archive, Palette, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, MoreHorizontal, Archive, Palette, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import BoardCard from './BoardCard'
-import { TABLICA_COLORS } from './tablicaTokens'
+import { TABLICA_COLORS, hexToRgba } from './tablicaTokens'
 
 function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor, isDropTarget, removingCardIds, searchQuery }, ref) {
   const [composerOpen, setComposerOpen] = useState(false)
@@ -94,17 +94,21 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
     )
   }
 
+  const accent = column.kolor || null
+
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, background: accent ? hexToRgba(accent, 0.1) : undefined }}
       className={`board-column flex-shrink-0 flex flex-col rounded-[var(--radius-card)]${isDropTarget ? ' board-column-droptarget' : ''}`}
     >
       <div
         {...attributes}
         {...listeners}
         className="flex items-center gap-2 px-3 py-2.5 rounded-t-[var(--radius-card)] cursor-grab"
-        style={{ borderTop: `3px solid ${column.kolor || 'var(--c-action)'}`, touchAction: 'none' }}
+        style={accent
+          ? { background: accent, touchAction: 'none' }
+          : { borderTop: '3px solid var(--c-action)', touchAction: 'none' }}
       >
         {editingName ? (
           <input
@@ -120,14 +124,16 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
           <span
             onClick={() => setEditingName(true)}
             className="text-[13.5px] font-semibold flex-1 truncate"
-            style={{ color: 'var(--text)' }}
+            style={{ color: accent ? '#fff' : 'var(--text)' }}
           >
             {column.nazwa}
           </span>
         )}
         <span
           className="text-[11px] font-medium rounded-full px-1.5"
-          style={{ background: 'var(--hover-bg)', color: 'var(--text-2)', minWidth: 20, textAlign: 'center' }}
+          style={accent
+            ? { background: 'rgba(255,255,255,0.28)', color: '#fff', minWidth: 20, textAlign: 'center' }
+            : { background: 'var(--hover-bg)', color: 'var(--text-2)', minWidth: 20, textAlign: 'center' }}
         >
           {searchQuery ? `${visibleCount}/${cards.length}` : cards.length}
         </span>
@@ -136,7 +142,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
           onClick={() => setCollapsed(true)}
           className="p-1 rounded"
           title="Zwiń kolumnę"
-          style={{ color: 'var(--muted)' }}
+          style={{ color: accent ? 'rgba(255,255,255,0.85)' : 'var(--muted)' }}
         >
           <ChevronLeft size={15} />
         </button>
@@ -145,7 +151,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
             onPointerDown={e => e.stopPropagation()}
             onClick={() => setMenuOpen(o => !o)}
             className="p-1 rounded"
-            style={{ color: 'var(--muted)' }}
+            style={{ color: accent ? 'rgba(255,255,255,0.85)' : 'var(--muted)' }}
           >
             <MoreHorizontal size={15} />
           </button>
@@ -158,6 +164,18 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               {colorPickerOpen ? (
                 <div className="px-3 py-2">
                   <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      title="Brak"
+                      onClick={() => { onChangeListColor(column.id, null); setMenuOpen(false); setColorPickerOpen(false) }}
+                      className="rounded-full flex items-center justify-center"
+                      style={{
+                        width: 22, height: 22, background: 'var(--hover-bg)', border: '1px solid var(--border)',
+                        outline: !column.kolor ? '2px solid var(--text)' : 'none', outlineOffset: 2,
+                      }}
+                    >
+                      <X size={11} style={{ color: 'var(--text-2)' }} />
+                    </button>
                     {TABLICA_COLORS.map(c => (
                       <button
                         key={c.value}

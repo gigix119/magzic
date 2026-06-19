@@ -419,6 +419,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 5;
+  background: rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -431,10 +432,15 @@ body {
 
 .board-column {
   width: 272px;
-  background: var(--hover-bg);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 220px);
+}
+:root[data-theme="dark"] .board-column {
+  background: rgba(24, 24, 27, 0.78);
 }
 
 .board-column-body {
@@ -511,8 +517,13 @@ body {
 /* Zwinięta kolumna — wąski pasek jak w Trello */
 .board-column-collapsed {
   width: 44px;
-  background: var(--hover-bg);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   min-height: 120px;
+}
+:root[data-theme="dark"] .board-column-collapsed {
+  background: rgba(24, 24, 27, 0.78);
 }
 
 /* Wskaźnik aktywnej kolumny (karuzela) — tylko mobile */

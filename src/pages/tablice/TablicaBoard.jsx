@@ -11,13 +11,14 @@ import {
 import { supabase } from '../../supabase'
 import { useToast } from '../../context/ToastContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { ArrowLeft, Plus, MoreHorizontal, Zap, Search, X, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, Plus, MoreHorizontal, Zap, Search, X, LayoutGrid, Image as ImageIcon } from 'lucide-react'
 import EmptyState from '../../components/ui/EmptyState'
 import BottomSheet from '../../components/ui/BottomSheet'
 import BoardColumn from './BoardColumn'
 import CardDetailModal from './CardDetailModal'
 import AutomationModal from './AutomationModal'
-import { TABLICA_COLORS, positionBetween, prefersReducedMotion } from './tablicaTokens'
+import BoardBackgroundPicker from './BoardBackgroundPicker'
+import { positionBetween, prefersReducedMotion, getBoardBackgroundStyle } from './tablicaTokens'
 
 function findContainer(id, cardsByList) {
   if (typeof id === 'string' && id.startsWith('colbody:')) return id.slice(8)
@@ -68,6 +69,7 @@ export default function TablicaBoard() {
   const [titleDraft, setTitleDraft] = useState('')
   const [boardMenuOpen, setBoardMenuOpen] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [bgPickerOpen, setBgPickerOpen] = useState(false)
 
   const [addingList, setAddingList] = useState(false)
   const [listDraft, setListDraft] = useState('')
@@ -97,7 +99,7 @@ export default function TablicaBoard() {
       addWsFilter(wsQuery('tablice').select('*')).eq('id', id).maybeSingle(),
       addWsFilter(wsQuery('listy').select('*')).eq('tablica_id', id).eq('archiwum', false).order('pozycja'),
       addWsFilter(wsQuery('karty').select('*')).eq('tablica_id', id).eq('archiwum', false).order('pozycja'),
-      addWsFilter(wsQuery('tablice').select('id,nazwa,kolor_tla')).eq('archiwum', false).order('pozycja'),
+      addWsFilter(wsQuery('tablice').select('id,nazwa,kolor_tla,tlo_typ')).eq('archiwum', false).order('pozycja'),
     ])
     if (be) addToast(be.message, 'error')
     setBoard(b || null)
@@ -123,10 +125,9 @@ export default function TablicaBoard() {
     if (error) addToast(error.message, 'error')
   }
 
-  async function changeColor(color) {
-    setBoard(prev => ({ ...prev, kolor_tla: color }))
-    setBoardMenuOpen(false)
-    const { error } = await supabase.from('tablice').update({ kolor_tla: color }).eq('id', id)
+  async function changeBackground(kolorTla, tloTyp) {
+    setBoard(prev => ({ ...prev, kolor_tla: kolorTla, tlo_typ: tloTyp }))
+    const { error } = await supabase.from('tablice').update({ kolor_tla: kolorTla, tlo_typ: tloTyp }).eq('id', id)
     if (error) addToast(error.message, 'error')
   }
 
@@ -418,10 +419,12 @@ export default function TablicaBoard() {
   const activeList = activeType === 'list' ? lists.find(l => l.id === activeId) : null
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 96px)' }}>
+    <div
+      className="board-bg flex flex-col -mx-3 -mt-3 px-3 pt-3 md:-mx-6 md:-mt-6 md:px-6 md:pt-6"
+      style={{ height: 'calc(100vh - 96px)', ...getBoardBackgroundStyle(board.kolor_tla, board.tlo_typ) }}
+    >
       <div
         className="board-topbar flex items-center gap-2 px-4 py-3 rounded-[var(--radius-card)] mb-2 flex-shrink-0"
-        style={{ background: `${board.kolor_tla || '#5B8DEF'}e6` }}
       >
         <button onClick={() => navigate('/tablice')} className="p-1 rounded-lg text-white opacity-90 flex-shrink-0">
           <ArrowLeft size={18} />
@@ -445,7 +448,7 @@ export default function TablicaBoard() {
           <h1
             onClick={() => setEditingTitle(true)}
             className="text-[16px] font-semibold flex-1 truncate cursor-text"
-            style={{ color: '#fff' }}
+            style={{ color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.35)' }}
           >
             {board.nazwa}
           </h1>
@@ -470,22 +473,13 @@ export default function TablicaBoard() {
               >
                 <Zap size={14} /> Automatyzacja
               </button>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>Kolor tablicy</p>
-              <div className="flex gap-2 flex-wrap">
-                {TABLICA_COLORS.map(c => (
-                  <button
-                    key={c.value}
-                    title={c.label}
-                    onClick={() => changeColor(c.value)}
-                    className="rounded-full"
-                    style={{
-                      width: 26, height: 26, background: c.value,
-                      outline: board.kolor_tla === c.value ? '2px solid var(--text)' : 'none',
-                      outlineOffset: 2,
-                    }}
-                  />
-                ))}
-              </div>
+              <button
+                onClick={() => { setBoardMenuOpen(false); setBgPickerOpen(true) }}
+                className="flex items-center gap-2 w-full px-1 py-1.5 text-left text-sm"
+                style={{ color: 'var(--text)' }}
+              >
+                <ImageIcon size={14} /> Zmień tło
+              </button>
             </div>
           )}
         </div>
@@ -658,11 +652,19 @@ export default function TablicaBoard() {
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left"
               style={{ background: b.id === id ? 'var(--hover-bg)' : 'transparent', minHeight: 44 }}
             >
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: b.kolor_tla || '#5B8DEF', flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, ...getBoardBackgroundStyle(b.kolor_tla, b.tlo_typ) }} />
               <span className="text-sm font-medium flex-1 truncate" style={{ color: 'var(--text)' }}>{b.nazwa}</span>
             </button>
           ))}
         </div>
+      </BottomSheet>
+
+      <BottomSheet open={bgPickerOpen} onClose={() => setBgPickerOpen(false)} title="Zmień tło">
+        <BoardBackgroundPicker
+          kolorTla={board.kolor_tla}
+          tloTyp={board.tlo_typ}
+          onChange={changeBackground}
+        />
       </BottomSheet>
     </div>
   )
