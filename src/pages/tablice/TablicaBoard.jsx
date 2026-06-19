@@ -597,13 +597,13 @@ export default function TablicaBoard() {
 
         <DragOverlay>
           {activeCard && (
-            <div className="board-card board-card-overlay rounded-[12px] p-3" style={{ width: 248 }}>
+            <div className="board-card board-card-overlay rounded-[10px] p-3" style={{ width: 248 }}>
               <p className="text-[13.5px] leading-snug font-medium" style={{ color: 'var(--text)' }}>{activeCard.tytul}</p>
             </div>
           )}
           {activeList && (
             <div
-              className="rounded-[var(--radius-card)] px-3 py-2.5 board-card-overlay"
+              className="rounded-[14px] px-3 py-2.5 board-card-overlay"
               style={{ width: 272, borderTop: `3px solid ${activeList.kolor || 'var(--c-action)'}` }}
             >
               <span className="text-[13.5px] font-semibold" style={{ color: 'var(--text)' }}>{activeList.nazwa}</span>

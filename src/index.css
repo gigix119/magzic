@@ -432,15 +432,18 @@ body {
 
 .board-column {
   width: 272px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 220px);
 }
 :root[data-theme="dark"] .board-column {
-  background: rgba(24, 24, 27, 0.78);
+  background: rgba(24, 24, 27, 0.85);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .board-column-body {
@@ -460,8 +463,10 @@ body {
   animation: cardFadeIn 0.18s ease-out;
   touch-action: none;
 }
-.board-card:hover { box-shadow: var(--shadow-md); }
-.board-card:active { transform: scale(1.02); }
+@media (hover: hover) and (pointer: fine) {
+  .board-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md), 0 6px 16px rgba(0,0,0,0.08); }
+}
+.board-card:active { transform: scale(0.98); }
 
 .board-card-overlay {
   background: var(--c-surface);
@@ -517,13 +522,7 @@ body {
 /* Zwinięta kolumna — wąski pasek jak w Trello */
 .board-column-collapsed {
   width: 44px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   min-height: 120px;
-}
-:root[data-theme="dark"] .board-column-collapsed {
-  background: rgba(24, 24, 27, 0.78);
 }
 
 /* Wskaźnik aktywnej kolumny (karuzela) — tylko mobile */

@@ -38,10 +38,17 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
     opacity: isDragging ? 0.5 : 1,
   }
 
+  function autoGrow(el) {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }
+
   function submitDraft() {
     const text = draft.trim()
     if (text) onAddCard(column.id, text)
     setDraft('')
+    requestAnimationFrame(() => autoGrow(textareaRef.current))
     textareaRef.current?.focus()
   }
 
@@ -67,7 +74,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
       <div
         ref={setNodeRef}
         style={style}
-        className="board-column board-column-collapsed flex-shrink-0 flex flex-col items-center rounded-[var(--radius-card)] cursor-pointer"
+        className="board-column board-column-collapsed flex-shrink-0 flex flex-col items-center rounded-[14px] cursor-pointer"
         onClick={() => setCollapsed(false)}
         title={`Rozwiń „${column.nazwa}"`}
       >
@@ -100,12 +107,12 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
     <div
       ref={setNodeRef}
       style={{ ...style, background: accent ? hexToRgba(accent, 0.1) : undefined }}
-      className={`board-column flex-shrink-0 flex flex-col rounded-[var(--radius-card)]${isDropTarget ? ' board-column-droptarget' : ''}`}
+      className={`board-column flex-shrink-0 flex flex-col rounded-[14px]${isDropTarget ? ' board-column-droptarget' : ''}`}
     >
       <div
         {...attributes}
         {...listeners}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-t-[var(--radius-card)] cursor-grab"
+        className="flex items-center gap-2 px-3 py-2.5 rounded-t-[14px] cursor-grab"
         style={accent
           ? { background: accent, touchAction: 'none' }
           : { borderTop: '3px solid var(--c-action)', touchAction: 'none' }}
@@ -235,15 +242,15 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               ref={textareaRef}
               autoFocus
               value={draft}
-              onChange={e => setDraft(e.target.value)}
+              onChange={e => { setDraft(e.target.value); autoGrow(e.target) }}
               onKeyDown={handleKeyDown}
               onBlur={() => { if (!draft.trim()) setComposerOpen(false) }}
               placeholder="Tytuł karty…"
-              rows={2}
+              rows={1}
               style={{
                 width: '100%', fontSize: 16, padding: '8px 10px', borderRadius: 10,
                 border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)',
-                resize: 'none', outline: 'none',
+                resize: 'none', outline: 'none', overflow: 'hidden', minHeight: 38,
               }}
             />
             <div className="flex items-center gap-2 mt-1.5">
@@ -252,14 +259,15 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
                 className="px-3 rounded-[var(--radius-control)] text-sm font-medium text-white"
                 style={{ background: 'var(--c-action)', minHeight: 36 }}
               >
-                Dodaj
+                Dodaj kartę
               </button>
               <button
                 onClick={() => { setComposerOpen(false); setDraft('') }}
-                className="px-2 text-sm"
+                className="p-1.5 rounded"
+                title="Zamknij"
                 style={{ color: 'var(--muted)' }}
               >
-                Anuluj
+                <X size={16} />
               </button>
             </div>
           </div>

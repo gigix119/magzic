@@ -99,6 +99,14 @@ export function terminStatus(termin, zakonczona) {
   return 'neutral'
 }
 
+// Stabilny kolor awatara wg hashu nazwy (zamiast jednego stałego koloru dla wszystkich)
+export function hashColor(str) {
+  if (!str) return TABLICA_COLORS[0].value
+  let hash = 0
+  for (let i = 0; i < str.length; i++) hash = (hash << 5) - hash + str.charCodeAt(i) | 0
+  return TABLICA_COLORS[Math.abs(hash) % TABLICA_COLORS.length].value
+}
+
 export function prefersReducedMotion() {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 }

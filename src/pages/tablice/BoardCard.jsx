@@ -2,12 +2,12 @@ import { useState, memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CheckCircle2, Calendar } from 'lucide-react'
-import { formatTermin, terminStatus } from './tablicaTokens'
+import { formatTermin, terminStatus, hashColor } from './tablicaTokens'
 
-const TERMIN_COLOR = {
-  overdue: 'var(--c-critical)',
-  soon: 'var(--c-attention)',
-  neutral: 'var(--text-2)',
+const TERMIN_STYLE = {
+  overdue: { color: 'var(--c-critical)', background: 'var(--c-critical-subtle)' },
+  soon: { color: 'var(--c-attention)', background: 'var(--c-attention-subtle)' },
+  neutral: { color: 'var(--text-2)', background: 'var(--hover-bg)' },
 }
 
 function BoardCard({ card, onOpen, onRename, removing, hidden }) {
@@ -49,7 +49,7 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
       {...attributes}
       {...listeners}
       onClick={() => !isDragging && !editingTitle && onOpen(card)}
-      className={`board-card rounded-[12px] p-3 mb-2 cursor-pointer select-none${removing ? ' board-card-removing' : ''}`}
+      className={`board-card rounded-[10px] p-3 mb-2 cursor-pointer select-none${removing ? ' board-card-removing' : ''}`}
     >
       {etykiety.length > 0 && (
         <div className="flex gap-1 mb-1.5 flex-wrap">
@@ -87,8 +87,11 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
         <div className="flex items-center gap-3 mt-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
           {card.zakonczona && <CheckCircle2 size={14} style={{ color: 'var(--c-success)' }} />}
           {card.termin && (
-            <span className="flex items-center gap-1" style={{ color: TERMIN_COLOR[status] }}>
-              <Calendar size={12} /> {formatTermin(card.termin)}
+            <span
+              className="flex items-center gap-1 rounded-full px-1.5"
+              style={{ color: TERMIN_STYLE[status].color, background: TERMIN_STYLE[status].background, height: 20 }}
+            >
+              <Calendar size={11} /> {formatTermin(card.termin)}
             </span>
           )}
           {przypisani.length > 0 && (
@@ -99,7 +102,7 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
                   className="flex items-center justify-center rounded-full text-white font-semibold"
                   style={{
                     width: 20, height: 20, fontSize: 9,
-                    background: 'var(--c-action)',
+                    background: hashColor(String(p)),
                     border: '1.5px solid var(--c-surface)',
                   }}
                 >
