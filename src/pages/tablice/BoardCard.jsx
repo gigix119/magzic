@@ -1,7 +1,7 @@
 import { useState, memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckCircle2, Calendar } from 'lucide-react'
+import { CheckCircle2, Calendar, ListChecks } from 'lucide-react'
 import { formatTermin, terminStatus, hashColor } from './tablicaTokens'
 
 const TERMIN_STYLE = {
@@ -28,6 +28,8 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
 
   const etykiety = Array.isArray(card.etykiety) ? card.etykiety : []
   const przypisani = Array.isArray(card.przypisani) ? card.przypisani : []
+  const checklista = Array.isArray(card.checklista) ? card.checklista : []
+  const checklistDone = checklista.filter(it => it.done).length
   const status = terminStatus(card.termin, card.zakonczona)
 
   function startEdit(e) {
@@ -83,9 +85,17 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
         </p>
       )}
 
-      {(card.termin || przypisani.length > 0 || card.zakonczona) && (
+      {(card.termin || przypisani.length > 0 || card.zakonczona || checklista.length > 0) && (
         <div className="flex items-center gap-3 mt-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
           {card.zakonczona && <CheckCircle2 size={14} style={{ color: 'var(--c-success)' }} />}
+          {checklista.length > 0 && (
+            <span
+              className="flex items-center gap-1"
+              style={{ color: checklistDone === checklista.length ? 'var(--c-success)' : 'var(--text-2)' }}
+            >
+              <ListChecks size={12} /> {checklistDone}/{checklista.length}
+            </span>
+          )}
           {card.termin && (
             <span
               className="flex items-center gap-1 rounded-full px-1.5"

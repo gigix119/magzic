@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Modal from '../../components/Modal'
-import { Trash2, Archive, CheckCircle2, Circle, X, ArrowRightLeft, Copy } from 'lucide-react'
-import { TABLICA_COLORS } from './tablicaTokens'
+import { Trash2, Archive, CheckCircle2, Circle, X, ArrowRightLeft, Copy, ChevronUp, ChevronDown, ListChecks, Plus } from 'lucide-react'
+import { TABLICA_COLORS, CHECKLIST_TEMPLATES } from './tablicaTokens'
 
 const inputStyle = {
   background: 'var(--input-bg)',
@@ -33,6 +33,13 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const otherLists = (lists || []).filter(l => l.id !== card.lista_id)
   const [targetListaId, setTargetListaId] = useState(otherLists[0]?.id || '')
+  const [checklista, setChecklista] = useState(Array.isArray(card.checklista) ? card.checklista : [])
+  const [newItemText, setNewItemText] = useState('')
+  const [editingItemId, setEditingItemId] = useState(null)
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState(null)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const doneCount = checklista.filter(it => it.done).length
+  const percent = checklista.length ? Math.round((doneCount / checklista.length) * 100) : 0
 
   function save(fields) {
     onSave(card.id, fields)
@@ -81,6 +88,56 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
       save({ etykiety: next })
       return next
     })
+  }
+
+  function saveChecklist(next) {
+    const withPositions = next.map((it, i) => ({ ...it, pozycja: i }))
+    setChecklista(withPositions)
+    save({ checklista: withPositions })
+  }
+
+  function toggleItemDone(itemId) {
+    saveChecklist(checklista.map(it => (it.id === itemId ? { ...it, done: !it.done } : it)))
+  }
+
+  function addChecklistItem(text) {
+    const tekst = text.trim()
+    if (!tekst) return
+    saveChecklist([...checklista, { id: crypto.randomUUID(), tekst, done: false, pozycja: checklista.length }])
+  }
+
+  function handleAddItemSubmit(e) {
+    e.preventDefault()
+    addChecklistItem(newItemText)
+    setNewItemText('')
+  }
+
+  function addTemplate(items) {
+    const additions = items.map((tekst, i) => ({ id: crypto.randomUUID(), tekst, done: false, pozycja: checklista.length + i }))
+    saveChecklist([...checklista, ...additions])
+    setTemplatesOpen(false)
+  }
+
+  function commitItemText(itemId, text) {
+    const tekst = text.trim()
+    setEditingItemId(null)
+    if (!tekst) return
+    saveChecklist(checklista.map(it => (it.id === itemId ? { ...it, tekst } : it)))
+  }
+
+  function removeChecklistItem(itemId) {
+    if (confirmingRemoveId !== itemId) { setConfirmingRemoveId(itemId); return }
+    setConfirmingRemoveId(null)
+    saveChecklist(checklista.filter(it => it.id !== itemId))
+  }
+
+  function moveChecklistItem(itemId, direction) {
+    const index = checklista.findIndex(it => it.id === itemId)
+    const target = index + direction
+    if (index === -1 || target < 0 || target >= checklista.length) return
+    const next = [...checklista]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    saveChecklist(next)
   }
 
   function handleDeleteClick() {
@@ -188,6 +245,138 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
               ))}
             </div>
           )}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+              <ListChecks size={14} />
+              Checklista{checklista.length > 0 ? ` ${doneCount}/${checklista.length} (${percent}%)` : ''}
+            </label>
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen(o => !o)}
+              className="text-xs font-medium"
+              style={{ color: 'var(--c-action)', minHeight: 28 }}
+            >
+              Wstaw szablon
+            </button>
+          </div>
+
+          {checklista.length > 0 && (
+            <div className="rounded-full overflow-hidden mb-2.5" style={{ height: 6, background: 'var(--hover-bg)' }}>
+              <div
+                style={{
+                  height: '100%', width: `${percent}%`,
+                  background: percent === 100 ? 'var(--c-success)' : 'var(--c-action)',
+                  transition: 'width 0.2s',
+                }}
+              />
+            </div>
+          )}
+
+          {templatesOpen && (
+            <div className="flex flex-col gap-1.5 mb-2.5">
+              {CHECKLIST_TEMPLATES.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => addTemplate(t.items)}
+                  className="text-left text-sm px-3 rounded-[var(--radius-control)]"
+                  style={{ background: 'var(--hover-bg)', color: 'var(--text)', minHeight: 40 }}
+                >
+                  {t.nazwa} <span style={{ color: 'var(--text-2)' }}>({t.items.length})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {checklista.length > 0 && (
+            <div className="flex flex-col gap-0.5 mb-2">
+              {checklista.map((item, i) => (
+                <div key={item.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleItemDone(item.id)}
+                    className="flex items-center justify-center flex-shrink-0"
+                    style={{ color: item.done ? 'var(--c-success)' : 'var(--text-2)', width: 40, height: 44 }}
+                  >
+                    {item.done ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+                  </button>
+
+                  {editingItemId === item.id ? (
+                    <input
+                      autoFocus
+                      defaultValue={item.tekst}
+                      onBlur={ev => commitItemText(item.id, ev.target.value)}
+                      onKeyDown={ev => { if (ev.key === 'Enter') ev.target.blur(); if (ev.key === 'Escape') setEditingItemId(null) }}
+                      style={{ ...inputStyle, minHeight: 36, padding: '6px 10px', fontSize: 13.5, flex: 1 }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => setEditingItemId(item.id)}
+                      className="text-[13.5px] flex-1"
+                      style={{
+                        color: item.done ? 'var(--text-2)' : 'var(--text)',
+                        textDecoration: item.done ? 'line-through' : 'none',
+                        opacity: item.done ? 0.7 : 1,
+                        cursor: 'text',
+                        minHeight: 44,
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {item.tekst}
+                    </span>
+                  )}
+
+                  <div className="flex items-center flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveChecklistItem(item.id, -1)}
+                      disabled={i === 0}
+                      style={{ color: 'var(--muted)', opacity: i === 0 ? 0.3 : 1, width: 26, height: 44 }}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveChecklistItem(item.id, 1)}
+                      disabled={i === checklista.length - 1}
+                      style={{ color: 'var(--muted)', opacity: i === checklista.length - 1 ? 0.3 : 1, width: 26, height: 44 }}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeChecklistItem(item.id)}
+                      onBlur={() => setConfirmingRemoveId(null)}
+                      title={confirmingRemoveId === item.id ? 'Na pewno?' : 'Usuń'}
+                      style={{ color: confirmingRemoveId === item.id ? 'var(--c-critical)' : 'var(--muted)', width: 30, height: 44, flexShrink: 0 }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={handleAddItemSubmit} className="flex items-center gap-2">
+            <input
+              value={newItemText}
+              onChange={ev => setNewItemText(ev.target.value)}
+              placeholder="Dodaj element…"
+              style={{ ...inputStyle, minHeight: 40, padding: '8px 10px', fontSize: 14, flex: 1 }}
+            />
+            <button
+              type="submit"
+              className="flex items-center justify-center rounded-[var(--radius-control)] flex-shrink-0"
+              style={{ background: 'var(--hover-bg)', color: 'var(--text)', width: 40, height: 40 }}
+            >
+              <Plus size={16} />
+            </button>
+          </form>
         </div>
 
         {otherLists.length > 0 && (

@@ -107,6 +107,12 @@ export function hashColor(str) {
   return TABLICA_COLORS[Math.abs(hash) % TABLICA_COLORS.length].value
 }
 
+// Szablony checklisty — wstawiane jako lista stringów, zamieniane na elementy w UI
+export const CHECKLIST_TEMPLATES = [
+  { id: 'sprzatanie', nazwa: 'Sprzątanie standardowe', items: ['Odkurzanie', 'Mycie łazienki', 'Kuchnia', 'Pościel', 'Ręczniki', 'Śmieci', 'Kontrola'] },
+  { id: 'przygotowanie', nazwa: 'Przygotowanie lokalu', items: ['Pościel', 'Ręczniki', 'Środki czystości', 'Test urządzeń', 'Zdjęcia'] },
+]
+
 export function prefersReducedMotion() {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 }
