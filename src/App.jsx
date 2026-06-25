@@ -23,7 +23,7 @@ import ZlecenieDetail from './pages/ZlecenieDetail'
 import Operacje from './pages/Operacje'
 import Lokale from './pages/Lokale'
 import LokalDetail from './pages/LokalDetail'
-import Tablice from './pages/Tablice'
+import TabliceSiatka from './pages/TabliceSiatka'
 import TablicaBoard from './pages/tablice/TablicaBoard'
 import Ustawienia from './pages/Ustawienia'
 import Regulamin from './pages/Regulamin'
@@ -92,7 +92,7 @@ export default function App() {
                   <Route path="/kontrahenci" element={<Kontrahenci />} />
                   <Route path="/lokale" element={<Lokale />} />
                   <Route path="/lokale/:id" element={<LokalDetail />} />
-                  <Route path="/tablice" element={<Tablice />} />
+                  <Route path="/tablice" element={<TabliceSiatka />} />
                   <Route path="/tablice/:id" element={<TablicaBoard />} />
                   <Route path="/faktury" element={<Faktury />} />
                   <Route path="/ustawienia" element={<Ustawienia />} />
