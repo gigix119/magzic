@@ -1,3 +1,13 @@
+// Kolory nagłówków list wnętrza tablicy — 1:1 z figma/src/tokens/tablicaTokens.ts (listaColors)
+export const LISTA_HEADER_COLORS = [
+  { value: '#0FA3B1', label: 'Teal' },
+  { value: '#5B4A9E', label: 'Fiolet' },
+  { value: '#C47A1E', label: 'Amber' },
+  { value: '#1F7A5C', label: 'Zielony' },
+  { value: '#8B2E2E', label: 'Czerwony' },
+  { value: '#2B4A6F', label: 'Granat' },
+]
+
 // Paleta kolorów tablic/list/etykiet — stonowane, nasycone pastele (nie korpo-niebieski Trello)
 export const TABLICA_COLORS = [
   { value: '#5B8DEF', label: 'Niebieski' },

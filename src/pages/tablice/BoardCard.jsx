@@ -1,13 +1,13 @@
 import { useState, memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckCircle2, Calendar, ListChecks } from 'lucide-react'
+import { CheckCircle2, Calendar, ListChecks, AlignLeft, Pencil } from 'lucide-react'
 import { formatTermin, terminStatus, hashColor } from './tablicaTokens'
 
 const TERMIN_STYLE = {
-  overdue: { color: 'var(--c-critical)', background: 'var(--c-critical-subtle)' },
-  soon: { color: 'var(--c-attention)', background: 'var(--c-attention-subtle)' },
-  neutral: { color: 'var(--text-2)', background: 'var(--hover-bg)' },
+  overdue: { color: '#FF6B6B', background: 'rgba(255,107,107,0.12)' },
+  soon: { color: '#F5A524', background: 'rgba(245,165,36,0.14)' },
+  neutral: { color: '#A9BBC9', background: 'transparent' },
 }
 
 function BoardCard({ card, onOpen, onRename, removing, hidden }) {
@@ -16,6 +16,7 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
     data: { type: 'card', listaId: card.lista_id },
   })
 
+  const [hovered, setHovered] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(card.tytul || '')
 
@@ -47,81 +48,107 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, position: 'relative', overflow: 'hidden' }}
       {...attributes}
       {...listeners}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onClick={() => !isDragging && !editingTitle && onOpen(card)}
-      className={`board-card rounded-[10px] p-3 mb-2 cursor-pointer select-none${removing ? ' board-card-removing' : ''}`}
+      className={`board-card rounded-[8px] cursor-pointer select-none${removing ? ' board-card-removing' : ''}`}
     >
+      {card.cover_url && (
+        <div style={{ width: '100%', height: 100, overflow: 'hidden' }}>
+          <img src={card.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      )}
+
       {etykiety.length > 0 && (
-        <div className="flex gap-1 mb-1.5 flex-wrap">
+        <div style={{ display: 'flex', gap: 4, padding: card.cover_url ? '6px 10px 0' : '8px 10px 0', flexWrap: 'wrap' }}>
           {etykiety.map((et, i) => (
-            <span key={i} title={et.nazwa || ''} style={{ width: 28, height: 6, borderRadius: 3, background: et.color || '#5B8DEF' }} />
+            <span key={i} title={et.nazwa || ''} style={{ height: 8, minWidth: 40, borderRadius: 4, background: et.color || '#5B8DEF', opacity: 0.9 }} />
           ))}
         </div>
       )}
 
-      {editingTitle ? (
-        <input
-          autoFocus
-          value={titleDraft}
-          onChange={e => setTitleDraft(e.target.value)}
-          onBlur={commitEdit}
-          onClick={e => e.stopPropagation()}
-          onPointerDown={e => e.stopPropagation()}
-          onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingTitle(false) }}
-          style={{
-            width: '100%', fontSize: 13.5, fontWeight: 500, padding: '2px 4px', borderRadius: 6,
-            border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)', outline: 'none',
-          }}
-        />
-      ) : (
-        <p
-          className="text-[13.5px] leading-snug font-medium"
-          style={{ color: 'var(--text)' }}
-          onDoubleClick={startEdit}
-        >
-          {card.tytul}
-        </p>
-      )}
+      <div style={{ padding: '8px 10px', position: 'relative' }}>
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={e => setTitleDraft(e.target.value)}
+            onBlur={commitEdit}
+            onClick={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingTitle(false) }}
+            style={{
+              width: '100%', fontSize: 14, fontWeight: 400, padding: '2px 4px', borderRadius: 6,
+              border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
+            }}
+          />
+        ) : (
+          <p
+            onDoubleClick={startEdit}
+            style={{
+              fontSize: 14, fontWeight: 400, lineHeight: 1.45, color: '#F4F8FB', margin: 0,
+              wordBreak: 'break-word', fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            {card.tytul}
+          </p>
+        )}
 
-      {(card.termin || przypisani.length > 0 || card.zakonczona || checklista.length > 0) && (
-        <div className="flex items-center gap-3 mt-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
-          {card.zakonczona && <CheckCircle2 size={14} style={{ color: 'var(--c-success)' }} />}
-          {checklista.length > 0 && (
-            <span
-              className="flex items-center gap-1"
-              style={{ color: checklistDone === checklista.length ? 'var(--c-success)' : 'var(--text-2)' }}
-            >
-              <ListChecks size={12} /> {checklistDone}/{checklista.length}
-            </span>
-          )}
-          {card.termin && (
-            <span
-              className="flex items-center gap-1 rounded-full px-1.5"
-              style={{ color: TERMIN_STYLE[status].color, background: TERMIN_STYLE[status].background, height: 20 }}
-            >
-              <Calendar size={11} /> {formatTermin(card.termin)}
-            </span>
-          )}
-          {przypisani.length > 0 && (
-            <span className="flex items-center -space-x-1.5 ml-auto">
-              {przypisani.slice(0, 3).map((p, i) => (
-                <span
-                  key={i}
-                  className="flex items-center justify-center rounded-full text-white font-semibold"
-                  style={{
-                    width: 20, height: 20, fontSize: 9,
-                    background: hashColor(String(p)),
-                    border: '1.5px solid var(--c-surface)',
-                  }}
-                >
-                  {String(p).slice(0, 2).toUpperCase()}
-                </span>
-              ))}
-            </span>
-          )}
-        </div>
+        {(card.termin || card.opis || przypisani.length > 0 || card.zakonczona || checklista.length > 0) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            {card.zakonczona && <CheckCircle2 size={13} style={{ color: '#2BD17E' }} />}
+            {checklista.length > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: checklistDone === checklista.length ? '#2BD17E' : '#A9BBC9' }}>
+                <ListChecks size={11} /> {checklistDone}/{checklista.length}
+              </span>
+            )}
+            {card.termin && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, borderRadius: 4,
+                color: TERMIN_STYLE[status].color, background: TERMIN_STYLE[status].background,
+                padding: status === 'overdue' ? '1px 5px' : 0,
+              }}>
+                <Calendar size={11} /> {formatTermin(card.termin)}
+              </span>
+            )}
+            {card.opis && <AlignLeft size={12} style={{ color: '#A9BBC9' }} />}
+            {przypisani.length > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+                {przypisani.slice(0, 3).map((p, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 20, height: 20, fontSize: 9, fontWeight: 600, color: 'white',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      borderRadius: '50%', background: hashColor(String(p)),
+                      border: '1.5px solid #22272B', marginLeft: i > 0 ? -6 : 0,
+                    }}
+                  >
+                    {String(p).slice(0, 2).toUpperCase()}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {hovered && !isDragging && !editingTitle && (
+        <button
+          onClick={startEdit}
+          onPointerDown={e => e.stopPropagation()}
+          title="Edytuj tytuł"
+          style={{
+            position: 'absolute', top: 4, right: 4, width: 26, height: 26, borderRadius: 6,
+            background: 'rgba(255,255,255,0.12)', border: 'none', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#A9BBC9',
+          }}
+        >
+          <Pencil size={12} />
+        </button>
       )}
     </div>
   )

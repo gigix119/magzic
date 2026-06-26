@@ -414,40 +414,79 @@ body {
   flex: 1;
 }
 
-/* ── Tablice (Kanban) ── */
-.board-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+/* ── Tablice (Kanban) — wnętrze tablicy, dark-glass 1:1 z figma/src/app/App.tsx ── */
+/* Stałe, niezależne od motywu aplikacji (jak Trello — karty zawsze ciemne na kolorowym tle) */
+
+.board-interior {
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  font-family: 'Inter', sans-serif;
 }
 
+.board-header-interior {
+  height: 56px;
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.board-header-btn {
+  height: 36px;
+  min-width: 36px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 8px;
+  cursor: pointer;
+  color: #F4F8FB;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.board-header-btn:hover { background: rgba(255,255,255,0.18); }
+
 .board-scroll {
+  flex: 1;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px 84px;
   scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
 
 .board-column {
   width: 272px;
-  background: rgba(255, 255, 255, 0.92);
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.30);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-radius: 14px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 220px);
-}
-:root[data-theme="dark"] .board-column {
-  background: rgba(24, 24, 27, 0.85);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  max-height: calc(100vh - 110px);
 }
 
 .board-column-body {
   scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
 }
 
 @keyframes cardFadeIn {
@@ -456,23 +495,23 @@ body {
 }
 
 .board-card {
-  background: var(--c-surface);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border);
-  transition: box-shadow 0.15s ease-out, transform 0.15s ease-out;
+  background: #22272B;
+  border: 1px solid transparent;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  transition: background 0.12s, box-shadow 0.12s, transform 0.12s;
   animation: cardFadeIn 0.18s ease-out;
   touch-action: none;
 }
 @media (hover: hover) and (pointer: fine) {
-  .board-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md), 0 6px 16px rgba(0,0,0,0.08); }
+  .board-card:hover { background: #2E3640; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.40); }
 }
 .board-card:active { transform: scale(0.98); }
 
 .board-card-overlay {
-  background: var(--c-surface);
-  box-shadow: var(--shadow-md), 0 8px 20px rgba(0,0,0,0.18);
-  border: 1px solid var(--border);
-  transform: scale(1.03) rotate(1.5deg);
+  background: #2E3640;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  transform: scale(1.02) rotate(2deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -485,7 +524,7 @@ body {
   .board-column {
     width: 85vw;
     scroll-snap-align: start;
-    max-height: calc(100vh - 280px);
+    max-height: calc(100vh - 180px);
   }
 }
 
@@ -513,9 +552,9 @@ body {
 
 /* Podświetlenie kolumny-celu podczas przeciągania karty */
 .board-column-droptarget {
-  outline: 2px dashed var(--c-action);
+  outline: 2px solid #37A0C9;
   outline-offset: -2px;
-  background: var(--c-action-subtle, rgba(91,141,239,0.08));
+  background: rgba(55,160,201,0.10);
   transition: background 0.15s ease-out, outline-color 0.15s ease-out;
 }
 
@@ -523,6 +562,8 @@ body {
 .board-column-collapsed {
   width: 44px;
   min-height: 120px;
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 /* Wskaźnik aktywnej kolumny (karuzela) — tylko mobile */
@@ -542,7 +583,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    margin-bottom: 8px;
+    padding: 6px 0;
   }
 }
 
@@ -561,12 +602,106 @@ body {
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    background: var(--c-action);
+    background: #37A0C9;
     color: #fff;
-    box-shadow: var(--shadow-md), 0 6px 16px rgba(0,0,0,0.25);
+    box-shadow: 0 4px 20px rgba(55,160,201,0.50);
     z-index: 30;
     border: none;
   }
+}
+
+/* ── BoardMenu — slide-over panel ── */
+.board-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.board-menu-panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 320px;
+  max-width: 86vw;
+  z-index: 61;
+  background: rgba(10,20,36,0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(255,255,255,0.12);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.50);
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', sans-serif;
+  animation: boardMenuSlideIn 0.16s ease-out;
+}
+@keyframes boardMenuSlideIn {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-menu-panel { animation: none; }
+}
+.board-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #F4F8FB;
+  font-size: 14px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background 0.1s;
+  min-height: 44px;
+}
+.board-menu-item:hover { background: rgba(255,255,255,0.06); }
+
+/* ── BottomNav — pływający pasek nawigacji, tylko mobile ── */
+.board-bottom-nav {
+  display: none;
+}
+@media (max-width: 767px) {
+  .board-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: max(16px, env(safe-area-inset-bottom, 16px));
+    left: 50%;
+    transform: translateX(-50%);
+    align-items: center;
+    gap: 4px;
+    background: rgba(8,18,32,0.88);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 999px;
+    padding: 6px 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    z-index: 40;
+  }
+}
+.board-bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: #A9BBC9;
+  font-size: 10px;
+  font-weight: 400;
+  font-family: 'Inter', sans-serif;
+  min-width: 70px;
+  transition: background 0.12s, color 0.12s;
+}
+.board-bottom-nav-item.active {
+  background: rgba(55,160,201,0.22);
+  border-color: rgba(55,160,201,0.40);
+  color: #37A0C9;
+  font-weight: 600;
 }
 
 /* Skeleton boardu podczas ładowania (zamiast spinnera na środku) */

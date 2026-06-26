@@ -93,7 +93,6 @@ export default function App() {
                   <Route path="/lokale" element={<Lokale />} />
                   <Route path="/lokale/:id" element={<LokalDetail />} />
                   <Route path="/tablice" element={<TabliceSiatka />} />
-                  <Route path="/tablice/:id" element={<TablicaBoard />} />
                   <Route path="/faktury" element={<Faktury />} />
                   <Route path="/ustawienia" element={<Ustawienia />} />
 
@@ -127,6 +126,9 @@ export default function App() {
                     <Route path="reconciliation" element={<BackendInventoryReconciliation />} />
                   </Route>
                 </Route>
+
+                {/* Wnętrze tablicy — pełnoekranowe, własny header/nav (bez sidebara aplikacji) */}
+                <Route path="/tablice/:id" element={<ProtectedRoute><TablicaBoard /></ProtectedRoute>} />
 
                 {/* Widok pracownika — uproszczona, mobilna ścieżka (bez sidebara) */}
                 <Route element={<ProtectedRoute><WorkerLayout /></ProtectedRoute>}>

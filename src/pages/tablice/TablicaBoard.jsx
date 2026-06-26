@@ -11,14 +11,28 @@ import {
 import { supabase } from '../../supabase'
 import { useToast } from '../../context/ToastContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { ArrowLeft, Plus, MoreHorizontal, Zap, Search, X, LayoutGrid, Image as ImageIcon } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import {
+  ArrowLeft, Plus, MoreHorizontal, Zap, Search, X, LayoutGrid,
+  ChevronDown, Star, PlugZap, Filter, Share2,
+} from 'lucide-react'
 import EmptyState from '../../components/ui/EmptyState'
 import BottomSheet from '../../components/ui/BottomSheet'
 import BoardColumn from './BoardColumn'
+import BoardMenu from './BoardMenu'
+import BottomNav from './BottomNav'
 import CardDetailModal from './CardDetailModal'
 import AutomationModal from './AutomationModal'
 import BoardBackgroundPicker from './BoardBackgroundPicker'
 import { positionBetween, prefersReducedMotion, getBoardBackgroundStyle } from './tablicaTokens'
+
+function initialsFromProfile(profile, user) {
+  if (profile?.first_name || profile?.last_name) {
+    return `${profile.first_name?.[0] || ''}${profile.last_name?.[0] || ''}`.toUpperCase() || 'U'
+  }
+  if (profile?.display_name) return profile.display_name.slice(0, 2).toUpperCase()
+  return (user?.email || 'U').slice(0, 2).toUpperCase()
+}
 
 function findContainer(id, cardsByList) {
   if (typeof id === 'string' && id.startsWith('colbody:')) return id.slice(8)
@@ -31,14 +45,14 @@ function findContainer(id, cardsByList) {
 
 function BoardSkeleton() {
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 96px)' }}>
-      <div className="rounded-[var(--radius-card)] mb-3 flex-shrink-0" style={{ height: 52, background: 'var(--hover-bg)' }} />
+    <div className="flex flex-col" style={{ height: '100svh', background: '#0A1A2F', padding: '12px 16px' }}>
+      <div className="rounded-lg mb-3 flex-shrink-0" style={{ height: 56, background: 'rgba(255,255,255,0.08)' }} />
       <div className="flex gap-3 flex-1">
         {[0, 1, 2].map(i => (
-          <div key={i} className="board-column flex-shrink-0 flex flex-col rounded-[var(--radius-card)] p-2.5" style={{ background: 'var(--hover-bg)' }}>
+          <div key={i} className="flex-shrink-0 flex flex-col rounded-[12px] p-2.5" style={{ width: 272, background: 'rgba(255,255,255,0.06)' }}>
             <div className="skeleton-shimmer rounded mb-3" style={{ height: 16, width: '60%' }} />
             {[0, 1, 2].map(j => (
-              <div key={j} className="skeleton-shimmer rounded-[12px] mb-2" style={{ height: 58 }} />
+              <div key={j} className="skeleton-shimmer rounded-[8px] mb-2" style={{ height: 58 }} />
             ))}
           </div>
         ))}
@@ -52,6 +66,7 @@ export default function TablicaBoard() {
   const navigate = useNavigate()
   const { addToast } = useToast()
   const { wsQuery, addWsFilter, wsData } = useWorkspace()
+  const { user, profile } = useAuth()
 
   const [board, setBoard] = useState(null)
   const [lists, setLists] = useState([])
@@ -129,6 +144,17 @@ export default function TablicaBoard() {
     setBoard(prev => ({ ...prev, kolor_tla: kolorTla, tlo_typ: tloTyp }))
     const { error } = await supabase.from('tablice').update({ kolor_tla: kolorTla, tlo_typ: tloTyp }).eq('id', id)
     if (error) addToast(error.message, 'error')
+  }
+
+  async function toggleStar() {
+    const next = !board.ulubiona
+    setBoard(prev => ({ ...prev, ulubiona: next }))
+    const { error } = await supabase.from('tablice').update({ ulubiona: next }).eq('id', id)
+    if (error) { addToast(error.message, 'error'); setBoard(prev => ({ ...prev, ulubiona: !next })) }
+  }
+
+  function handlePlaceholder(label) {
+    addToast(`${label} — wkrótce`, 'info')
   }
 
   const handleAddCard = useCallback(async (listaId, tytul) => {
@@ -407,8 +433,11 @@ export default function TablicaBoard() {
   if (loading) return <BoardSkeleton />
   if (!board) {
     return (
-      <div className="text-sm" style={{ color: 'var(--text-2)' }}>
-        Tablica nie znaleziona. <Link to="/tablice" style={{ color: 'var(--c-action)' }}>Wróć do listy tablic</Link>
+      <div
+        className="flex items-center justify-center text-sm"
+        style={{ height: '100svh', background: '#0A1A2F', color: '#A9BBC9', fontFamily: "'Inter', sans-serif" }}
+      >
+        Tablica nie znaleziona. <Link to="/tablice" style={{ color: '#37A0C9', marginLeft: 4 }}>Wróć do listy tablic</Link>
       </div>
     )
   }
@@ -419,208 +448,228 @@ export default function TablicaBoard() {
   const activeList = activeType === 'list' ? lists.find(l => l.id === activeId) : null
 
   return (
-    <div
-      className="board-bg flex flex-col -mx-3 -mt-3 px-3 pt-3 md:-mx-6 md:-mt-6 md:px-6 md:pt-6"
-      style={{ height: 'calc(100vh - 96px)', ...getBoardBackgroundStyle(board.kolor_tla, board.tlo_typ) }}
-    >
-      <div
-        className="board-topbar flex items-center gap-2 px-4 py-3 rounded-[var(--radius-card)] mb-2 flex-shrink-0"
-      >
-        <button onClick={() => navigate('/tablice')} className="p-1 rounded-lg text-white opacity-90 flex-shrink-0">
-          <ArrowLeft size={18} />
-        </button>
-        <button onClick={() => setSwitcherOpen(true)} className="p-1 rounded-lg text-white opacity-90 flex-shrink-0" title="Przełącz tablicę">
-          <LayoutGrid size={17} />
-        </button>
-        {editingTitle ? (
-          <input
-            autoFocus
-            value={titleDraft}
-            onChange={e => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={e => { if (e.key === 'Enter') commitTitle(); if (e.key === 'Escape') { setTitleDraft(board.nazwa); setEditingTitle(false) } }}
-            style={{
-              background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
-              padding: '4px 10px', fontSize: 16, fontWeight: 600, color: '#fff', flex: 1,
-            }}
-          />
-        ) : (
-          <h1
-            onClick={() => setEditingTitle(true)}
-            className="text-[16px] font-semibold flex-1 truncate cursor-text"
-            style={{ color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.35)' }}
-          >
-            {board.nazwa}
-          </h1>
-        )}
-        <button onClick={() => setSearchOpen(o => !o)} className="p-1.5 rounded-lg text-white opacity-90 flex-shrink-0" title="Szukaj kart">
-          <Search size={17} />
-        </button>
-        <div className="relative">
-          <button onClick={() => setBoardMenuOpen(o => !o)} className="p-1.5 rounded-lg text-white opacity-90">
-            <MoreHorizontal size={18} />
-          </button>
-          {boardMenuOpen && (
-            <div
-              className="absolute right-0 top-9 z-20 rounded-lg p-3"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', minWidth: 200 }}
-              onMouseLeave={() => setBoardMenuOpen(false)}
-            >
-              <button
-                onClick={() => { setBoardMenuOpen(false); setAutomationOpen(true) }}
-                className="flex items-center gap-2 w-full px-1 py-1.5 mb-2 text-left text-sm"
-                style={{ color: 'var(--text)' }}
-              >
-                <Zap size={14} /> Automatyzacja
-              </button>
-              <button
-                onClick={() => { setBoardMenuOpen(false); setBgPickerOpen(true) }}
-                className="flex items-center gap-2 w-full px-1 py-1.5 text-left text-sm"
-                style={{ color: 'var(--text)' }}
-              >
-                <ImageIcon size={14} /> Zmień tło
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="board-interior" style={getBoardBackgroundStyle(board.kolor_tla, board.tlo_typ)}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.08)', pointerEvents: 'none' }} />
 
-      {searchOpen && (
-        <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-          <div className="relative flex-1">
-            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-            <input
-              autoFocus
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              placeholder="Szukaj kart po tytule…"
-              style={{
-                width: '100%', fontSize: 14, padding: '8px 10px 8px 30px', borderRadius: 10,
-                border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)', outline: 'none',
-              }}
-            />
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <header className="board-header-interior">
+          <button onClick={() => navigate('/tablice')} className="board-header-btn" title="Wróć do tablic" style={{ width: 36, padding: 0, justifyContent: 'center' }}>
+            <ArrowLeft size={16} />
+          </button>
+
+          <div className="flex items-center gap-1" style={{ minWidth: 0 }}>
+            {editingTitle ? (
+              <input
+                autoFocus
+                value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={e => { if (e.key === 'Enter') commitTitle(); if (e.key === 'Escape') { setTitleDraft(board.nazwa); setEditingTitle(false) } }}
+                style={{
+                  background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+                  padding: '4px 10px', fontSize: 16, fontWeight: 700, color: '#fff',
+                  fontFamily: "'Space Grotesk', sans-serif", maxWidth: 280,
+                }}
+              />
+            ) : (
+              <span
+                onClick={() => setEditingTitle(true)}
+                className="truncate cursor-text"
+                style={{
+                  fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, color: '#F4F8FB',
+                  whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                {board.nazwa}
+              </span>
+            )}
+            <button onClick={() => setSwitcherOpen(true)} title="Przełącz tablicę" className="flex items-center justify-center rounded-md flex-shrink-0" style={{ width: 26, height: 26 }}>
+              <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.55)' }} />
+            </button>
+            <button onClick={toggleStar} title={board.ulubiona ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'} className="flex items-center justify-center rounded-md flex-shrink-0" style={{ width: 30, height: 30 }}>
+              <Star size={16} fill={board.ulubiona ? '#F5A524' : 'none'} stroke={board.ulubiona ? '#F5A524' : 'rgba(255,255,255,0.60)'} />
+            </button>
           </div>
-          <button
-            onClick={() => { setSearchOpen(false); setSearchInput('') }}
-            className="p-1.5 rounded-lg flex-shrink-0"
-            style={{ color: 'var(--muted)' }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
 
-      {lists.length > 1 && (
-        <div className="board-dots flex-shrink-0">
-          {lists.map((l, i) => (
-            <span
-              key={l.id}
-              className="board-dot"
-              style={{ background: i === activeColumnIndex ? 'var(--c-action)' : 'var(--border)' }}
-            />
-          ))}
-        </div>
-      )}
+          <div style={{ flex: 1 }} />
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div ref={scrollRef} onScroll={handleBoardScroll} className="board-scroll flex gap-3 flex-1 pb-2">
-          {lists.length === 0 && !addingList && (
-            <EmptyState
-              icon={LayoutGrid}
-              title="Brak list"
-              description="Dodaj pierwszą listę, by zacząć organizować karty."
-              className="flex-1"
-            />
-          )}
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => handlePlaceholder('Power-Upy')} className="board-header-btn">
+              <PlugZap size={14} /><span className="hidden lg:inline">Power-Ups</span>
+            </button>
+            <button onClick={() => setAutomationOpen(true)} className="board-header-btn">
+              <Zap size={14} /><span className="hidden lg:inline">Automatyzacja</span>
+            </button>
+            <button onClick={() => setSearchOpen(o => !o)} className="board-header-btn" title="Filtruj karty">
+              <Filter size={14} /><span className="hidden lg:inline">Filtruj</span>
+            </button>
+            <div
+              className="flex items-center justify-center flex-shrink-0"
+              style={{
+                width: 32, height: 32, borderRadius: '50%', background: '#37A0C9',
+                fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 12, color: 'white',
+                border: '1px solid rgba(255,255,255,0.16)',
+              }}
+              title={profile?.display_name || user?.email}
+            >
+              {initialsFromProfile(profile, user)}
+            </div>
+            <button onClick={() => handlePlaceholder('Udostępnij')} className="board-header-btn">
+              <Share2 size={14} /><span className="hidden lg:inline">Udostępnij</span>
+            </button>
+            <button onClick={() => setBoardMenuOpen(true)} className="board-header-btn" title="Menu tablicy" style={{ width: 36, padding: 0, justifyContent: 'center' }}>
+              <MoreHorizontal size={16} />
+            </button>
+          </div>
+        </header>
 
-          <SortableContext items={lists.map(l => l.id)} strategy={horizontalListSortingStrategy}>
-            {lists.map(list => (
-              <BoardColumn
-                key={list.id}
-                ref={el => { columnRefs.current[list.id] = el }}
-                column={list}
-                cards={cardsByList[list.id] || []}
-                onOpenCard={setOpenCard}
-                onAddCard={handleAddCard}
-                onArchiveList={handleArchiveList}
-                onRenameList={handleRenameList}
-                onRenameCard={handleRenameCard}
-                onChangeListColor={handleChangeListColor}
-                isDropTarget={dragOverList === list.id}
-                removingCardIds={removingCardIds}
-                searchQuery={searchQuery}
+        {searchOpen && (
+          <div className="flex items-center gap-2 flex-shrink-0" style={{ padding: '10px 16px 0' }}>
+            <div className="relative flex-1" style={{ maxWidth: 360 }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#A9BBC9' }} />
+              <input
+                autoFocus
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                placeholder="Szukaj kart po tytule…"
+                style={{
+                  width: '100%', fontSize: 14, padding: '8px 10px 8px 30px', borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
+                }}
+              />
+            </div>
+            <button
+              onClick={() => { setSearchOpen(false); setSearchInput('') }}
+              className="p-1.5 rounded-lg flex-shrink-0"
+              style={{ color: '#A9BBC9' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {lists.length > 1 && (
+          <div className="board-dots flex-shrink-0">
+            {lists.map((l, i) => (
+              <span
+                key={l.id}
+                className="board-dot"
+                style={{ background: i === activeColumnIndex ? '#37A0C9' : 'rgba(255,255,255,0.25)' }}
               />
             ))}
-          </SortableContext>
-
-          <div className="flex-shrink-0" style={{ width: 240 }}>
-            {addingList ? (
-              <form onSubmit={handleAddList} className="rounded-[var(--radius-card)] p-2.5" style={{ background: 'var(--hover-bg)' }}>
-                <input
-                  autoFocus
-                  value={listDraft}
-                  onChange={e => setListDraft(e.target.value)}
-                  onBlur={() => { if (!listDraft.trim()) setAddingList(false) }}
-                  onKeyDown={e => { if (e.key === 'Escape') { setAddingList(false); setListDraft('') } }}
-                  placeholder="Nazwa listy…"
-                  style={{
-                    width: '100%', fontSize: 16, padding: '8px 10px', borderRadius: 10,
-                    border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)', outline: 'none',
-                  }}
-                />
-                <div className="flex items-center gap-2 mt-2">
-                  <button type="submit" className="px-3 rounded-[var(--radius-control)] text-sm font-medium text-white" style={{ background: 'var(--c-action)', minHeight: 36 }}>
-                    Dodaj listę
-                  </button>
-                  <button type="button" onClick={() => { setAddingList(false); setListDraft('') }} className="px-2 text-sm" style={{ color: 'var(--muted)' }}>
-                    Anuluj
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button
-                onClick={() => setAddingList(true)}
-                className="flex items-center gap-1.5 w-full px-3 py-2.5 rounded-[var(--radius-card)] text-sm font-medium"
-                style={{ background: 'var(--hover-bg)', color: 'var(--text-2)', minHeight: 44 }}
-              >
-                <Plus size={15} /> Dodaj listę
-              </button>
-            )}
           </div>
-        </div>
+        )}
 
-        <DragOverlay>
-          {activeCard && (
-            <div className="board-card board-card-overlay rounded-[10px] p-3" style={{ width: 248 }}>
-              <p className="text-[13.5px] leading-snug font-medium" style={{ color: 'var(--text)' }}>{activeCard.tytul}</p>
-            </div>
-          )}
-          {activeList && (
-            <div
-              className="rounded-[14px] px-3 py-2.5 board-card-overlay"
-              style={{ width: 272, borderTop: `3px solid ${activeList.kolor || 'var(--c-action)'}` }}
-            >
-              <span className="text-[13.5px] font-semibold" style={{ color: 'var(--text)' }}>{activeList.nazwa}</span>
-            </div>
-          )}
-        </DragOverlay>
-      </DndContext>
-
-      {lists.length > 0 && (
-        <button
-          onClick={handleFabAddCard}
-          className="board-fab-add"
-          aria-label="Dodaj kartę"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
         >
-          <Plus size={22} />
-        </button>
-      )}
+          <div ref={scrollRef} onScroll={handleBoardScroll} className="board-scroll">
+            {lists.length === 0 && !addingList && (
+              <EmptyState
+                icon={LayoutGrid}
+                title="Brak list"
+                description="Dodaj pierwszą listę, by zacząć organizować karty."
+                className="flex-1"
+              />
+            )}
+
+            <SortableContext items={lists.map(l => l.id)} strategy={horizontalListSortingStrategy}>
+              {lists.map(list => (
+                <BoardColumn
+                  key={list.id}
+                  ref={el => { columnRefs.current[list.id] = el }}
+                  column={list}
+                  cards={cardsByList[list.id] || []}
+                  onOpenCard={setOpenCard}
+                  onAddCard={handleAddCard}
+                  onArchiveList={handleArchiveList}
+                  onRenameList={handleRenameList}
+                  onRenameCard={handleRenameCard}
+                  onChangeListColor={handleChangeListColor}
+                  isDropTarget={dragOverList === list.id}
+                  removingCardIds={removingCardIds}
+                  searchQuery={searchQuery}
+                />
+              ))}
+            </SortableContext>
+
+            <div className="flex-shrink-0" style={{ width: 272 }}>
+              {addingList ? (
+                <form onSubmit={handleAddList} className="rounded-[12px] p-2.5" style={{ background: 'rgba(0,0,0,0.30)', backdropFilter: 'blur(8px)' }}>
+                  <input
+                    autoFocus
+                    value={listDraft}
+                    onChange={e => setListDraft(e.target.value)}
+                    onBlur={() => { if (!listDraft.trim()) setAddingList(false) }}
+                    onKeyDown={e => { if (e.key === 'Escape') { setAddingList(false); setListDraft('') } }}
+                    placeholder="Nazwa listy…"
+                    style={{
+                      width: '100%', fontSize: 16, padding: '8px 10px', borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
+                    }}
+                  />
+                  <div className="flex items-center gap-2 mt-2">
+                    <button type="submit" className="px-3 rounded-lg text-sm font-medium text-white" style={{ background: '#37A0C9', minHeight: 36 }}>
+                      Dodaj listę
+                    </button>
+                    <button type="button" onClick={() => { setAddingList(false); setListDraft('') }} className="px-2 text-sm" style={{ color: '#A9BBC9' }}>
+                      Anuluj
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  onClick={() => setAddingList(true)}
+                  className="flex items-center gap-2"
+                  style={{
+                    width: 272, height: 44, padding: '0 14px', background: 'rgba(255,255,255,0.14)',
+                    border: '1px dashed rgba(255,255,255,0.25)', borderRadius: 12, cursor: 'pointer',
+                    color: 'rgba(255,255,255,0.70)', fontSize: 14, fontFamily: "'Inter', sans-serif",
+                  }}
+                >
+                  <Plus size={16} /><span>Dodaj listę</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <DragOverlay>
+            {activeCard && (
+              <div className="board-card board-card-overlay rounded-[8px] p-2.5" style={{ width: 248 }}>
+                <p style={{ fontSize: 14, lineHeight: 1.45, color: '#F4F8FB', fontFamily: "'Inter', sans-serif" }}>{activeCard.tytul}</p>
+              </div>
+            )}
+            {activeList && (
+              <div
+                className="board-card-overlay"
+                style={{ width: 272, borderRadius: 12, padding: '10px 10px 8px', background: activeList.kolor || 'rgba(0,0,0,0.30)' }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#F4F8FB', fontFamily: "'Space Grotesk', sans-serif" }}>{activeList.nazwa}</span>
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
+
+        {lists.length > 0 && (
+          <button
+            onClick={handleFabAddCard}
+            className="board-fab-add"
+            aria-label="Dodaj kartę"
+          >
+            <Plus size={22} />
+          </button>
+        )}
+
+        <BottomNav
+          onInbox={() => handlePlaceholder('Skrzynka odbiorcza')}
+          onPlanner={() => handlePlaceholder('Planista')}
+          onSwitch={() => setSwitcherOpen(true)}
+        />
+      </div>
 
       {openCard && (
         <CardDetailModal
@@ -640,6 +689,15 @@ export default function TablicaBoard() {
           tablicaId={id}
           lists={lists}
           onClose={() => setAutomationOpen(false)}
+        />
+      )}
+
+      {boardMenuOpen && (
+        <BoardMenu
+          onClose={() => setBoardMenuOpen(false)}
+          onAutomation={() => { setBoardMenuOpen(false); setAutomationOpen(true) }}
+          onChangeBackground={() => { setBoardMenuOpen(false); setBgPickerOpen(true) }}
+          onPlaceholder={label => { setBoardMenuOpen(false); handlePlaceholder(label) }}
         />
       )}
 
