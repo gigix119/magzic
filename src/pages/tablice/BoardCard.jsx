@@ -1,8 +1,8 @@
 import { useState, useRef, memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckCircle2, Circle, Calendar, AlertTriangle, ListChecks, AlignLeft, Pencil, Camera } from 'lucide-react'
-import { formatTermin, terminStatus, hashColor } from './tablicaTokens'
+import { CheckCircle2, Circle, Calendar, AlertTriangle, ListChecks, AlignLeft, Pencil, Camera, Zap } from 'lucide-react'
+import { formatTermin, terminStatus, hashColor, classifyKarta, STATUS_COLORS, STATUS_LABELS } from './tablicaTokens'
 import { capturePhoto } from './photoUpload'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
@@ -10,8 +10,8 @@ import { useToast } from '../../context/ToastContext'
 
 const TERMIN_STYLE = {
   overdue: { color: '#FF6B6B', background: 'rgba(255,107,107,0.12)' },
-  soon: { color: '#F5A524', background: 'rgba(245,165,36,0.14)' },
-  neutral: { color: '#A9BBC9', background: 'transparent' },
+  soon: { color: 'var(--tb-status-zmiana, #F5A524)', background: 'rgba(245,165,36,0.14)' },
+  neutral: { color: 'var(--tb-text-muted, #A9BBC9)', background: 'transparent' },
 }
 
 function BoardCard({ card, onOpen, onRename, onToggleDone, onPhotoAdded, photoInfo, removing, pulsing, hidden }) {
@@ -43,6 +43,7 @@ function BoardCard({ card, onOpen, onRename, onToggleDone, onPhotoAdded, photoIn
   const checklistDone = checklista.filter(it => it.done).length
   const status = terminStatus(card.termin, card.zakonczona)
   const photoCount = photoInfo?.count || 0
+  const classification = classifyKarta(card.tytul)
 
   function startEdit(e) {
     e.stopPropagation()
@@ -134,6 +135,19 @@ function BoardCard({ card, onOpen, onRename, onToggleDone, onPhotoAdded, photoIn
             : <Circle size={18} style={{ color: 'rgba(255,255,255,0.35)' }} />}
         </button>
 
+        {classification && !editingTitle && (
+          <span
+            title="Auto-klasyfikacja na podstawie tytułu"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3, height: 17, padding: '0 6px', marginBottom: 4,
+              borderRadius: 999, fontSize: 10, fontWeight: 600, color: STATUS_COLORS[classification],
+              background: `${STATUS_COLORS[classification]}22`, border: `1px solid ${STATUS_COLORS[classification]}55`,
+            }}
+          >
+            <Zap size={9} /> {STATUS_LABELS[classification]}
+          </span>
+        )}
+
         {editingTitle ? (
           <input
             autoFocus
@@ -145,14 +159,14 @@ function BoardCard({ card, onOpen, onRename, onToggleDone, onPhotoAdded, photoIn
             onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingTitle(false) }}
             style={{
               width: '100%', fontSize: 16, fontWeight: 400, padding: '2px 4px', borderRadius: 6,
-              border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
+              border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.30)', color: 'var(--tb-text, #F4F8FB)', outline: 'none',
             }}
           />
         ) : (
           <p
             onDoubleClick={startEdit}
             style={{
-              fontSize: 14, fontWeight: 400, lineHeight: 1.45, color: '#F4F8FB', margin: 0,
+              fontSize: 14, fontWeight: 400, lineHeight: 1.45, color: 'var(--tb-text, #F4F8FB)', margin: 0,
               wordBreak: 'break-word', fontFamily: "'Inter', sans-serif",
               textDecoration: card.zakonczona ? 'line-through' : 'none',
             }}
@@ -164,7 +178,7 @@ function BoardCard({ card, onOpen, onRename, onToggleDone, onPhotoAdded, photoIn
         {(card.termin || card.opis || przypisani.length > 0 || card.zakonczona || checklista.length > 0) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             {checklista.length > 0 && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: checklistDone === checklista.length ? '#2BD17E' : '#A9BBC9' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: checklistDone === checklista.length ? '#2BD17E' : 'var(--tb-text-muted, #A9BBC9)' }}>
                 <ListChecks size={11} /> {checklistDone}/{checklista.length}
               </span>
             )}
@@ -177,7 +191,7 @@ function BoardCard({ card, onOpen, onRename, onToggleDone, onPhotoAdded, photoIn
                 {status === 'overdue' ? <AlertTriangle size={11} /> : <Calendar size={11} />} {formatTermin(card.termin)}
               </span>
             )}
-            {card.opis && <AlignLeft size={12} style={{ color: '#A9BBC9' }} />}
+            {card.opis && <AlignLeft size={12} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} />}
             {przypisani.length > 0 && (
               <span style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
                 {przypisani.slice(0, 3).map((p, i) => (

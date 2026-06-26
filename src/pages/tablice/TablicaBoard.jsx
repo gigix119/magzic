@@ -27,6 +27,12 @@ import BoardBackgroundPicker from './BoardBackgroundPicker'
 import OfflineBanner from './OfflineBanner'
 import { capturePhoto, flushPendingPhotos } from './photoUpload'
 import { positionBetween, prefersReducedMotion, getBoardBackgroundStyle } from './tablicaTokens'
+import { logActivity } from './activityLog'
+import ImportKWHotelModal from './ImportKWHotelModal'
+import BoardActivityPanel from './BoardActivityPanel'
+import BoardStats from './BoardStats'
+import ThemeSwitcherPanel from './ThemeSwitcherPanel'
+import { useTablicaTheme } from '../../lib/useTablicaTheme'
 
 function initialsFromProfile(profile, user) {
   if (profile?.first_name || profile?.last_name) {
@@ -91,12 +97,18 @@ export default function TablicaBoard() {
   const [addingList, setAddingList] = useState(false)
   const [listDraft, setListDraft] = useState('')
   const [automationOpen, setAutomationOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
+  const [themePanelOpen, setThemePanelOpen] = useState(false)
+  const { theme, themeKey, setTheme } = useTablicaTheme()
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const searchQuery = searchInput.trim().toLowerCase()
 
   const [cardPhotos, setCardPhotos] = useState({})
+  const [photosToday, setPhotosToday] = useState(0)
   const [fabMenuOpen, setFabMenuOpen] = useState(false)
   const fabPhotoInputRef = useRef(null)
 
@@ -149,12 +161,16 @@ export default function TablicaBoard() {
     for (const c of k || []) { (grouped[c.lista_id] ??= []).push(c) }
     setCardsByList(grouped)
     const photoMap = {}
+    const todayStr = new Date().toDateString()
+    let todayCount = 0
     for (const p of photos || []) {
       const entry = photoMap[p.karta_id] || { count: 0, latestUrl: p.url }
       entry.count += 1
       photoMap[p.karta_id] = entry
+      if (new Date(p.created_at).toDateString() === todayStr) todayCount += 1
     }
     setCardPhotos(photoMap)
+    setPhotosToday(todayCount)
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -307,8 +323,9 @@ export default function TablicaBoard() {
       setCardsByList(prev => ({ ...prev, [listaId]: prev[listaId].filter(c => c.id !== tempId) }))
     } else {
       setCardsByList(prev => ({ ...prev, [listaId]: prev[listaId].map(c => (c.id === tempId ? data : c)) }))
+      logActivity({ workspaceId, kartaId: data.id, tablicaId: id, user, profile, typ: 'utworzono', opis: `utworzono kartę „${tytul}"` })
     }
-  }, [id, addToast, wsData])
+  }, [id, addToast, wsData, workspaceId, user, profile])
 
   const handleRenameList = useCallback(async (listaId, nazwa) => {
     setLists(prev => prev.map(l => (l.id === listaId ? { ...l, nazwa } : l)))
@@ -347,17 +364,45 @@ export default function TablicaBoard() {
     setAddingList(false)
   }
 
+  function describeSaveActivity(oldCard, fields) {
+    if (!oldCard) return null
+    if ('tytul' in fields && fields.tytul !== oldCard.tytul) {
+      return { typ: 'edycja', opis: `zmieniono tytuł z „${oldCard.tytul}" na „${fields.tytul}"` }
+    }
+    if ('termin' in fields) {
+      return fields.termin
+        ? { typ: 'termin', opis: `ustawiono termin na ${new Date(fields.termin).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })}` }
+        : { typ: 'termin', opis: 'usunięto termin' }
+    }
+    if ('zakonczona' in fields && fields.zakonczona !== oldCard.zakonczona) {
+      return { typ: 'zakonczona', opis: fields.zakonczona ? 'oznaczono jako zakończoną' : 'odznaczono jako zakończoną' }
+    }
+    if ('etykiety' in fields) {
+      const added = (fields.etykiety || []).length > (oldCard.etykiety || []).length
+      return { typ: 'etykieta', opis: added ? 'dodano etykietę' : 'usunięto etykietę' }
+    }
+    if ('foto_przed' in fields || 'foto_po' in fields) {
+      const slot = 'foto_przed' in fields ? 'przed' : 'po'
+      const value = fields.foto_przed ?? fields.foto_po
+      return { typ: 'zdjecie', opis: value ? `dodano zdjęcie (${slot})` : `usunięto zdjęcie (${slot})` }
+    }
+    return null
+  }
+
   const handleSaveCard = useCallback(async (cardId, fields) => {
     const container = findContainer(cardId, cardsByListRef.current)
     if (!container) return
     markLocalEdit(cardId)
+    const oldCard = cardsByListRef.current[container].find(c => c.id === cardId)
     setCardsByList(prev => ({
       ...prev,
       [container]: prev[container].map(c => (c.id === cardId ? { ...c, ...fields } : c)),
     }))
     const { error } = await supabase.from('karty').update(fields).eq('id', cardId)
-    if (error) addToast(error.message, 'error')
-  }, [addToast])
+    if (error) { addToast(error.message, 'error'); return }
+    const activity = describeSaveActivity(oldCard, fields)
+    if (activity) logActivity({ workspaceId, kartaId: cardId, tablicaId: id, user, profile, ...activity })
+  }, [addToast, workspaceId, user, profile, id])
 
   const handleRenameCard = useCallback((cardId, tytul) => {
     handleSaveCard(cardId, { tytul })
@@ -369,7 +414,8 @@ export default function TablicaBoard() {
 
   const handlePhotoAdded = useCallback((cardId, row) => {
     setCardPhotos(prev => ({ ...prev, [cardId]: { count: (prev[cardId]?.count || 0) + 1, latestUrl: row.url } }))
-  }, [])
+    logActivity({ workspaceId, kartaId: cardId, tablicaId: id, user, profile, typ: 'zdjecie', opis: 'dodano zdjęcie (aparat)' })
+  }, [workspaceId, user, profile, id])
 
   const handleFabQuickPhoto = useCallback(async (file) => {
     const targetList = listsRef.current[0]
@@ -440,6 +486,7 @@ export default function TablicaBoard() {
     setCardsByList(prev => ({ ...prev, [container]: prev[container].filter(c => c.id !== cardId) }))
     const { error } = await supabase.from('karty').update({ archiwum: true }).eq('id', cardId)
     if (error) { addToast(error.message, 'error'); restoreCard(container, index, snapshot); return }
+    logActivity({ workspaceId, kartaId: cardId, tablicaId: id, user, profile, typ: 'archiwum', opis: 'oznaczono jako zarchiwizowaną' })
     addToast('Karta zarchiwizowana', 'success', {
       duration: 5000,
       action: {
@@ -451,7 +498,7 @@ export default function TablicaBoard() {
         },
       },
     })
-  }, [addToast])
+  }, [addToast, workspaceId, user, profile, id])
 
   const handleDeleteCard = useCallback(async (cardId) => {
     const container = findContainer(cardId, cardsByListRef.current)
@@ -491,9 +538,11 @@ export default function TablicaBoard() {
     }))
     const { error } = await supabase.rpc('przenies_karte', { p_karta_id: cardId, p_lista_id: targetListaId, p_pozycja: newPos })
     const targetName = listsRef.current.find(l => l.id === targetListaId)?.nazwa
-    if (error) addToast('Nie udało się przenieść karty', 'error')
-    else addToast(targetName ? `Przeniesiono do „${targetName}"` : 'Karta przeniesiona', 'success')
-  }, [addToast])
+    const sourceName = listsRef.current.find(l => l.id === container)?.nazwa
+    if (error) { addToast('Nie udało się przenieść karty', 'error'); return }
+    addToast(targetName ? `Przeniesiono do „${targetName}"` : 'Karta przeniesiona', 'success')
+    logActivity({ workspaceId, kartaId: cardId, tablicaId: id, user, profile, typ: 'przeniesiono', opis: `przeniesiono z „${sourceName || '?'}" do „${targetName || '?'}"` })
+  }, [addToast, workspaceId, user, profile, id])
 
   const handleCopyCard = useCallback(async (cardId, targetListaId) => {
     const container = findContainer(cardId, cardsByListRef.current)
@@ -596,7 +645,13 @@ export default function TablicaBoard() {
       const { error } = await supabase.rpc('przenies_karte', {
         p_karta_id: active.id, p_lista_id: container, p_pozycja: newPos,
       })
-      if (error) { setCardsByList(snapshot); addToast('Nie udało się przenieść karty', 'error') }
+      if (error) { setCardsByList(snapshot); addToast('Nie udało się przenieść karty', 'error'); return }
+      const originalListaId = active.data.current?.listaId
+      if (originalListaId && originalListaId !== container) {
+        const sourceName = listsRef.current.find(l => l.id === originalListaId)?.nazwa
+        const targetName = listsRef.current.find(l => l.id === container)?.nazwa
+        logActivity({ workspaceId, kartaId: active.id, tablicaId: id, user, profile, typ: 'przeniesiono', opis: `przeniesiono z „${sourceName || '?'}" do „${targetName || '?'}"` })
+      }
     }
   }
 
@@ -625,9 +680,9 @@ export default function TablicaBoard() {
     return (
       <div
         className="flex items-center justify-center text-sm"
-        style={{ height: '100svh', background: '#0A1A2F', color: '#A9BBC9', fontFamily: "'Inter', sans-serif" }}
+        style={{ height: '100svh', background: '#0A1A2F', color: 'var(--tb-text-muted, #A9BBC9)', fontFamily: "'Inter', sans-serif" }}
       >
-        Tablica nie znaleziona. <Link to="/tablice" style={{ color: '#37A0C9', marginLeft: 4 }}>Wróć do listy tablic</Link>
+        Tablica nie znaleziona. <Link to="/tablice" style={{ color: 'var(--tb-accent, #37A0C9)', marginLeft: 4 }}>Wróć do listy tablic</Link>
       </div>
     )
   }
@@ -667,7 +722,7 @@ export default function TablicaBoard() {
                 onClick={() => setEditingTitle(true)}
                 className="truncate cursor-text"
                 style={{
-                  fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, color: '#F4F8FB',
+                  fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, color: 'var(--tb-text, #F4F8FB)',
                   whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis',
                 }}
               >
@@ -694,10 +749,16 @@ export default function TablicaBoard() {
             <button onClick={() => setSearchOpen(o => !o)} className="board-header-btn board-header-action" title="Filtruj karty">
               <Filter size={14} /><span className="hidden lg:inline">Filtruj</span>
             </button>
+            <button
+              onClick={() => setThemePanelOpen(true)}
+              title={`Motyw: ${theme.name}`}
+              className="flex items-center justify-center rounded-md flex-shrink-0"
+              style={{ width: 24, height: 24, borderRadius: 7, background: `linear-gradient(135deg, ${theme.bg.mid}, ${theme.akcent.baltic})`, border: '1px solid rgba(255,255,255,0.25)' }}
+            />
             <div
               className="flex items-center justify-center flex-shrink-0"
               style={{
-                width: 32, height: 32, borderRadius: '50%', background: '#37A0C9',
+                width: 32, height: 32, borderRadius: '50%', background: 'var(--tb-accent, #37A0C9)',
                 fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 12, color: 'white',
                 border: '1px solid rgba(255,255,255,0.16)',
               }}
@@ -717,7 +778,7 @@ export default function TablicaBoard() {
         {searchOpen && (
           <div className="flex items-center gap-2 flex-shrink-0" style={{ padding: '10px 16px 0' }}>
             <div className="relative flex-1" style={{ maxWidth: 360 }}>
-              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#A9BBC9' }} />
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--tb-text-muted, #A9BBC9)' }} />
               <input
                 autoFocus
                 value={searchInput}
@@ -725,14 +786,14 @@ export default function TablicaBoard() {
                 placeholder="Szukaj kart po tytule…"
                 style={{
                   width: '100%', fontSize: 16, padding: '8px 10px 8px 30px', borderRadius: 10,
-                  border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
+                  border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: 'var(--tb-text, #F4F8FB)', outline: 'none',
                 }}
               />
             </div>
             <button
               onClick={() => { setSearchOpen(false); setSearchInput('') }}
               className="p-1.5 rounded-lg flex-shrink-0"
-              style={{ color: '#A9BBC9' }}
+              style={{ color: 'var(--tb-text-muted, #A9BBC9)' }}
             >
               <X size={16} />
             </button>
@@ -745,7 +806,7 @@ export default function TablicaBoard() {
               <span
                 key={l.id}
                 className="board-dot"
-                style={{ background: i === activeColumnIndex ? '#37A0C9' : 'rgba(255,255,255,0.25)' }}
+                style={{ background: i === activeColumnIndex ? 'var(--tb-accent, #37A0C9)' : 'rgba(255,255,255,0.25)' }}
               />
             ))}
           </div>
@@ -804,14 +865,14 @@ export default function TablicaBoard() {
                     placeholder="Nazwa listy…"
                     style={{
                       width: '100%', fontSize: 16, padding: '8px 10px', borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
+                      border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: 'var(--tb-text, #F4F8FB)', outline: 'none',
                     }}
                   />
                   <div className="flex items-center gap-2 mt-2">
-                    <button type="submit" className="px-3 rounded-lg text-sm font-medium text-white" style={{ background: '#37A0C9', minHeight: 36 }}>
+                    <button type="submit" className="px-3 rounded-lg text-sm font-medium text-white" style={{ background: 'var(--tb-accent, #37A0C9)', minHeight: 36 }}>
                       Dodaj listę
                     </button>
-                    <button type="button" onClick={() => { setAddingList(false); setListDraft('') }} className="px-2 text-sm" style={{ color: '#A9BBC9' }}>
+                    <button type="button" onClick={() => { setAddingList(false); setListDraft('') }} className="px-2 text-sm" style={{ color: 'var(--tb-text-muted, #A9BBC9)' }}>
                       Anuluj
                     </button>
                   </div>
@@ -835,7 +896,7 @@ export default function TablicaBoard() {
           <DragOverlay>
             {activeCard && (
               <div className="board-card board-card-overlay rounded-[8px] p-2.5" style={{ width: 248 }}>
-                <p style={{ fontSize: 14, lineHeight: 1.45, color: '#F4F8FB', fontFamily: "'Inter', sans-serif" }}>{activeCard.tytul}</p>
+                <p style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--tb-text, #F4F8FB)', fontFamily: "'Inter', sans-serif" }}>{activeCard.tytul}</p>
               </div>
             )}
             {activeList && (
@@ -843,7 +904,7 @@ export default function TablicaBoard() {
                 className="board-card-overlay"
                 style={{ width: 272, borderRadius: 12, padding: '10px 10px 8px', background: activeList.kolor || 'rgba(0,0,0,0.30)' }}
               >
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#F4F8FB', fontFamily: "'Space Grotesk', sans-serif" }}>{activeList.nazwa}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--tb-text, #F4F8FB)', fontFamily: "'Space Grotesk', sans-serif" }}>{activeList.nazwa}</span>
               </div>
             )}
           </DragOverlay>
@@ -904,19 +965,45 @@ export default function TablicaBoard() {
           onChangeBackground={() => { setBoardMenuOpen(false); setBgPickerOpen(true) }}
           onFilter={() => { setBoardMenuOpen(false); setSearchOpen(o => !o) }}
           onPlaceholder={label => { setBoardMenuOpen(false); handlePlaceholder(label) }}
+          onImport={() => { setBoardMenuOpen(false); setImportOpen(true) }}
+          onActivity={() => { setBoardMenuOpen(false); setActivityOpen(true) }}
+          onStats={() => { setBoardMenuOpen(false); setStatsOpen(true) }}
+          onTheme={() => { setBoardMenuOpen(false); setThemePanelOpen(true) }}
         />
+      )}
+
+      {importOpen && (
+        <ImportKWHotelModal
+          tablicaId={id}
+          lists={lists}
+          cardsByList={cardsByList}
+          onClose={() => setImportOpen(false)}
+          onImported={fetchData}
+        />
+      )}
+
+      {activityOpen && (
+        <BoardActivityPanel tablicaId={id} onClose={() => setActivityOpen(false)} />
+      )}
+
+      {statsOpen && (
+        <BoardStats lists={lists} cardsByList={cardsByList} photosToday={photosToday} onClose={() => setStatsOpen(false)} />
+      )}
+
+      {themePanelOpen && (
+        <ThemeSwitcherPanel themeKey={themeKey} onSelect={setTheme} onClose={() => setThemePanelOpen(false)} />
       )}
 
       <BottomSheet open={fabMenuOpen} onClose={() => setFabMenuOpen(false)} title="Szybka akcja">
         <div className="flex flex-col gap-2">
           <button onClick={() => fabPhotoInputRef.current?.click()} className="fab-menu-item">
-            <Camera size={17} style={{ color: '#37A0C9' }} /> Szybkie zdjęcie
+            <Camera size={17} style={{ color: 'var(--tb-accent, #37A0C9)' }} /> Szybkie zdjęcie
           </button>
           <button onClick={handleFabAddCard} className="fab-menu-item">
-            <Plus size={17} style={{ color: '#A9BBC9' }} /> Dodaj kartę
+            <Plus size={17} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} /> Dodaj kartę
           </button>
           <button onClick={handleFabAddList} className="fab-menu-item">
-            <Plus size={17} style={{ color: '#A9BBC9' }} /> Dodaj listę
+            <Plus size={17} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} /> Dodaj listę
           </button>
         </div>
       </BottomSheet>

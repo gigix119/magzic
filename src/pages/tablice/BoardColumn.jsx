@@ -82,19 +82,19 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
         <button
           onClick={e => { e.stopPropagation(); setCollapsed(false) }}
           className="p-1 mt-2 rounded"
-          style={{ color: '#A9BBC9' }}
+          style={{ color: 'var(--tb-text-muted, #A9BBC9)' }}
         >
           <ChevronRight size={15} />
         </button>
         <span
           className="text-[13px] font-semibold mt-2"
-          style={{ color: '#F4F8FB', writingMode: 'vertical-rl', fontFamily: "'Space Grotesk', sans-serif" }}
+          style={{ color: 'var(--tb-text, #F4F8FB)', writingMode: 'vertical-rl', fontFamily: "'Space Grotesk', sans-serif" }}
         >
           {column.nazwa}
         </span>
         <span
           className="text-[11px] font-medium rounded-full px-1.5 mb-3 mt-auto"
-          style={{ background: 'rgba(255,255,255,0.18)', color: '#F4F8FB' }}
+          style={{ background: 'rgba(255,255,255,0.18)', color: 'var(--tb-text, #F4F8FB)' }}
         >
           {cards.length}
         </span>
@@ -132,7 +132,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               onPointerDown={e => e.stopPropagation()}
               style={{
                 background: 'rgba(0,0,0,0.30)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 6,
-                padding: '2px 6px', fontSize: 16, fontWeight: 600, color: '#F4F8FB', width: '100%',
+                padding: '2px 6px', fontSize: 16, fontWeight: 600, color: 'var(--tb-text, #F4F8FB)', width: '100%',
                 fontFamily: "'Space Grotesk', sans-serif",
               }}
             />
@@ -141,7 +141,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               onClick={() => setEditingName(true)}
               className="flex-1 truncate"
               style={{
-                fontSize: 14, fontWeight: 600, color: '#F4F8FB',
+                fontSize: 14, fontWeight: 600, color: 'var(--tb-text, #F4F8FB)',
                 fontFamily: "'Space Grotesk', sans-serif", lineHeight: 1.3, wordBreak: 'break-word',
               }}
             >
@@ -151,7 +151,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
           <span
             className="flex-shrink-0"
             style={{
-              fontSize: 11, fontWeight: 600, background: 'rgba(255,255,255,0.18)', color: '#F4F8FB',
+              fontSize: 11, fontWeight: 600, background: 'rgba(255,255,255,0.18)', color: 'var(--tb-text, #F4F8FB)',
               borderRadius: 999, padding: '1px 7px', fontFamily: "'Space Grotesk', sans-serif",
             }}
           >
@@ -178,7 +178,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
             {menuOpen && (
               <div
                 className="absolute right-0 top-8 z-10 rounded-lg py-1 text-sm"
-                style={{ background: 'rgba(10,20,36,0.97)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 12px 32px rgba(0,0,0,0.50)', minWidth: 190, backdropFilter: 'blur(20px)' }}
+                style={{ background: 'var(--tb-menu-bg, rgba(10,20,36,0.97))', border: '1px solid var(--tb-divider, rgba(255,255,255,0.12))', boxShadow: '0 12px 32px rgba(0,0,0,0.50)', minWidth: 190, backdropFilter: 'blur(var(--tb-blur-amt, 20px))' }}
                 onMouseLeave={() => { setMenuOpen(false); setColorPickerOpen(false) }}
               >
                 {colorPickerOpen ? (
@@ -191,10 +191,10 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
                         className="rounded-full flex items-center justify-center"
                         style={{
                           width: 22, height: 22, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)',
-                          outline: !column.kolor ? '2px solid #F4F8FB' : 'none', outlineOffset: 2,
+                          outline: !column.kolor ? '2px solid var(--tb-text, #F4F8FB)' : 'none', outlineOffset: 2,
                         }}
                       >
-                        <X size={11} style={{ color: '#A9BBC9' }} />
+                        <X size={11} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} />
                       </button>
                       {LISTA_HEADER_COLORS.map(c => (
                         <button
@@ -205,7 +205,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
                           className="rounded-full"
                           style={{
                             width: 22, height: 22, background: c.value,
-                            outline: column.kolor === c.value ? '2px solid #F4F8FB' : 'none',
+                            outline: column.kolor === c.value ? '2px solid var(--tb-text, #F4F8FB)' : 'none',
                             outlineOffset: 2,
                           }}
                         />
@@ -219,21 +219,21 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
                       className="board-menu-item"
                       style={{ minHeight: 36, fontSize: 13.5 }}
                     >
-                      <Palette size={14} style={{ color: '#A9BBC9' }} /> Zmień kolor listy
+                      <Palette size={14} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} /> Zmień kolor listy
                     </button>
                     <button
                       onClick={() => { setHideDone(h => !h); setMenuOpen(false) }}
                       className="board-menu-item"
                       style={{ minHeight: 36, fontSize: 13.5 }}
                     >
-                      <CheckCircle2 size={14} style={{ color: '#A9BBC9' }} /> {hideDone ? 'Pokaż gotowe' : 'Ukryj gotowe'}
+                      <CheckCircle2 size={14} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} /> {hideDone ? 'Pokaż gotowe' : 'Ukryj gotowe'}
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); onArchiveList(column.id) }}
                       className="board-menu-item"
                       style={{ minHeight: 36, fontSize: 13.5 }}
                     >
-                      <Archive size={14} style={{ color: '#A9BBC9' }} /> Archiwizuj listę
+                      <Archive size={14} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} /> Archiwizuj listę
                     </button>
                   </>
                 )}
@@ -278,7 +278,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               rows={1}
               style={{
                 width: '100%', fontSize: 16, padding: '8px 10px', borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB',
+                border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: 'var(--tb-text, #F4F8FB)',
                 resize: 'none', outline: 'none', overflow: 'hidden', minHeight: 38,
               }}
             />
@@ -294,7 +294,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
                 onClick={() => { setComposerOpen(false); setDraft('') }}
                 className="p-1.5 rounded"
                 title="Zamknij"
-                style={{ color: '#A9BBC9' }}
+                style={{ color: 'var(--tb-text-muted, #A9BBC9)' }}
               >
                 <X size={16} />
               </button>

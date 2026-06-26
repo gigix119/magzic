@@ -102,8 +102,43 @@ const THEMES = {
 
 /** Zwraca pełny zestaw tokenów dla danego motywu */
 export function getTheme(key) {
-  return THEMES[key]
+  return THEMES[key] || THEMES.baltic
 }
 
 /** Wszystkie motywy — do ThemeSwitcher */
 export const themes = THEMES
+
+/**
+ * Mapuje tokeny motywu na CSS custom properties (--tb-*), aplikowane globalnie
+ * na document.documentElement przez useTablicaTheme. Style w komponentach
+ * Tablice odwołują się do var(--tb-x, <wartość baltic>) — fallback gwarantuje
+ * identyczny wygląd nawet jeśli zmienna nie jest jeszcze ustawiona.
+ */
+export function getThemeCssVars(theme) {
+  const isLight = !!theme.isLight
+  return {
+    '--tb-bg-abyss': theme.bg.abyss,
+    '--tb-bg-deep': theme.bg.deep,
+    '--tb-bg-mid': theme.bg.mid,
+    '--tb-bg-tide': theme.bg.tide,
+    '--tb-accent': theme.akcent.baltic,
+    '--tb-text': theme.text.primary,
+    '--tb-text-muted': theme.text.muted,
+    '--tb-status-zmiana': theme.status.zmiana,
+    '--tb-status-przyjazd': theme.status.przyjazd,
+    '--tb-status-wyjazd': theme.status.wyjazd,
+    '--tb-blur-amt': isLight ? '0px' : '20px',
+    '--tb-header-bg': isLight ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.28)',
+    '--tb-column-bg': isLight ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.30)',
+    '--tb-menu-bg': isLight ? 'rgba(255,255,255,0.97)' : 'rgba(10,20,36,0.97)',
+    '--tb-panel-bg': isLight ? 'rgba(255,255,255,0.97)' : 'rgba(12,24,44,0.97)',
+    '--tb-card-bg': isLight ? 'rgba(255,255,255,0.92)' : '#22272B',
+    '--tb-card-bg-hover': isLight ? '#ffffff' : '#2E3640',
+    '--tb-card-border': isLight ? 'rgba(0,0,0,0.08)' : 'transparent',
+    '--tb-divider': isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
+    '--tb-input-bg': isLight ? 'rgba(0,0,0,0.04)' : 'rgba(0,0,0,0.30)',
+    '--tb-overlay-1': isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.07)',
+    '--tb-overlay-2': isLight ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.12)',
+    '--tb-overlay-3': isLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.18)',
+  }
+}

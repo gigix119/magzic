@@ -5,13 +5,11 @@ import { supabase } from '../../supabase'
 import { useToast } from '../../context/ToastContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
-import { getTheme } from '../../lib/tablicaTokens'
+import { useTablicaTheme } from '../../lib/useTablicaTheme'
 import EmptyState from '../../components/ui/EmptyState'
 import BottomNav from './BottomNav'
 import CardDetailModal from './CardDetailModal'
 import { STATUS_COLORS, classifyKarta } from './tablicaTokens'
-
-const theme = getTheme('baltic')
 
 const SECTION_LABELS = {
   bez_terminu: 'Bez terminu',
@@ -43,7 +41,7 @@ function ChecklistRing({ done, total, color }) {
         strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
-      <text x="50%" y="51%" textAnchor="middle" dy="0.32em" fontSize={9} fontWeight={600} fill="#F4F8FB" fontFamily="'Inter', sans-serif">
+      <text x="50%" y="51%" textAnchor="middle" dy="0.32em" fontSize={9} fontWeight={600} fill="var(--tb-text, #F4F8FB)" fontFamily="'Inter', sans-serif">
         {done}/{total}
       </text>
     </svg>
@@ -76,7 +74,7 @@ function AgendaRow({ card, onOpen }) {
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center gap-2 flex-wrap">
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#F4F8FB', fontFamily: "'Space Grotesk', sans-serif" }}>{card.tytul}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--tb-text, #F4F8FB)', fontFamily: "'Space Grotesk', sans-serif" }}>{card.tytul}</span>
           {classification && (
             <span
               className="card-detail-chip"
@@ -87,7 +85,7 @@ function AgendaRow({ card, onOpen }) {
           )}
         </div>
         {card.opis && (
-          <p className="truncate" style={{ fontSize: 12.5, color: '#A9BBC9', margin: '2px 0 0' }}>{card.opis}</p>
+          <p className="truncate" style={{ fontSize: 12.5, color: 'var(--tb-text-muted, #A9BBC9)', margin: '2px 0 0' }}>{card.opis}</p>
         )}
         {overdue && (
           <p style={{ fontSize: 12, color: '#FF6B6B', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -97,7 +95,7 @@ function AgendaRow({ card, onOpen }) {
       </div>
 
       {checklista.length > 0 && (
-        <ChecklistRing done={doneCount} total={checklista.length} color={doneCount === checklista.length ? '#2BD17E' : '#37A0C9'} />
+        <ChecklistRing done={doneCount} total={checklista.length} color={doneCount === checklista.length ? '#2BD17E' : 'var(--tb-accent, #37A0C9)'} />
       )}
     </div>
   )
@@ -108,6 +106,7 @@ export default function MojDzien() {
   const { addToast } = useToast()
   const { wsQuery, addWsFilter } = useWorkspace()
   const { user } = useAuth()
+  const { theme } = useTablicaTheme()
 
   const [cards, setCards] = useState([])
   const [loading, setLoading] = useState(true)
@@ -168,8 +167,8 @@ export default function MojDzien() {
           <ArrowLeft size={16} />
         </button>
         <div style={{ minWidth: 0 }}>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, color: '#F4F8FB' }}>Mój dzień</span>
-          <span style={{ fontSize: 12, color: '#A9BBC9', marginLeft: 10 }}>{todayLabel}</span>
+          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, color: 'var(--tb-text, #F4F8FB)' }}>Mój dzień</span>
+          <span style={{ fontSize: 12, color: 'var(--tb-text-muted, #A9BBC9)', marginLeft: 10 }}>{todayLabel}</span>
         </div>
       </header>
 
@@ -183,7 +182,7 @@ export default function MojDzien() {
             <button
               onClick={() => navigate('/tablice')}
               className="px-4 rounded-[10px] text-sm font-medium text-white"
-              style={{ background: '#37A0C9', minHeight: 40 }}
+              style={{ background: 'var(--tb-accent, #37A0C9)', minHeight: 40 }}
             >
               Wróć do tablicy
             </button>

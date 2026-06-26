@@ -30,6 +30,7 @@ import Ustawienia from './pages/Ustawienia'
 import Regulamin from './pages/Regulamin'
 import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
 import BusinessOnboarding from './components/BusinessOnboarding'
+import InstallPromptBanner from './components/InstallPromptBanner'
 import BackendLayout from './pages/backend/BackendLayout'
 import BackendIndex from './pages/backend/BackendIndex'
 import BackendUsers from './pages/backend/BackendUsers'
@@ -78,6 +79,7 @@ export default function App() {
           <WorkspaceProvider>
             <BrowserRouter>
               <BusinessOnboarding />
+              <InstallPromptBanner />
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />

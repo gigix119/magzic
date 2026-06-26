@@ -4,6 +4,7 @@ import { supabase } from '../../supabase'
 import { useToast } from '../../context/ToastContext'
 import { useAuth } from '../../context/AuthContext'
 import { hashColor } from './tablicaTokens'
+import { logActivity } from './activityLog'
 
 function displayName(profile, user) {
   if (profile?.first_name || profile?.last_name) {
@@ -58,7 +59,11 @@ export default function CardComments({ card, workspaceId }) {
       .select()
       .single()
     if (error) addToast(error.message, 'error')
-    else { setItems(prev => [data, ...prev]); setDraft('') }
+    else {
+      setItems(prev => [data, ...prev])
+      setDraft('')
+      logActivity({ workspaceId, kartaId: card.id, tablicaId: card.tablica_id, user, profile, typ: 'komentarz', opis: 'dodano komentarz' })
+    }
     setSending(false)
   }
 
@@ -76,7 +81,7 @@ export default function CardComments({ card, workspaceId }) {
           type="submit"
           disabled={sending || !draft.trim()}
           className="flex items-center justify-center rounded-[10px] flex-shrink-0"
-          style={{ background: 'rgba(255,255,255,0.10)', color: '#F4F8FB', width: 40, height: 40, opacity: draft.trim() ? 1 : 0.5 }}
+          style={{ background: 'rgba(255,255,255,0.10)', color: 'var(--tb-text, #F4F8FB)', width: 40, height: 40, opacity: draft.trim() ? 1 : 0.5 }}
         >
           <Send size={15} />
         </button>
@@ -101,7 +106,7 @@ export default function CardComments({ card, workspaceId }) {
             </span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="flex items-center gap-1.5">
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#F4F8FB' }}>{item.autor_nazwa || 'Użytkownik'}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tb-text, #F4F8FB)' }}>{item.autor_nazwa || 'Użytkownik'}</span>
                 <span style={{ fontSize: 11, color: '#6E7E8C' }}>{formatWhen(item.created_at)}</span>
               </div>
               <p style={{ fontSize: 13.5, color: '#D7E1E8', margin: 0, wordBreak: 'break-word' }}>{item.tresc}</p>

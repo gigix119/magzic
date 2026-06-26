@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Trash2, Archive, CheckCircle2, Circle, X, ArrowRightLeft, Copy, ChevronUp, ChevronDown,
-  ListChecks, Plus, LayoutList, UserRound, Image, Paperclip, MessageSquare,
+  ListChecks, Plus, LayoutList, UserRound, Image, Paperclip, MessageSquare, History,
 } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
@@ -10,6 +10,7 @@ import CardPhotos from './CardPhotos'
 import CardPhotoGallery from './CardPhotoGallery'
 import CardAttachments from './CardAttachments'
 import CardComments from './CardComments'
+import CardActivity from './CardActivity'
 import TerminPicker from './TerminPicker'
 
 function toLocalDatetimeValue(termin) {
@@ -227,7 +228,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
           <button
             onClick={onClose}
             className="flex items-center justify-center rounded-lg flex-shrink-0"
-            style={{ width: 32, height: 32, background: 'rgba(255,255,255,0.08)', color: '#A9BBC9' }}
+            style={{ width: 32, height: 32, background: 'rgba(255,255,255,0.08)', color: 'var(--tb-text-muted, #A9BBC9)' }}
           >
             <X size={16} />
           </button>
@@ -249,7 +250,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
               className="card-detail-chip"
               style={{
                 cursor: 'pointer',
-                color: przypisanyDo === user?.id ? '#37A0C9' : '#A9BBC9',
+                color: przypisanyDo === user?.id ? 'var(--tb-accent, #37A0C9)' : 'var(--tb-text-muted, #A9BBC9)',
                 borderColor: przypisanyDo === user?.id ? 'rgba(55,160,201,0.55)' : undefined,
                 background: przypisanyDo === user?.id ? 'rgba(55,160,201,0.18)' : undefined,
               }}
@@ -262,7 +263,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
             type="button"
             onClick={toggleZakonczona}
             className="flex items-center gap-2 text-sm font-medium self-start"
-            style={{ color: zakonczona ? '#2BD17E' : '#A9BBC9', minHeight: 36 }}
+            style={{ color: zakonczona ? '#2BD17E' : 'var(--tb-text-muted, #A9BBC9)', minHeight: 36 }}
           >
             {zakonczona ? <CheckCircle2 size={18} /> : <Circle size={18} />}
             Zakończona
@@ -307,7 +308,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                     style={{
                       width: 26, height: 26,
                       background: c.value,
-                      outline: active ? '2px solid #F4F8FB' : 'none',
+                      outline: active ? '2px solid var(--tb-text, #F4F8FB)' : 'none',
                       outlineOffset: 2,
                       transform: active ? 'scale(1.1)' : 'none',
                     }}
@@ -328,7 +329,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                       className="card-detail-input"
                       style={{ minHeight: 32, padding: '5px 9px', fontSize: 13 }}
                     />
-                    <button type="button" onClick={() => toggleLabel(e.color)} style={{ color: '#A9BBC9', flexShrink: 0 }}>
+                    <button type="button" onClick={() => toggleLabel(e.color)} style={{ color: 'var(--tb-text-muted, #A9BBC9)', flexShrink: 0 }}>
                       <X size={13} />
                     </button>
                   </div>
@@ -347,7 +348,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                 type="button"
                 onClick={() => setTemplatesOpen(o => !o)}
                 className="text-xs font-medium"
-                style={{ color: '#37A0C9', minHeight: 26 }}
+                style={{ color: 'var(--tb-accent, #37A0C9)', minHeight: 26 }}
               >
                 Wstaw szablon
               </button>
@@ -358,7 +359,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                 <div
                   style={{
                     height: '100%', width: `${percent}%`,
-                    background: percent === 100 ? '#2BD17E' : '#37A0C9',
+                    background: percent === 100 ? '#2BD17E' : 'var(--tb-accent, #37A0C9)',
                     transition: 'width 0.2s',
                   }}
                 />
@@ -373,9 +374,9 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                     type="button"
                     onClick={() => addTemplate(t.items)}
                     className="text-left text-sm px-3 rounded-[10px]"
-                    style={{ background: 'rgba(255,255,255,0.07)', color: '#F4F8FB', minHeight: 38 }}
+                    style={{ background: 'rgba(255,255,255,0.07)', color: 'var(--tb-text, #F4F8FB)', minHeight: 38 }}
                   >
-                    {t.nazwa} <span style={{ color: '#A9BBC9' }}>({t.items.length})</span>
+                    {t.nazwa} <span style={{ color: 'var(--tb-text-muted, #A9BBC9)' }}>({t.items.length})</span>
                   </button>
                 ))}
               </div>
@@ -389,7 +390,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                       type="button"
                       onClick={() => toggleItemDone(item.id)}
                       className="flex items-center justify-center flex-shrink-0"
-                      style={{ color: item.done ? '#2BD17E' : '#A9BBC9', width: 36, height: 38 }}
+                      style={{ color: item.done ? '#2BD17E' : 'var(--tb-text-muted, #A9BBC9)', width: 36, height: 38 }}
                     >
                       {item.done ? <CheckCircle2 size={19} /> : <Circle size={19} />}
                     </button>
@@ -408,7 +409,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                         onClick={() => setEditingItemId(item.id)}
                         className="text-[13.5px] flex-1"
                         style={{
-                          color: item.done ? '#A9BBC9' : '#F4F8FB',
+                          color: item.done ? 'var(--tb-text-muted, #A9BBC9)' : 'var(--tb-text, #F4F8FB)',
                           textDecoration: item.done ? 'line-through' : 'none',
                           opacity: item.done ? 0.7 : 1,
                           cursor: 'text',
@@ -426,7 +427,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                         type="button"
                         onClick={() => moveChecklistItem(item.id, -1)}
                         disabled={i === 0}
-                        style={{ color: '#A9BBC9', opacity: i === 0 ? 0.3 : 1, width: 24, height: 38 }}
+                        style={{ color: 'var(--tb-text-muted, #A9BBC9)', opacity: i === 0 ? 0.3 : 1, width: 24, height: 38 }}
                       >
                         <ChevronUp size={13} />
                       </button>
@@ -434,7 +435,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                         type="button"
                         onClick={() => moveChecklistItem(item.id, 1)}
                         disabled={i === checklista.length - 1}
-                        style={{ color: '#A9BBC9', opacity: i === checklista.length - 1 ? 0.3 : 1, width: 24, height: 38 }}
+                        style={{ color: 'var(--tb-text-muted, #A9BBC9)', opacity: i === checklista.length - 1 ? 0.3 : 1, width: 24, height: 38 }}
                       >
                         <ChevronDown size={13} />
                       </button>
@@ -443,7 +444,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                         onClick={() => removeChecklistItem(item.id)}
                         onBlur={() => setConfirmingRemoveId(null)}
                         title={confirmingRemoveId === item.id ? 'Na pewno?' : 'Usuń'}
-                        style={{ color: confirmingRemoveId === item.id ? '#FF6B6B' : '#A9BBC9', width: 28, height: 38, flexShrink: 0 }}
+                        style={{ color: confirmingRemoveId === item.id ? '#FF6B6B' : 'var(--tb-text-muted, #A9BBC9)', width: 28, height: 38, flexShrink: 0 }}
                       >
                         <X size={13} />
                       </button>
@@ -464,7 +465,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
               <button
                 type="submit"
                 className="flex items-center justify-center rounded-[10px] flex-shrink-0"
-                style={{ background: 'rgba(255,255,255,0.10)', color: '#F4F8FB', width: 38, height: 38 }}
+                style={{ background: 'rgba(255,255,255,0.10)', color: 'var(--tb-text, #F4F8FB)', width: 38, height: 38 }}
               >
                 <Plus size={15} />
               </button>
@@ -503,7 +504,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                   onClick={handleMove}
                   title="Przenieś do wybranej listy"
                   className="flex items-center gap-1.5 px-3 rounded-[10px] text-sm font-medium flex-shrink-0"
-                  style={{ background: 'rgba(255,255,255,0.08)', color: '#F4F8FB', minHeight: 38 }}
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--tb-text, #F4F8FB)', minHeight: 38 }}
                 >
                   <ArrowRightLeft size={13} /> Przenieś
                 </button>
@@ -512,7 +513,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                   onClick={handleCopy}
                   title="Skopiuj do wybranej listy"
                   className="flex items-center gap-1.5 px-3 rounded-[10px] text-sm font-medium flex-shrink-0"
-                  style={{ background: 'rgba(255,255,255,0.08)', color: '#F4F8FB', minHeight: 38 }}
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--tb-text, #F4F8FB)', minHeight: 38 }}
                 >
                   <Copy size={13} /> Kopiuj
                 </button>
@@ -524,6 +525,11 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
             <label className="card-detail-section-label"><MessageSquare size={13} /> Komentarze</label>
             <CardComments card={card} workspaceId={workspaceId} />
           </div>
+
+          <div>
+            <label className="card-detail-section-label"><History size={13} /> Aktywność</label>
+            <CardActivity card={card} />
+          </div>
         </div>
 
         <div className="card-detail-footer">
@@ -531,7 +537,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
             <button
               onClick={handleArchive}
               className="flex items-center gap-1.5 text-sm font-medium"
-              style={{ color: '#A9BBC9', minHeight: 40 }}
+              style={{ color: 'var(--tb-text-muted, #A9BBC9)', minHeight: 40 }}
             >
               <Archive size={14} /> Archiwizuj
             </button>
@@ -547,7 +553,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
           <button
             onClick={onClose}
             className="px-5 rounded-[10px] text-sm font-medium text-white"
-            style={{ background: '#37A0C9', minHeight: 38 }}
+            style={{ background: 'var(--tb-accent, #37A0C9)', minHeight: 38 }}
           >
             Gotowe
           </button>

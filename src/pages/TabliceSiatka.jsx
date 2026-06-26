@@ -5,10 +5,8 @@ import { supabase } from '../supabase'
 import { useToast } from '../context/ToastContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import Spinner from '../components/Spinner'
-import { getTheme } from '../lib/tablicaTokens'
+import { useTablicaTheme } from '../lib/useTablicaTheme'
 import { getBoardBackgroundStyle } from './tablice/tablicaTokens'
-
-const t = getTheme('baltic')
 
 const COVER_COLORS = ['#0FA3B1', '#D9912E', '#B5483C', '#2B4A6F', '#5B4A9E', '#1F7A5C']
 
@@ -52,7 +50,7 @@ function BoardCard({ board, onStarToggle, onClick }) {
         </button>
       </div>
       <div style={{ flex: '0 0 37px', background: 'rgba(8,16,30,0.88)', backdropFilter: 'blur(4px)', padding: '0 10px', display: 'flex', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: '#F4F8FB', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.35 }}>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: 'var(--tb-text, #F4F8FB)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.35 }}>
           {board.nazwa}
         </span>
       </div>
@@ -77,9 +75,9 @@ function CreateBoardTile({ onClick }) {
       }}
     >
       <div style={{ width: 32, height: 32, borderRadius: 8, background: hovered ? 'rgba(55,160,201,0.20)' : 'rgba(255,255,255,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.14s' }}>
-        <Plus size={16} style={{ color: hovered ? '#37A0C9' : '#A9BBC9' }} />
+        <Plus size={16} style={{ color: hovered ? 'var(--tb-accent, #37A0C9)' : 'var(--tb-text-muted, #A9BBC9)' }} />
       </div>
-      <span style={{ fontSize: 13, fontWeight: 500, color: hovered ? '#F4F8FB' : '#A9BBC9', fontFamily: "'Inter', sans-serif" }}>Utwórz nową tablicę</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: hovered ? 'var(--tb-text, #F4F8FB)' : 'var(--tb-text-muted, #A9BBC9)', fontFamily: "'Inter', sans-serif" }}>Utwórz nową tablicę</span>
     </button>
   )
 }
@@ -102,8 +100,8 @@ function CreateBoardModal({ onClose, onCreate, creating }) {
         fontFamily: "'Inter', sans-serif",
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16, color: '#F4F8FB' }}>Utwórz tablicę</span>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', color: '#A9BBC9' }}>
+          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16, color: 'var(--tb-text, #F4F8FB)' }}>Utwórz tablicę</span>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', color: 'var(--tb-text-muted, #A9BBC9)' }}>
             <X size={15} />
           </button>
         </div>
@@ -111,11 +109,11 @@ function CreateBoardModal({ onClose, onCreate, creating }) {
           <div style={{ width: '100%', height: 96, borderRadius: 10, overflow: 'hidden', marginBottom: 20, position: 'relative', background: selectedColor }}>
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.12)' }} />
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 12px', background: 'rgba(8,16,30,0.80)' }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: '#F4F8FB' }}>{title || 'Tytuł tablicy'}</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--tb-text, #F4F8FB)' }}>{title || 'Tytuł tablicy'}</span>
             </div>
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#A9BBC9', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--tb-text-muted, #A9BBC9)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
               Tytuł tablicy <span style={{ color: '#FF6B6B' }}>*</span>
             </label>
             <input
@@ -126,13 +124,13 @@ function CreateBoardModal({ onClose, onCreate, creating }) {
               style={{
                 width: '100%', height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.07)',
                 border: `1px solid ${title ? 'rgba(55,160,201,0.60)' : 'rgba(255,255,255,0.18)'}`,
-                color: '#F4F8FB', fontSize: 16, padding: '0 14px', outline: 'none',
+                color: 'var(--tb-text, #F4F8FB)', fontSize: 16, padding: '0 14px', outline: 'none',
                 fontFamily: "'Inter', sans-serif", boxSizing: 'border-box', transition: 'border 0.14s',
               }}
             />
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#A9BBC9', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tło</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--tb-text-muted, #A9BBC9)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tło</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {COVER_COLORS.map(c => {
                 const isActive = selectedColor === c
@@ -140,16 +138,16 @@ function CreateBoardModal({ onClose, onCreate, creating }) {
                   <button
                     key={c}
                     onClick={() => setSelectedColor(c)}
-                    style={{ width: 40, height: 28, borderRadius: 7, background: c, border: isActive ? '2px solid #37A0C9' : '2px solid transparent', cursor: 'pointer', outline: isActive ? '2px solid rgba(55,160,201,0.35)' : 'none', outlineOffset: 1 }}
+                    style={{ width: 40, height: 28, borderRadius: 7, background: c, border: isActive ? '2px solid var(--tb-accent, #37A0C9)' : '2px solid transparent', cursor: 'pointer', outline: isActive ? '2px solid rgba(55,160,201,0.35)' : 'none', outlineOffset: 1 }}
                   />
                 )
               })}
             </div>
           </div>
           <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#A9BBC9', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Widoczność</label>
-            <button type="button" style={{ width: '100%', height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', color: '#F4F8FB', fontSize: 14, cursor: 'default' }}>
-              <span>Przestrzeń robocza</span><ChevronDown size={14} style={{ color: '#A9BBC9' }} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--tb-text-muted, #A9BBC9)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Widoczność</label>
+            <button type="button" style={{ width: '100%', height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', color: 'var(--tb-text, #F4F8FB)', fontSize: 14, cursor: 'default' }}>
+              <span>Przestrzeń robocza</span><ChevronDown size={14} style={{ color: 'var(--tb-text-muted, #A9BBC9)' }} />
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -158,7 +156,7 @@ function CreateBoardModal({ onClose, onCreate, creating }) {
               onClick={() => onCreate(title.trim(), selectedColor)}
               style={{
                 height: 48, borderRadius: 12, width: '100%',
-                background: canCreate ? '#37A0C9' : 'rgba(55,160,201,0.25)', border: 'none',
+                background: canCreate ? 'var(--tb-accent, #37A0C9)' : 'rgba(55,160,201,0.25)', border: 'none',
                 cursor: canCreate ? 'pointer' : 'not-allowed', color: canCreate ? 'white' : 'rgba(255,255,255,0.35)',
                 fontSize: 15, fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif",
                 transition: 'background 0.14s, color 0.14s',
@@ -166,7 +164,7 @@ function CreateBoardModal({ onClose, onCreate, creating }) {
             >
               {creating ? 'Tworzenie…' : title.trim() ? 'Utwórz' : 'Wpisz tytuł tablicy'}
             </button>
-            <button onClick={onClose} style={{ height: 44, borderRadius: 12, width: '100%', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#A9BBC9', fontSize: 14, cursor: 'pointer' }}>
+            <button onClick={onClose} style={{ height: 44, borderRadius: 12, width: '100%', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--tb-text-muted, #A9BBC9)', fontSize: 14, cursor: 'pointer' }}>
               Anuluj
             </button>
           </div>
@@ -180,6 +178,7 @@ export default function TabliceSiatka() {
   const { addToast } = useToast()
   const { workspaceId, wsQuery, addWsFilter } = useWorkspace()
   const navigate = useNavigate()
+  const { theme: t } = useTablicaTheme()
 
   const [boards, setBoards] = useState([])
   const [loading, setLoading] = useState(true)
@@ -251,18 +250,18 @@ export default function TabliceSiatka() {
           className="flex items-center gap-2 flex-1"
           style={{ maxWidth: 420, height: 38, borderRadius: 10, padding: '0 14px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)' }}
         >
-          <Search size={14} style={{ color: '#A9BBC9', flexShrink: 0 }} />
+          <Search size={14} style={{ color: 'var(--tb-text-muted, #A9BBC9)', flexShrink: 0 }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Szukaj tablic…"
-            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#F4F8FB', fontSize: 14 }}
+            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--tb-text, #F4F8FB)', fontSize: 14 }}
           />
         </div>
         <button
           onClick={() => setShowCreate(true)}
           className="hidden sm:flex"
-          style={{ height: 38, padding: '0 18px', borderRadius: 10, background: '#37A0C9', border: 'none', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'Space Grotesk', sans-serif", alignItems: 'center', gap: 6, boxShadow: '0 2px 10px rgba(55,160,201,0.40)', flexShrink: 0 }}
+          style={{ height: 38, padding: '0 18px', borderRadius: 10, background: 'var(--tb-accent, #37A0C9)', border: 'none', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'Space Grotesk', sans-serif", alignItems: 'center', gap: 6, boxShadow: '0 2px 10px rgba(55,160,201,0.40)', flexShrink: 0 }}
         >
           <Plus size={15} strokeWidth={2.5} />Utwórz
         </button>
@@ -270,12 +269,12 @@ export default function TabliceSiatka() {
 
       {filteredBoards.length === 0 && !search ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 px-4 text-center">
-          <p style={{ fontSize: 14, fontWeight: 500, color: '#F4F8FB' }}>Brak tablic</p>
-          <p style={{ fontSize: 12, maxWidth: 260, color: '#A9BBC9' }}>Utwórz pierwszą tablicę, by zacząć organizować zadania w stylu Kanban.</p>
+          <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--tb-text, #F4F8FB)' }}>Brak tablic</p>
+          <p style={{ fontSize: 12, maxWidth: 260, color: 'var(--tb-text-muted, #A9BBC9)' }}>Utwórz pierwszą tablicę, by zacząć organizować zadania w stylu Kanban.</p>
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-2 px-4 rounded-lg text-sm font-medium text-white mt-1"
-            style={{ background: '#37A0C9', minHeight: 44 }}
+            style={{ background: 'var(--tb-accent, #37A0C9)', minHeight: 44 }}
           >
             <Plus size={16} /> Nowa tablica
           </button>
@@ -286,7 +285,7 @@ export default function TabliceSiatka() {
             <div className="mb-9">
               <div className="flex items-center gap-2 mb-3.5">
                 <Star size={17} fill="#F5A524" stroke="#F5A524" />
-                <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 16, color: '#F4F8FB' }}>Tablice oznaczone gwiazdką</span>
+                <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 16, color: 'var(--tb-text, #F4F8FB)' }}>Tablice oznaczone gwiazdką</span>
               </div>
               <div className="boards-grid">
                 {starred.map(b => (
@@ -297,7 +296,7 @@ export default function TabliceSiatka() {
           )}
 
           <div>
-            <p style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#A9BBC9', marginBottom: 12 }}>
+            <p style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--tb-text-muted, #A9BBC9)', marginBottom: 12 }}>
               Twoje przestrzenie robocze
             </p>
             <div className="boards-grid">
@@ -316,7 +315,7 @@ export default function TabliceSiatka() {
         className="sm:hidden"
         style={{
           position: 'fixed', right: 20, bottom: 'max(80px, env(safe-area-inset-bottom, 24px))',
-          width: 56, height: 56, borderRadius: '50%', background: '#37A0C9', border: 'none',
+          width: 56, height: 56, borderRadius: '50%', background: 'var(--tb-accent, #37A0C9)', border: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           boxShadow: '0 4px 20px rgba(55,160,201,0.55)', zIndex: 40,
         }}
