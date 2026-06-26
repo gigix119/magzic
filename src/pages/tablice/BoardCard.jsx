@@ -10,7 +10,7 @@ const TERMIN_STYLE = {
   neutral: { color: '#A9BBC9', background: 'transparent' },
 }
 
-function BoardCard({ card, onOpen, onRename, removing, hidden }) {
+function BoardCard({ card, onOpen, onRename, removing, pulsing, hidden }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     data: { type: 'card', listaId: card.lista_id },
@@ -54,7 +54,7 @@ function BoardCard({ card, onOpen, onRename, removing, hidden }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={() => !isDragging && !editingTitle && onOpen(card)}
-      className={`board-card rounded-[8px] cursor-pointer select-none${removing ? ' board-card-removing' : ''}`}
+      className={`board-card rounded-[8px] cursor-pointer select-none${removing ? ' board-card-removing' : ''}${pulsing ? ' board-card-remote-pulse' : ''}`}
     >
       {card.cover_url && (
         <div style={{ width: '100%', height: 100, overflow: 'hidden' }}>

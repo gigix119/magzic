@@ -117,6 +117,20 @@ export function hashColor(str) {
   return TABLICA_COLORS[Math.abs(hash) % TABLICA_COLORS.length].value
 }
 
+// Klasyfikacja karty (ZMIANA/PRZYJAZD/WYJAZD) wg słów kluczowych w tytule —
+// te same słowa co reguły automatyzacji (AutomationModal/reguly_tablic_migration.sql).
+// Brak osobnej kolumny w bazie — wnioskowane z tytułu, tylko do celów wizualnych (StatusPill, spine).
+export const STATUS_COLORS = { zmiana: '#F5A524', przyjazd: '#2BD17E', wyjazd: '#9B8CFF' }
+export const STATUS_LABELS = { zmiana: 'Zmiana', przyjazd: 'Przyjazd', wyjazd: 'Wyjazd' }
+
+export function classifyKarta(tytul) {
+  const t = (tytul || '').toLowerCase()
+  if (t.includes('zmiana')) return 'zmiana'
+  if (t.includes('przyjazd')) return 'przyjazd'
+  if (t.includes('wyjazd')) return 'wyjazd'
+  return null
+}
+
 // Szablony checklisty — wstawiane jako lista stringów, zamieniane na elementy w UI
 export const CHECKLIST_TEMPLATES = [
   { id: 'sprzatanie', nazwa: 'Sprzątanie standardowe', items: ['Odkurzanie', 'Mycie łazienki', 'Kuchnia', 'Pościel', 'Ręczniki', 'Śmieci', 'Kontrola'] },

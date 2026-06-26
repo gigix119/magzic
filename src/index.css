@@ -718,3 +718,222 @@ body {
   .skeleton-shimmer { animation: none; }
 }
 
+/* ── CardDetail — dark-glass, desktop modal / mobile bottom sheet (PB3) ── */
+.card-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0,0,0,0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card-detail-panel {
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  background: rgba(12,24,44,0.97);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-top: 1px solid rgba(255,255,255,0.28);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.65);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  animation: cardDetailFadeIn 0.18s ease-out;
+}
+
+@keyframes cardDetailFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.card-detail-grabber { display: none; }
+
+@media (max-width: 767px) {
+  .card-detail-overlay { align-items: flex-end; padding: 0; }
+  .card-detail-panel {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+    animation: slideUpModal 0.25s cubic-bezier(0.32,0.72,0,1);
+  }
+  .card-detail-grabber {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.25);
+    margin: 10px auto 2px;
+    flex-shrink: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-detail-panel { animation: none; }
+}
+
+.card-detail-header {
+  flex-shrink: 0;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.card-detail-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.card-detail-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+}
+
+.card-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.07);
+  color: #A9BBC9;
+  white-space: nowrap;
+}
+
+.card-detail-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #A9BBC9;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
+.card-detail-input {
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 10px;
+  color: #F4F8FB;
+  padding: 10px 12px;
+  font-size: 14.5px;
+  width: 100%;
+  outline: none;
+  min-height: 44px;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+.card-detail-input::placeholder { color: #6E7E8C; }
+.card-detail-input:focus { border-color: rgba(55,160,201,0.55); }
+
+/* Pulsowanie obramowania karty po zmianie wprowadzonej przez innego użytkownika (Realtime) */
+@keyframes remoteCardPulse {
+  0%   { box-shadow: 0 1px 4px rgba(0,0,0,0.25), 0 0 0 0 rgba(55,160,201,0.65); border-color: rgba(55,160,201,0.85); }
+  100% { box-shadow: 0 1px 4px rgba(0,0,0,0.25), 0 0 0 6px rgba(55,160,201,0); border-color: transparent; }
+}
+.board-card-remote-pulse {
+  animation: remoteCardPulse 0.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-card-remote-pulse { animation: none; }
+}
+
+/* ── "Mój dzień" — agenda widok (PB3) ── */
+.moj-dzien-page {
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  font-family: 'Inter', sans-serif;
+}
+
+.moj-dzien-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 16px 100px;
+}
+
+.agenda-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #A9BBC9;
+}
+.agenda-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.12);
+}
+
+.agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .agenda-row:hover { background: rgba(255,255,255,0.07); }
+}
+.agenda-row:active { background: rgba(255,255,255,0.10); }
+
+.agenda-hour {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 1px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.agenda-hour-big { font-size: 20px; font-weight: 700; color: #F4F8FB; }
+.agenda-hour-small { font-size: 11px; font-weight: 400; color: #A9BBC9; }
+
+.agenda-spine {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+

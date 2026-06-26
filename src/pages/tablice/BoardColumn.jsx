@@ -7,7 +7,7 @@ import { Plus, MoreHorizontal, Archive, Palette, ChevronsLeftRight, ChevronRight
 import BoardCard from './BoardCard'
 import { LISTA_HEADER_COLORS } from './tablicaTokens'
 
-function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor, isDropTarget, removingCardIds, searchQuery }, ref) {
+function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor, isDropTarget, removingCardIds, pulsingCardIds, searchQuery }, ref) {
   const [composerOpen, setComposerOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -248,6 +248,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               onOpen={onOpenCard}
               onRename={onRenameCard}
               removing={removingCardIds?.has(card.id)}
+              pulsing={pulsingCardIds?.has(card.id)}
               hidden={!!searchQuery && !card.tytul?.toLowerCase().includes(searchQuery)}
             />
           ))}

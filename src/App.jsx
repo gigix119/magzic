@@ -25,6 +25,7 @@ import Lokale from './pages/Lokale'
 import LokalDetail from './pages/LokalDetail'
 import TabliceSiatka from './pages/TabliceSiatka'
 import TablicaBoard from './pages/tablice/TablicaBoard'
+import MojDzien from './pages/tablice/MojDzien'
 import Ustawienia from './pages/Ustawienia'
 import Regulamin from './pages/Regulamin'
 import PolitykaPrywatnosci from './pages/PolitykaPrywatnosci'
@@ -128,6 +129,7 @@ export default function App() {
                 </Route>
 
                 {/* Wnętrze tablicy — pełnoekranowe, własny header/nav (bez sidebara aplikacji) */}
+                <Route path="/tablice/moj-dzien" element={<ProtectedRoute><MojDzien /></ProtectedRoute>} />
                 <Route path="/tablice/:id" element={<ProtectedRoute><TablicaBoard /></ProtectedRoute>} />
 
                 {/* Widok pracownika — uproszczona, mobilna ścieżka (bez sidebara) */}

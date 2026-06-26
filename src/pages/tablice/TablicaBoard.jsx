@@ -98,10 +98,27 @@ export default function TablicaBoard() {
   const scrollRef = useRef(null)
   const columnRefs = useRef({})
 
+  const [pulsingCardIds, setPulsingCardIds] = useState(() => new Set())
+  const recentLocalEditsRef = useRef(new Map())
+  const realtimeQueueRef = useRef([])
+  const realtimeTimerRef = useRef(null)
+
   const listsRef = useRef(lists)
   const cardsByListRef = useRef(cardsByList)
   useEffect(() => { listsRef.current = lists }, [lists])
   useEffect(() => { cardsByListRef.current = cardsByList }, [cardsByList])
+
+  function markLocalEdit(cardId) {
+    recentLocalEditsRef.current.set(cardId, Date.now())
+  }
+
+  function pulseCards(ids) {
+    if (!ids.length) return
+    setPulsingCardIds(prev => { const s = new Set(prev); ids.forEach(id => s.add(id)); return s })
+    setTimeout(() => {
+      setPulsingCardIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s })
+    }, 650)
+  }
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -130,6 +147,105 @@ export default function TablicaBoard() {
 
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { if (board) setTitleDraft(board.nazwa) }, [board])
+
+  // ── Realtime: synchronizacja kart/list między wszystkimi otwartymi sesjami tablicy ──
+  function applyRealtimeBatch(events) {
+    const listaEvents = events.filter(e => e.type === 'lista')
+    const kartaEvents = events.filter(e => e.type === 'karta')
+
+    if (listaEvents.length) {
+      setLists(prev => {
+        let next = [...prev]
+        for (const { payload } of listaEvents) {
+          const { eventType, new: newRow, old: oldRow } = payload
+          if (eventType === 'DELETE') {
+            next = next.filter(l => l.id !== oldRow.id)
+            continue
+          }
+          if (newRow.archiwum) { next = next.filter(l => l.id !== newRow.id); continue }
+          const idx = next.findIndex(l => l.id === newRow.id)
+          if (idx === -1) next = [...next, newRow]
+          else next[idx] = { ...next[idx], ...newRow }
+        }
+        return next.sort((a, b) => a.pozycja - b.pozycja)
+      })
+      setCardsByList(prev => {
+        const next = { ...prev }
+        for (const { payload } of listaEvents) {
+          const { eventType, new: newRow, old: oldRow } = payload
+          if (eventType === 'DELETE' && oldRow?.id) delete next[oldRow.id]
+          else if (newRow && !(newRow.id in next)) next[newRow.id] = []
+        }
+        return next
+      })
+    }
+
+    if (kartaEvents.length) {
+      const toPulse = []
+      setCardsByList(prev => {
+        const next = { ...prev }
+        for (const { payload } of kartaEvents) {
+          const { eventType, new: newRow, old: oldRow } = payload
+
+          if (eventType === 'DELETE') {
+            const container = findContainer(oldRow.id, next)
+            if (container) next[container] = next[container].filter(c => c.id !== oldRow.id)
+            continue
+          }
+
+          if (newRow.archiwum) {
+            const container = findContainer(newRow.id, next)
+            if (container) next[container] = next[container].filter(c => c.id !== newRow.id)
+            continue
+          }
+
+          const targetListaId = newRow.lista_id
+          const existingContainer = findContainer(newRow.id, next)
+          if (existingContainer && existingContainer !== targetListaId) {
+            next[existingContainer] = next[existingContainer].filter(c => c.id !== newRow.id)
+          }
+          if (!next[targetListaId]) next[targetListaId] = []
+          const idx = next[targetListaId].findIndex(c => c.id === newRow.id)
+          if (idx === -1) {
+            next[targetListaId] = [...next[targetListaId], newRow].sort((a, b) => a.pozycja - b.pozycja)
+          } else {
+            next[targetListaId] = next[targetListaId].map(c => (c.id === newRow.id ? { ...c, ...newRow } : c))
+          }
+
+          const lastLocal = recentLocalEditsRef.current.get(newRow.id)
+          const isOwnEcho = lastLocal && Date.now() - lastLocal < 1200
+          if (eventType === 'UPDATE' && !isOwnEcho) toPulse.push(newRow.id)
+        }
+        return next
+      })
+      pulseCards(toPulse)
+    }
+  }
+
+  function queueRealtimeEvent(evt) {
+    realtimeQueueRef.current.push(evt)
+    if (realtimeTimerRef.current) return
+    realtimeTimerRef.current = setTimeout(() => {
+      const batch = realtimeQueueRef.current
+      realtimeQueueRef.current = []
+      realtimeTimerRef.current = null
+      applyRealtimeBatch(batch)
+    }, 150)
+  }
+
+  useEffect(() => {
+    if (!id) return
+    const channel = supabase.channel(`tablica-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'karty', filter: `tablica_id=eq.${id}` }, payload => {
+        queueRealtimeEvent({ type: 'karta', payload })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'listy', filter: `tablica_id=eq.${id}` }, payload => {
+        queueRealtimeEvent({ type: 'lista', payload })
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [id])
 
   async function commitTitle() {
     setEditingTitle(false)
@@ -220,6 +336,7 @@ export default function TablicaBoard() {
   const handleSaveCard = useCallback(async (cardId, fields) => {
     const container = findContainer(cardId, cardsByListRef.current)
     if (!container) return
+    markLocalEdit(cardId)
     setCardsByList(prev => ({
       ...prev,
       [container]: prev[container].map(c => (c.id === cardId ? { ...c, ...fields } : c)),
@@ -302,6 +419,7 @@ export default function TablicaBoard() {
     if (!container || container === targetListaId) return
     const card = cardsByListRef.current[container].find(c => c.id === cardId)
     if (!card) return
+    markLocalEdit(cardId)
     const targetItems = cardsByListRef.current[targetListaId] || []
     const newPos = positionBetween(targetItems.length ? targetItems[targetItems.length - 1].pozycja : null, null)
     setCardsByList(prev => ({
@@ -406,6 +524,7 @@ export default function TablicaBoard() {
       const nextCard = reorderedItems[finalIndex + 1]
       const newPos = positionBetween(prevCard?.pozycja ?? null, nextCard?.pozycja ?? null)
 
+      markLocalEdit(active.id)
       const snapshot = cardsByList
       const updatedItems = reorderedItems.map(c => (c.id === active.id ? { ...c, pozycja: newPos, lista_id: container } : c))
       setCardsByList(prev => ({ ...prev, [container]: updatedItems }))
@@ -592,6 +711,7 @@ export default function TablicaBoard() {
                   onChangeListColor={handleChangeListColor}
                   isDropTarget={dragOverList === list.id}
                   removingCardIds={removingCardIds}
+                  pulsingCardIds={pulsingCardIds}
                   searchQuery={searchQuery}
                 />
               ))}
@@ -665,8 +785,9 @@ export default function TablicaBoard() {
         )}
 
         <BottomNav
+          active="board"
           onInbox={() => handlePlaceholder('Skrzynka odbiorcza')}
-          onPlanner={() => handlePlaceholder('Planista')}
+          onPlanner={() => navigate('/tablice/moj-dzien')}
           onSwitch={() => setSwitcherOpen(true)}
         />
       </div>
