@@ -14,7 +14,7 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
 import {
   ArrowLeft, Plus, MoreHorizontal, Zap, Search, X, LayoutGrid,
-  ChevronDown, Star, PlugZap, Filter, Share2,
+  ChevronDown, Star, PlugZap, Filter, Share2, Camera,
 } from 'lucide-react'
 import EmptyState from '../../components/ui/EmptyState'
 import BottomSheet from '../../components/ui/BottomSheet'
@@ -24,6 +24,8 @@ import BottomNav from './BottomNav'
 import CardDetailModal from './CardDetailModal'
 import AutomationModal from './AutomationModal'
 import BoardBackgroundPicker from './BoardBackgroundPicker'
+import OfflineBanner from './OfflineBanner'
+import { capturePhoto, flushPendingPhotos } from './photoUpload'
 import { positionBetween, prefersReducedMotion, getBoardBackgroundStyle } from './tablicaTokens'
 
 function initialsFromProfile(profile, user) {
@@ -65,7 +67,7 @@ export default function TablicaBoard() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { addToast } = useToast()
-  const { wsQuery, addWsFilter, wsData } = useWorkspace()
+  const { workspaceId, wsQuery, addWsFilter, wsData } = useWorkspace()
   const { user, profile } = useAuth()
 
   const [board, setBoard] = useState(null)
@@ -93,6 +95,10 @@ export default function TablicaBoard() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const searchQuery = searchInput.trim().toLowerCase()
+
+  const [cardPhotos, setCardPhotos] = useState({})
+  const [fabMenuOpen, setFabMenuOpen] = useState(false)
+  const fabPhotoInputRef = useRef(null)
 
   const [activeColumnIndex, setActiveColumnIndex] = useState(0)
   const scrollRef = useRef(null)
@@ -127,11 +133,12 @@ export default function TablicaBoard() {
   )
 
   const fetchData = useCallback(async () => {
-    const [{ data: b, error: be }, { data: l }, { data: k }, { data: allBoards }] = await Promise.all([
+    const [{ data: b, error: be }, { data: l }, { data: k }, { data: allBoards }, { data: photos }] = await Promise.all([
       addWsFilter(wsQuery('tablice').select('*')).eq('id', id).maybeSingle(),
       addWsFilter(wsQuery('listy').select('*')).eq('tablica_id', id).eq('archiwum', false).order('pozycja'),
       addWsFilter(wsQuery('karty').select('*')).eq('tablica_id', id).eq('archiwum', false).order('pozycja'),
       addWsFilter(wsQuery('tablice').select('id,nazwa,kolor_tla,tlo_typ')).eq('archiwum', false).order('pozycja'),
+      addWsFilter(wsQuery('karta_zdjecia').select('karta_id,url,created_at')).eq('tablica_id', id).order('created_at', { ascending: false }),
     ])
     if (be) addToast(be.message, 'error')
     setBoard(b || null)
@@ -141,6 +148,13 @@ export default function TablicaBoard() {
     for (const list of l || []) grouped[list.id] = []
     for (const c of k || []) { (grouped[c.lista_id] ??= []).push(c) }
     setCardsByList(grouped)
+    const photoMap = {}
+    for (const p of photos || []) {
+      const entry = photoMap[p.karta_id] || { count: 0, latestUrl: p.url }
+      entry.count += 1
+      photoMap[p.karta_id] = entry
+    }
+    setCardPhotos(photoMap)
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -349,6 +363,54 @@ export default function TablicaBoard() {
     handleSaveCard(cardId, { tytul })
   }, [handleSaveCard])
 
+  const handleToggleDone = useCallback((cardId, current) => {
+    handleSaveCard(cardId, { zakonczona: !current })
+  }, [handleSaveCard])
+
+  const handlePhotoAdded = useCallback((cardId, row) => {
+    setCardPhotos(prev => ({ ...prev, [cardId]: { count: (prev[cardId]?.count || 0) + 1, latestUrl: row.url } }))
+  }, [])
+
+  const handleFabQuickPhoto = useCallback(async (file) => {
+    const targetList = listsRef.current[0]
+    if (!targetList || !file) return
+    const items = cardsByListRef.current[targetList.id] || []
+    const lastPos = items.length ? items[items.length - 1].pozycja : null
+    const newPos = positionBetween(lastPos, null)
+    const tytul = `Zdjęcie ${new Date().toLocaleDateString('pl-PL')}`
+    const { data, error } = await supabase
+      .from('karty')
+      .insert([{ tytul, lista_id: targetList.id, tablica_id: id, pozycja: newPos, ...wsData() }])
+      .select()
+      .single()
+    if (error) { addToast(error.message, 'error'); return }
+    setCardsByList(prev => ({ ...prev, [targetList.id]: [...(prev[targetList.id] || []), data] }))
+    const { row, offline } = await capturePhoto({ file, workspaceId, kartaId: data.id, tablicaId: id, typ: 'aparat', userId: user?.id })
+    if (offline) addToast('📷 Karta dodana, zdjęcie zapisane lokalnie — wyślę gdy wrócisz online', 'warning')
+    else if (row) { handlePhotoAdded(data.id, row); addToast('📷 Zdjęcie zapisane', 'success') }
+  }, [id, addToast, wsData, workspaceId, user, handlePhotoAdded])
+
+  function handleFabPhotoCapture(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    setFabMenuOpen(false)
+    if (file) handleFabQuickPhoto(file)
+  }
+
+  useEffect(() => {
+    async function flush() {
+      const { synced } = await flushPendingPhotos()
+      if (synced > 0) {
+        addToast(`📷 Wysłano ${synced} oczekujące zdjęcie(a)`, 'success')
+        fetchData()
+      }
+    }
+    flush()
+    window.addEventListener('online', flush)
+    return () => window.removeEventListener('online', flush)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function restoreCard(container, index, card) {
     setCardsByList(prev => {
       const arr = [...(prev[container] || [])]
@@ -428,8 +490,9 @@ export default function TablicaBoard() {
       [targetListaId]: [...(prev[targetListaId] || []), { ...card, lista_id: targetListaId, pozycja: newPos }],
     }))
     const { error } = await supabase.rpc('przenies_karte', { p_karta_id: cardId, p_lista_id: targetListaId, p_pozycja: newPos })
+    const targetName = listsRef.current.find(l => l.id === targetListaId)?.nazwa
     if (error) addToast('Nie udało się przenieść karty', 'error')
-    else addToast('Karta przeniesiona', 'success')
+    else addToast(targetName ? `Przeniesiono do „${targetName}"` : 'Karta przeniesiona', 'success')
   }, [addToast])
 
   const handleCopyCard = useCallback(async (cardId, targetListaId) => {
@@ -450,7 +513,8 @@ export default function TablicaBoard() {
       .single()
     if (error) { addToast(error.message, 'error'); return }
     setCardsByList(prev => ({ ...prev, [targetListaId]: [...(prev[targetListaId] || []), data] }))
-    addToast('Karta skopiowana', 'success')
+    const targetName = listsRef.current.find(l => l.id === targetListaId)?.nazwa
+    addToast(targetName ? `Skopiowano do „${targetName}"` : 'Karta skopiowana', 'success')
   }, [id, addToast, wsData])
 
   function handleDragStart(event) {
@@ -545,8 +609,15 @@ export default function TablicaBoard() {
   }
 
   function handleFabAddCard() {
+    setFabMenuOpen(false)
     const list = lists[activeColumnIndex] || lists[0]
     if (list) columnRefs.current[list.id]?.openComposer()
+  }
+
+  function handleFabAddList() {
+    setFabMenuOpen(false)
+    setAddingList(true)
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ left: scrollRef.current.scrollWidth, behavior: 'smooth' }))
   }
 
   if (loading) return <BoardSkeleton />
@@ -568,6 +639,7 @@ export default function TablicaBoard() {
 
   return (
     <div className="board-interior" style={getBoardBackgroundStyle(board.kolor_tla, board.tlo_typ)}>
+      <OfflineBanner />
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.08)', pointerEvents: 'none' }} />
 
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -613,13 +685,13 @@ export default function TablicaBoard() {
           <div style={{ flex: 1 }} />
 
           <div className="flex items-center gap-1.5">
-            <button onClick={() => handlePlaceholder('Power-Upy')} className="board-header-btn">
+            <button onClick={() => handlePlaceholder('Power-Upy')} className="board-header-btn board-header-action">
               <PlugZap size={14} /><span className="hidden lg:inline">Power-Ups</span>
             </button>
-            <button onClick={() => setAutomationOpen(true)} className="board-header-btn">
+            <button onClick={() => setAutomationOpen(true)} className="board-header-btn board-header-action">
               <Zap size={14} /><span className="hidden lg:inline">Automatyzacja</span>
             </button>
-            <button onClick={() => setSearchOpen(o => !o)} className="board-header-btn" title="Filtruj karty">
+            <button onClick={() => setSearchOpen(o => !o)} className="board-header-btn board-header-action" title="Filtruj karty">
               <Filter size={14} /><span className="hidden lg:inline">Filtruj</span>
             </button>
             <div
@@ -633,7 +705,7 @@ export default function TablicaBoard() {
             >
               {initialsFromProfile(profile, user)}
             </div>
-            <button onClick={() => handlePlaceholder('Udostępnij')} className="board-header-btn">
+            <button onClick={() => handlePlaceholder('Udostępnij')} className="board-header-btn board-header-action">
               <Share2 size={14} /><span className="hidden lg:inline">Udostępnij</span>
             </button>
             <button onClick={() => setBoardMenuOpen(true)} className="board-header-btn" title="Menu tablicy" style={{ width: 36, padding: 0, justifyContent: 'center' }}>
@@ -652,7 +724,7 @@ export default function TablicaBoard() {
                 onChange={e => setSearchInput(e.target.value)}
                 placeholder="Szukaj kart po tytule…"
                 style={{
-                  width: '100%', fontSize: 14, padding: '8px 10px 8px 30px', borderRadius: 10,
+                  width: '100%', fontSize: 16, padding: '8px 10px 8px 30px', borderRadius: 10,
                   border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.30)', color: '#F4F8FB', outline: 'none',
                 }}
               />
@@ -709,6 +781,9 @@ export default function TablicaBoard() {
                   onRenameList={handleRenameList}
                   onRenameCard={handleRenameCard}
                   onChangeListColor={handleChangeListColor}
+                  onToggleDone={handleToggleDone}
+                  onPhotoAdded={handlePhotoAdded}
+                  cardPhotos={cardPhotos}
                   isDropTarget={dragOverList === list.id}
                   removingCardIds={removingCardIds}
                   pulsingCardIds={pulsingCardIds}
@@ -776,13 +851,22 @@ export default function TablicaBoard() {
 
         {lists.length > 0 && (
           <button
-            onClick={handleFabAddCard}
+            onClick={() => setFabMenuOpen(true)}
             className="board-fab-add"
-            aria-label="Dodaj kartę"
+            aria-label="Szybka akcja"
           >
             <Plus size={22} />
           </button>
         )}
+
+        <input
+          ref={fabPhotoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={handleFabPhotoCapture}
+        />
 
         <BottomNav
           active="board"
@@ -818,9 +902,24 @@ export default function TablicaBoard() {
           onClose={() => setBoardMenuOpen(false)}
           onAutomation={() => { setBoardMenuOpen(false); setAutomationOpen(true) }}
           onChangeBackground={() => { setBoardMenuOpen(false); setBgPickerOpen(true) }}
+          onFilter={() => { setBoardMenuOpen(false); setSearchOpen(o => !o) }}
           onPlaceholder={label => { setBoardMenuOpen(false); handlePlaceholder(label) }}
         />
       )}
+
+      <BottomSheet open={fabMenuOpen} onClose={() => setFabMenuOpen(false)} title="Szybka akcja">
+        <div className="flex flex-col gap-2">
+          <button onClick={() => fabPhotoInputRef.current?.click()} className="fab-menu-item">
+            <Camera size={17} style={{ color: '#37A0C9' }} /> Szybkie zdjęcie
+          </button>
+          <button onClick={handleFabAddCard} className="fab-menu-item">
+            <Plus size={17} style={{ color: '#A9BBC9' }} /> Dodaj kartę
+          </button>
+          <button onClick={handleFabAddList} className="fab-menu-item">
+            <Plus size={17} style={{ color: '#A9BBC9' }} /> Dodaj listę
+          </button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={switcherOpen} onClose={() => setSwitcherOpen(false)} title="Przełącz tablicę">
         <div className="flex flex-col gap-1">

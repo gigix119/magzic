@@ -845,7 +845,7 @@ body {
   border-radius: 10px;
   color: #F4F8FB;
   padding: 10px 12px;
-  font-size: 14.5px;
+  font-size: 16px;
   width: 100%;
   outline: none;
   min-height: 44px;
@@ -865,6 +865,124 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .board-card-remote-pulse { animation: none; }
+}
+
+/* ── Ikony na karcie (ołówek, aparat) — zawsze widoczne na dotyku, na hover na desktopie (PB4) ── */
+.board-card-icon-btn {
+  position: absolute;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  background: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .board-card-icon-btn { opacity: 0; transition: opacity 0.12s; }
+  .board-card:hover .board-card-icon-btn { opacity: 1; }
+}
+.board-card-pencil-btn {
+  top: 4px; right: 4px; width: 30px; height: 30px; border-radius: 8px;
+  background: rgba(255,255,255,0.12); color: #A9BBC9;
+}
+.board-card-camera-btn {
+  bottom: 0; right: 0; width: 44px; height: 44px;
+}
+.board-card-camera-visual {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: rgba(55,160,201,0.25);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Puls przy oznaczeniu karty jako gotowej (PB4) */
+@keyframes cardDonePulse {
+  0%   { transform: scale(0.85); }
+  60%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+.board-card-done-pulse svg { animation: cardDonePulse 0.12s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .board-card-done-pulse svg { animation: none; }
+}
+
+/* ── TerminPicker — popover z przyciskami Wyczyść/Dzisiaj/Zatwierdź (PB4 FIX2) ── */
+.termin-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: transparent;
+}
+.termin-picker-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 81;
+  width: 260px;
+  max-width: 86vw;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(12,24,44,0.98);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.termin-picker-btn {
+  flex: 1;
+  height: 38px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.08);
+  color: #F4F8FB;
+  cursor: pointer;
+}
+.termin-picker-btn-confirm {
+  background: #37A0C9;
+  border-color: #37A0C9;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Offline indicator (PB4 Część 6B) ── */
+.offline-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 90;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  padding-top: max(8px, env(safe-area-inset-top, 8px));
+  font-family: 'Inter', sans-serif;
+}
+.offline-banner.offline { background: #F5A524; color: #1a1200; }
+.offline-banner.online { background: #2BD17E; color: #04210f; }
+
+/* ── Header tablicy: na mobile zostaje tylko nazwa/gwiazdka/avatar/menu, resztę chowamy do BoardMenu (PB4 Część 4D) ── */
+@media (max-width: 767px) {
+  .board-header-interior { height: 48px; }
+  .board-header-action { display: none; }
+}
+
+/* ── FAB menu — 3 szybkie akcje (PB4 Część 4E) ── */
+.fab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.07);
+  border: none;
+  color: #F4F8FB;
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
 }
 
 /* ── "Mój dzień" — agenda widok (PB3) ── */

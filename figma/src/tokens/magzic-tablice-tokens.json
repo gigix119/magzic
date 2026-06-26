@@ -1,0 +1,257 @@
+{
+  "$schema": "https://magzic.com/tokens/v1",
+  "meta": {
+    "name": "Magzic Tablice Tokens",
+    "file": "magzic-tablice-tokens.json",
+    "version": "1.0.0",
+    "modes": ["Baltic Deep", "Midnight Slate", "Coastal Fog", "Sunset Coast"],
+    "note": "Wartości dla trybu domyślnego = Baltic Deep. Wszystkie tryby poniżej w sekcji 'modes'."
+  },
+
+  "tokens": {
+
+    "bg": {
+      "abyss":   { "$type": "color", "Baltic Deep": "#080F1A",  "Midnight Slate": "#050508",  "Coastal Fog": "#D8E4EE",  "Sunset Coast": "#0F0408" },
+      "deep":    { "$type": "color", "Baltic Deep": "#0A1A2F",  "Midnight Slate": "#0D0D0F",  "Coastal Fog": "#EEF3F8",  "Sunset Coast": "#1A0A18" },
+      "mid":     { "$type": "color", "Baltic Deep": "#13314F",  "Midnight Slate": "#141418",  "Coastal Fog": "#EEF3F8",  "Sunset Coast": "#2D1320" },
+      "tide":    { "$type": "color", "Baltic Deep": "#1E4D6B",  "Midnight Slate": "#1C1C24",  "Coastal Fog": "#EEF3F8",  "Sunset Coast": "#3D2010" },
+      "board":   { "$type": "color", "Baltic Deep": "#1A8B99",  "Midnight Slate": "#1C1C24",  "Coastal Fog": "#D8E4EE",  "Sunset Coast": "#2D1320",
+                   "$note": "Kolor tła wnętrza tablicy (BoardInterior). Ustawiany per-tablica przy tworzeniu → tablice.kolor_tla" }
+    },
+
+    "glass": {
+      "surface": { "$type": "color", "Baltic Deep": "rgba(255,255,255,0.09)", "Midnight Slate": "rgba(255,255,255,0.06)", "Coastal Fog": "rgba(255,255,255,0.94)", "Sunset Coast": "rgba(255,230,200,0.07)" },
+      "edge":    { "$type": "color", "Baltic Deep": "rgba(255,255,255,0.18)", "Midnight Slate": "rgba(255,255,255,0.10)", "Coastal Fog": "rgba(0,0,0,0.08)",       "Sunset Coast": "rgba(255,200,150,0.16)" },
+      "edge_top":{ "$type": "color", "Baltic Deep": "rgba(255,255,255,0.28)", "Midnight Slate": "rgba(255,255,255,0.18)", "Coastal Fog": "rgba(0,0,0,0.10)",       "Sunset Coast": "rgba(255,210,170,0.26)",
+                   "$note": "Górna krawędź glass — jaśniejsza dla efektu prawdziwego szkła" },
+      "scrim":   { "$type": "color", "Baltic Deep": "rgba(8,18,32,0.62)",    "Midnight Slate": "rgba(3,3,5,0.70)",       "Coastal Fog": "rgba(0,0,0,0.40)",       "Sunset Coast": "rgba(16,4,12,0.65)",
+                   "$note": "Overlay za modalami i bottom-sheet" },
+      "blur":    { "$type": "dimension", "$value": "20px", "$note": "backdrop-filter: blur() — jednolita wartość dla wszystkich trybów" }
+    },
+
+    "akcent": {
+      "baltic":  { "$type": "color", "Baltic Deep": "#37A0C9",  "Midnight Slate": "#7C6FF7",  "Coastal Fog": "#0B7FCC",  "Sunset Coast": "#E8855A",
+                   "$note": "Główny kolor akcentu: przyciski CTA, aktywne elementy, focus ring" }
+    },
+
+    "text": {
+      "primary": { "$type": "color", "Baltic Deep": "#F4F8FB",  "Midnight Slate": "#F0F0F8",  "Coastal Fog": "#0F1923",  "Sunset Coast": "#F5EBE0" },
+      "muted":   { "$type": "color", "Baltic Deep": "#A9BBC9",  "Midnight Slate": "#8B8B9E",  "Coastal Fog": "#5E7080",  "Sunset Coast": "#C4A898" }
+    },
+
+    "status": {
+      "zmiana":   { "$type": "color", "Baltic Deep": "#F5A524",  "Midnight Slate": "#F5A524",  "Coastal Fog": "#E8930A",  "Sunset Coast": "#F5A524",
+                    "$note": "Pełna zmiana między gościami. Źródło: karty.klasyfikacja = 'zmiana'" },
+      "przyjazd": { "$type": "color", "Baltic Deep": "#2BD17E",  "Midnight Slate": "#2BD17E",  "Coastal Fog": "#16A870",  "Sunset Coast": "#4CC68D",
+                    "$note": "Przygotowanie pod check-in. Źródło: karty.klasyfikacja = 'przyjazd'" },
+      "wyjazd":   { "$type": "color", "Baltic Deep": "#9B8CFF",  "Midnight Slate": "#9B8CFF",  "Coastal Fog": "#6B52E0",  "Sunset Coast": "#C084FC",
+                    "$note": "Obsługa po wymeldowaniu. Źródło: karty.klasyfikacja = 'wyjazd'" }
+    },
+
+    "lista": {
+      "teal":   { "$type": "color", "$value": "#0FA3B1",  "$note": "Kolor nagłówka listy i okładki tablicy. listy.kolor = 'teal'" },
+      "violet": { "$type": "color", "$value": "#5B4A9E",  "$note": "listy.kolor = 'violet'" },
+      "amber":  { "$type": "color", "$value": "#C47A1E",  "$note": "listy.kolor = 'amber'" },
+      "green":  { "$type": "color", "$value": "#1F7A5C",  "$note": "listy.kolor = 'green'" },
+      "red":    { "$type": "color", "$value": "#8B2E2E",  "$note": "listy.kolor = 'red'" },
+      "navy":   { "$type": "color", "$value": "#2B4A6F",  "$note": "listy.kolor = 'navy'" },
+      "none":   { "$type": "color", "$value": "transparent", "$note": "Brak koloru nagłówka — domyślny stan listy" }
+    },
+
+    "space": {
+      "4":  { "$type": "dimension", "$value": "4px"  },
+      "8":  { "$type": "dimension", "$value": "8px"  },
+      "12": { "$type": "dimension", "$value": "12px" },
+      "16": { "$type": "dimension", "$value": "16px" },
+      "20": { "$type": "dimension", "$value": "20px" },
+      "24": { "$type": "dimension", "$value": "24px" },
+      "32": { "$type": "dimension", "$value": "32px" }
+    },
+
+    "radius": {
+      "sm8":    { "$type": "dimension", "$value": "8px",   "$note": "Karty (KartaTablicy), przyciski, inputy" },
+      "md12":   { "$type": "dimension", "$value": "12px",  "$note": "Listy (Lista), kafle tablic (BoardCard)" },
+      "lg16":   { "$type": "dimension", "$value": "16px",  "$note": "Modale (CreateBoardModal), panele (BoardMenu)" },
+      "pill999": { "$type": "dimension", "$value": "999px", "$note": "StatusPill, FilterChip, BottomNav, liczniki" }
+    },
+
+    "typography": {
+      "display": {
+        "family":  { "$type": "fontFamily", "$value": "Space Grotesk" },
+        "size":    { "$type": "dimension",  "$value": "24px" },
+        "weight":  { "$type": "fontWeight", "$value": 700 },
+        "$note": "Tytuły tablic w BoardHeader, nagłówki sekcji"
+      },
+      "title": {
+        "family":  { "$type": "fontFamily", "$value": "Space Grotesk" },
+        "size":    { "$type": "dimension",  "$value": "16px" },
+        "weight":  { "$type": "fontWeight", "$value": 600 }
+      },
+      "body": {
+        "family":  { "$type": "fontFamily", "$value": "Inter" },
+        "size":    { "$type": "dimension",  "$value": "14px" },
+        "weight":  { "$type": "fontWeight", "$value": 400 },
+        "$note": "Domyślny tekst kart (karty.tytul)"
+      },
+      "label": {
+        "family":  { "$type": "fontFamily", "$value": "Inter" },
+        "size":    { "$type": "dimension",  "$value": "13px" },
+        "weight":  { "$type": "fontWeight", "$value": 500 }
+      },
+      "caption": {
+        "family":  { "$type": "fontFamily", "$value": "Inter" },
+        "size":    { "$type": "dimension",  "$value": "12px" },
+        "weight":  { "$type": "fontWeight", "$value": 400 }
+      },
+      "input_min_size": {
+        "$type": "dimension", "$value": "16px",
+        "$note": "Minimalna wartość font-size dla <input> — blokuje auto-zoom na iOS"
+      }
+    },
+
+    "shadow": {
+      "card":         { "$type": "shadow", "$value": "0 1px 4px rgba(0,0,0,0.25)" },
+      "card_hover":   { "$type": "shadow", "$value": "0 4px 12px rgba(0,0,0,0.40)" },
+      "card_drag":    { "$type": "shadow", "$value": "0 12px 32px rgba(0,0,0,0.55)" },
+      "column":       { "$type": "shadow", "$value": "0 4px 32px rgba(0,0,0,0.38)" },
+      "modal":        { "$type": "shadow", "$value": "0 24px 64px rgba(0,0,0,0.65)" },
+      "fab":          { "$type": "shadow", "$value": "0 4px 20px rgba(55,160,201,0.50)" },
+      "bottom_nav":   { "$type": "shadow", "$value": "0 8px 32px rgba(0,0,0,0.45)" }
+    }
+  },
+
+  "components": {
+    "BoardGrid": {
+      "description": "Siatka kafli tablic — ekran startowy magzic.com/tablice",
+      "supabase_table": "tablice",
+      "props": {}
+    },
+    "BoardCard": {
+      "description": "Kafel pojedynczej tablicy na siatce",
+      "supabase_table": "tablice",
+      "variants": {
+        "cover":   { "type": "enum",    "values": ["color", "photo"],  "source": "tablice.kolor_tla | tablice.foto_url" },
+        "starred": { "type": "boolean", "default": false,              "source": "tablice.ulubiona" },
+        "hover":   { "type": "boolean", "default": false,              "note": "Stan wizualny only" }
+      },
+      "annotations": {
+        "name":      "tablice.nazwa",
+        "cover":     "tablice.kolor_tla / tablice.foto_url",
+        "starred":   "tablice.ulubiona"
+      }
+    },
+    "CreateBoardTile": {
+      "description": "Ostatni kafel w sekcji — otwiera CreateBoardModal",
+      "props": {}
+    },
+    "CreateBoardModal": {
+      "description": "Modal tworzenia nowej tablicy",
+      "supabase_table": "tablice (INSERT)",
+      "props": {
+        "isOpen":     { "type": "boolean" },
+        "onClose":    { "type": "function" }
+      }
+    },
+    "BoardInterior": {
+      "description": "Wnętrze tablicy Kanban — płótno z listami",
+      "supabase_table": "tablice + listy + karty",
+      "props": {
+        "boardId":    { "type": "string",  "source": "tablice.id" },
+        "boardName":  { "type": "string",  "source": "tablice.nazwa" },
+        "boardColor": { "type": "string",  "source": "tablice.kolor_tla",  "tokens": "bg/board" }
+      }
+    },
+    "BoardHeader": {
+      "description": "Sticky header wewnątrz BoardInterior",
+      "props": {
+        "boardName":  { "type": "string" },
+        "starred":    { "type": "boolean", "source": "tablice.ulubiona" }
+      }
+    },
+    "Lista": {
+      "description": "Kolumna kart na tablicy Kanban",
+      "supabase_table": "listy",
+      "variants": {
+        "headerColor": {
+          "type": "enum",
+          "values": ["none", "teal", "violet", "amber", "green", "red", "navy"],
+          "source": "listy.kolor",
+          "tokens": "lista/*"
+        },
+        "collapsed": { "type": "boolean", "default": false }
+      },
+      "annotations": {
+        "name":        "listy.nazwa",
+        "cardCount":   "count(karty) WHERE karty.lista_id = listy.id",
+        "headerColor": "listy.kolor",
+        "position":    "listy.pozycja (fractional indexing)"
+      }
+    },
+    "KartaTablicy": {
+      "description": "Pojedyncza karta Kanban",
+      "supabase_table": "karty",
+      "variants": {
+        "variant": { "type": "enum",    "values": ["simple", "enriched"] },
+        "lines":   { "type": "enum",    "values": [1, 2, 4],             "note": "Liczba linii tytułu" },
+        "hasLabels": { "type": "boolean", "default": false,              "source": "karty.etykiety[]" },
+        "hasCover":  { "type": "boolean", "default": false,              "source": "karty.cover_url" },
+        "hasMeta":   { "type": "boolean", "default": false,              "note": "Termin, załączniki, opis" },
+        "state":   { "type": "enum",    "values": ["default", "hover", "drag"] }
+      },
+      "annotations": {
+        "title":       "karty.tytul",
+        "labels":      "karty.etykiety[] (JSONB array {kolor, tekst})",
+        "coverPhoto":  "karty.cover_url (Supabase Storage signed URL, TTL 1h)",
+        "deadline":    "karty.termin (timestamptz)",
+        "attachments": "count(zalaczniki) WHERE zalaczniki.karta_id = karty.id",
+        "description": "karty.opis (boolean flag: length > 0)",
+        "position":    "karty.pozycja (fractional indexing within lista)"
+      }
+    },
+    "BottomNav": {
+      "description": "Pływający pasek nawigacji dolnej (glass pill)",
+      "props": {
+        "active": { "type": "enum", "values": ["inbox", "planner", "board", "switch"] }
+      }
+    },
+    "BoardMenu": {
+      "description": "Slide-over panel z prawej — menu tablicy (⋯)",
+      "props": {
+        "isOpen":  { "type": "boolean" },
+        "onClose": { "type": "function" }
+      }
+    },
+    "FAB": {
+      "description": "Floating Action Button — dodaj kartę / tablicę",
+      "props": {
+        "onClick": { "type": "function" }
+      },
+      "tokens": {
+        "color":  "akcent/baltic",
+        "shadow": "shadow/fab",
+        "size":   "56px",
+        "radius": "radius/pill999"
+      }
+    },
+    "StatusPill": {
+      "description": "Pill statusu karty (ZMIANA/PRZYJAZD/WYJAZD)",
+      "variants": {
+        "type": { "type": "enum", "values": ["zmiana", "przyjazd", "wyjazd"], "source": "karty.klasyfikacja", "tokens": "status/*" }
+      }
+    },
+    "CreateBoardTileEmpty": {
+      "description": "Alias CreateBoardTile — ostatni kafel z kreskowaną ramką"
+    }
+  },
+
+  "screens": {
+    "A-01": { "name": "BoardGrid desktop",       "size": "1440×900",  "status": "Ready for dev", "theme": "Baltic Deep" },
+    "A-02": { "name": "CreateBoardModal",         "size": "1440×900",  "status": "Ready for dev", "theme": "Baltic Deep" },
+    "A-03": { "name": "BoardGrid mobile",         "size": "375×812",   "status": "Ready for dev", "theme": "Baltic Deep" },
+    "B-01": { "name": "BoardInterior teal",       "size": "1440×900",  "status": "Ready for dev", "theme": "Baltic Deep", "boardColor": "bg/board=#1A8B99" },
+    "B-02": { "name": "BoardInterior colored",    "size": "1440×900",  "status": "Ready for dev", "theme": "Baltic Deep", "note": "Listy z kolorowymi nagłówkami (teal/violet/amber/green)" },
+    "B-03": { "name": "BoardMenu slide-over",     "size": "1440×900",  "status": "Ready for dev" },
+    "B-04": { "name": "BoardInterior mobile",     "size": "375×812",   "status": "Ready for dev" },
+    "B-05": { "name": "KartaTablicy variants",    "size": "1440×900",  "status": "Ready for dev", "note": "Arkusz wariantów: simple/enriched × 1/2/4 linie × stany" }
+  }
+}

@@ -3,11 +3,11 @@ import { useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Archive, Palette, ChevronsLeftRight, ChevronRight, FileText, X } from 'lucide-react'
+import { Plus, MoreHorizontal, Archive, Palette, ChevronsLeftRight, ChevronRight, FileText, X, CheckCircle2 } from 'lucide-react'
 import BoardCard from './BoardCard'
 import { LISTA_HEADER_COLORS } from './tablicaTokens'
 
-function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor, isDropTarget, removingCardIds, pulsingCardIds, searchQuery }, ref) {
+function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRenameList, onRenameCard, onChangeListColor, onToggleDone, onPhotoAdded, cardPhotos, isDropTarget, removingCardIds, pulsingCardIds, searchQuery }, ref) {
   const [composerOpen, setComposerOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -15,6 +15,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(column.nazwa)
   const [collapsed, setCollapsed] = useState(false)
+  const [hideDone, setHideDone] = useState(false)
   const textareaRef = useRef(null)
 
   useImperativeHandle(ref, () => ({
@@ -131,7 +132,7 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               onPointerDown={e => e.stopPropagation()}
               style={{
                 background: 'rgba(0,0,0,0.30)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 6,
-                padding: '2px 6px', fontSize: 14, fontWeight: 600, color: '#F4F8FB', width: '100%',
+                padding: '2px 6px', fontSize: 16, fontWeight: 600, color: '#F4F8FB', width: '100%',
                 fontFamily: "'Space Grotesk', sans-serif",
               }}
             />
@@ -221,6 +222,13 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
                       <Palette size={14} style={{ color: '#A9BBC9' }} /> Zmień kolor listy
                     </button>
                     <button
+                      onClick={() => { setHideDone(h => !h); setMenuOpen(false) }}
+                      className="board-menu-item"
+                      style={{ minHeight: 36, fontSize: 13.5 }}
+                    >
+                      <CheckCircle2 size={14} style={{ color: '#A9BBC9' }} /> {hideDone ? 'Pokaż gotowe' : 'Ukryj gotowe'}
+                    </button>
+                    <button
                       onClick={() => { setMenuOpen(false); onArchiveList(column.id) }}
                       className="board-menu-item"
                       style={{ minHeight: 36, fontSize: 13.5 }}
@@ -247,9 +255,12 @@ function BoardColumn({ column, cards, onOpenCard, onAddCard, onArchiveList, onRe
               card={card}
               onOpen={onOpenCard}
               onRename={onRenameCard}
+              onToggleDone={onToggleDone}
+              onPhotoAdded={onPhotoAdded}
+              photoInfo={cardPhotos?.[card.id]}
               removing={removingCardIds?.has(card.id)}
               pulsing={pulsingCardIds?.has(card.id)}
-              hidden={!!searchQuery && !card.tytul?.toLowerCase().includes(searchQuery)}
+              hidden={(!!searchQuery && !card.tytul?.toLowerCase().includes(searchQuery)) || (hideDone && !!card.zakonczona)}
             />
           ))}
         </SortableContext>

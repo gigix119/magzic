@@ -1,10 +1,12 @@
 import {
-  Share2, AlignLeft, EyeOff, Printer, Settings, Layers, Tag, Zap,
+  Share2, AlignLeft, EyeOff, Printer, Settings, Layers, Tag, Zap, Filter, PlugZap,
   Activity, Archive, ChevronsLeftRight, Copy, X,
 } from 'lucide-react'
 
-export default function BoardMenu({ onClose, onAutomation, onChangeBackground, onPlaceholder }) {
+export default function BoardMenu({ onClose, onAutomation, onChangeBackground, onFilter, onPlaceholder }) {
   const items = [
+    { icon: <Filter size={15} />, label: 'Filtruj', onClick: onFilter },
+    { icon: <PlugZap size={15} />, label: 'Power-Upy', onClick: () => onPlaceholder('Power-Upy') },
     { icon: <Share2 size={15} />, label: 'Udostępnij', onClick: () => onPlaceholder('Udostępnij') },
     { icon: <AlignLeft size={15} />, label: 'O tej tablicy', onClick: () => onPlaceholder('O tej tablicy') },
     { icon: <EyeOff size={15} />, label: 'Widoczność', onClick: () => onPlaceholder('Widoczność') },

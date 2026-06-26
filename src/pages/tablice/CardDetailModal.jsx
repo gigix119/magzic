@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
   Trash2, Archive, CheckCircle2, Circle, X, ArrowRightLeft, Copy, ChevronUp, ChevronDown,
-  ListChecks, Plus, Calendar, LayoutList, UserRound, Image, Paperclip, MessageSquare,
+  ListChecks, Plus, LayoutList, UserRound, Image, Paperclip, MessageSquare,
 } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
 import { TABLICA_COLORS, CHECKLIST_TEMPLATES, STATUS_COLORS, STATUS_LABELS, classifyKarta, hashColor, terminStatus } from './tablicaTokens'
 import CardPhotos from './CardPhotos'
+import CardPhotoGallery from './CardPhotoGallery'
 import CardAttachments from './CardAttachments'
 import CardComments from './CardComments'
+import TerminPicker from './TerminPicker'
 
 function toLocalDatetimeValue(termin) {
   if (!termin) return ''
@@ -233,15 +235,7 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
 
         <div className="card-detail-body">
           <div className="flex items-center gap-2 flex-wrap">
-            <label className="card-detail-chip" style={{ cursor: 'pointer', color: overdue ? '#FF6B6B' : '#A9BBC9', borderColor: overdue ? 'rgba(255,107,107,0.5)' : undefined }}>
-              <Calendar size={12} />
-              <input
-                type="datetime-local"
-                value={termin}
-                onChange={e => commitTermin(e.target.value)}
-                style={{ background: 'transparent', border: 'none', color: 'inherit', fontSize: 12, outline: 'none', fontFamily: 'inherit', width: termin ? 150 : 60 }}
-              />
-            </label>
+            <TerminPicker value={termin} overdue={overdue} onConfirm={commitTermin} />
 
             {sourceListName && (
               <span className="card-detail-chip">
@@ -475,6 +469,11 @@ export default function CardDetailModal({ card, lists, onClose, onSave, onArchiv
                 <Plus size={15} />
               </button>
             </form>
+          </div>
+
+          <div>
+            <label className="card-detail-section-label"><Image size={13} /> Zdjęcia</label>
+            <CardPhotoGallery card={card} workspaceId={workspaceId} userId={user?.id} />
           </div>
 
           <div>
